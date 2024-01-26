@@ -1,4 +1,5 @@
 import { diffChars } from "diff";
+import axios from "axios";
 
 class Typist {
   #changesList = [];
@@ -23,24 +24,29 @@ class Typist {
 
   stopRecord() {
     if (this.#recording) this.#recording = false;
+    console.log(this.#changesList);
   }
 
   pushChanges(oldValue, newValue) {
     if (this.#recording) {
       const _changes = diffChars(oldValue, newValue);
 
-      if (this.#changesList.length % 100 === 0) this.#totalSaves.push(oldValue);
+      if (this.#changesList.length % 100 === 0) {
+        this.#totalSaves.push(oldValue);
+        this.#changesList.length && this.#sendData();
+      }
 
       const changes = [];
       let counter = 0;
 
       for (let i = 0; i < _changes.length; i++) {
         if (
+          // eslint-disable-next-line no-prototype-builtins
           _changes[i].hasOwnProperty("added") &&
+          // eslint-disable-next-line no-prototype-builtins
           _changes[i].hasOwnProperty("removed")
         ) {
           if (_changes[i]["added"]) {
-            console.log(`add ${_changes[i].value} at ${counter}`);
             changes.push({
               millis: Date.now() - this.#startTime,
               type: 1,
@@ -49,7 +55,6 @@ class Typist {
             });
             counter += _changes[i].count;
           } else {
-            console.log(`remove ${_changes[i].value} at ${counter}`);
             changes.push({
               millis: Date.now() - this.#startTime,
               type: 0,
@@ -94,6 +99,30 @@ class Typist {
       }
     }
   }
+
+  #sendData() {
+    let data = JSON.stringify(this.#changesList.splice(0, 100));
+
+    let config = {
+      method: "post",
+      url: "http://localhost:4000/saveData",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      data,
+    };
+
+    axios
+      .request(config)
+      .then((response) => {
+        console.log(JSON.stringify(response.data));
+      })
+      .catch((error) => {
+        console.log(error);
+      });
+  }
+
+  getData() {}
 }
 
 export default Typist;
