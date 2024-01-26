@@ -101,7 +101,7 @@ class Typist {
   }
 
   #sendData() {
-    let data = JSON.stringify(this.#changesList.splice(0, 100));
+    let data = JSON.stringify(this.#changesList.slice(0, 100));
 
     let config = {
       method: "post",

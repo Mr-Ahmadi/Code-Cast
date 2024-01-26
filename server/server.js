@@ -26,11 +26,11 @@ app.use("/", indexRouter);
 //start server(first database connection => then express server)
 const startServer = async (_) => {
   try {
-    // await mongoose.connect(
-    //   process.env.DB_URI,
-    //   { dbName: process.env.DB_NAME },
-    //   { useNewUrlParser: true }
-    // );
+    await mongoose.connect(
+      process.env.DB_URI,
+      { dbName: process.env.DB_NAME },
+      { useNewUrlParser: true }
+    );
     app.listen(4000, (_) =>
       console.log("Server running on http://localhost:4000")
     );
