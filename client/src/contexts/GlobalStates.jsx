@@ -3,7 +3,8 @@ import AppReducer from "./AppReducer"
 import PropTypes from "prop-types";
 
 const initialState = {
-    recording: false
+    recording: false,
+    auth: null
 };
 
 export const GlobalContext = createContext(initialState);
@@ -17,8 +18,32 @@ export const GlobalProvider = ({ children }) => {
             payload: {}
         })
     }
-
     function stopRecording() {
+        dispatch({
+            type: "STOP_RECORDING",
+            payload: {}
+        })
+    }
+
+    function setAuthUnknown() {
+        dispatch({
+            type: "STOP_RECORDING",
+            payload: {}
+        })
+    }
+    function setAuthFailed() {
+        dispatch({
+            type: "STOP_RECORDING",
+            payload: {}
+        })
+    }
+    function setAuthTrue() {
+        dispatch({
+            type: "STOP_RECORDING",
+            payload: {}
+        })
+    }
+    function setAuthFalse() {
         dispatch({
             type: "STOP_RECORDING",
             payload: {}
@@ -30,7 +55,12 @@ export const GlobalProvider = ({ children }) => {
             recording: state.recording,
             startRecording,
             stopRecording,
-        }} >
+            auth: state.auth,
+            setAuthUnknown,
+            setAuthFailed,
+            setAuthTrue,
+            setAuthFalse,
+        }}>
             {children}
         </GlobalContext.Provider>
     );

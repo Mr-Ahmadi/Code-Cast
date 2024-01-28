@@ -1,8 +1,9 @@
 /*
 User => 1.Name     => (String)
         2.Email    => (String - lowercase)
-        3.Password => (bcrypt)
-        4.Record   => 1.Name
+        3.Verified => (Boolean)
+        4.Password => (bcrypt)
+        5.Record   => 1.Name
                       2.Voice                       
                       3.Break-Points
                       4.Changes       => 1.millis   => (int)
@@ -52,6 +53,10 @@ const UserSchema = new mongoose.Schema({
     required: [true, "Email is required"],
     lowercase: true,
     match: [/^\w+([\.-]?\w+)*@\w+([\.-]?\w+)*(\.\w{2,3})+$/, "Invalid email"],
+  },
+  verified: {
+    type: Boolean,
+    default: false,
   },
   password: {
     type: String,

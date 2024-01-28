@@ -8,6 +8,23 @@ const defaultFunc = (state, action) => {
             return {
                 ...state, recording: false
             }
+
+        case "SET_AUTH_TRUE":
+            return {
+                ...state, auth: true
+            }
+        case "SET_AUTH_FALSE":
+            return {
+                ...state, auth: false
+            }
+        case "SET_AUTH_UNKNOWN":
+            return {
+                ...state, auth: null
+            }
+        case "SET_AUTH_FAILED":
+            return {
+                ...state, auth: undefined
+            }
         default: state
     }
 }

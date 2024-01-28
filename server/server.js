@@ -29,7 +29,7 @@ const startServer = async (_) => {
     await mongoose.connect(
       process.env.DB_URI,
       { dbName: process.env.DB_NAME },
-      { useNewUrlParser: true }
+      { useNewUrlParser: true, useCreateIndex: true, useUnifiedTopology: true }
     );
     app.listen(4000, (_) =>
       console.log("Server running on http://localhost:4000")

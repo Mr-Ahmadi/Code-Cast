@@ -3,3 +3,76 @@ body {
   padding: 0;
   box-sizing: border-box;
 }
+
+.form-container {
+  font-family: "consolas";
+  position: absolute;
+  width: 300px;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  padding: 20px;
+  background-color: #1e1e1e;
+  color: #d4d4d4;
+}
+.form-container > h2 {
+  color: #c586c0;
+}
+
+.form-group {
+  padding-bottom: 15px;
+  padding-top: 15px;
+  width: 100%;
+}
+.form-group > label {
+  padding-bottom: 3px;
+  display: block;
+  font-weight: bold;
+  color: #dcdcaa;
+}
+
+.text-input {
+  display: block;
+  width: 98%;
+  margin-bottom: 5px;
+  border: none;
+  border-bottom: 2px solid #9cdcfe;
+  outline: none;
+  font-size: 16px;
+  color: #d4d4d4;
+  background-color: transparent;
+}
+.text-input:focus {
+  border-color: #264f78;
+}
+
+.bottom-row {
+  display: flex;
+  justify-content: space-between;
+}
+.bottom-row > div {
+  display: flex;
+  align-items: center;
+}
+
+.error-output {
+  margin: 0;
+  margin-bottom: 5%;
+  color: #f48771;
+  font-style: italic;
+}
+
+.btn-primary {
+  margin: 5px;
+  padding: 10px;
+  border: none;
+  border-radius: 5px;
+  font-size: 14px;
+  font-weight: bold;
+  color: #1e1e1e;
+  background-color: #c586c0;
+  cursor: pointer;
+}
+.btn-primary:hover {
+  background-color: #264f78;
+}
