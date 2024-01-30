@@ -1,14 +1,7 @@
 import useForm from "../../../hooks/useForm";
-// import FormContainer from "../../Elements/FormContainer";
-// import FormGroup from "../../Elements/FormGroup";
-// import Title from "../../Elements/Title";
-// import Button from "../../Elements/Button";
-// import Error from "../../Elements/Error";
-// import Input from "../../Elements/Input";
-// import Label from "../../Elements/Label";
-// import Row from "../../Elements/Row";
 import checkEmail from "../../../functions/validation/checkEmail";
 import checkPassword from "../../../functions/validation/checkPassword";
+import { Link } from "react-router-dom";
 
 // A function to check the validity of the form inputs
 const validate = (values) => {
@@ -69,7 +62,9 @@ const SignIn = () => {
                         : <span className="error-output">.</span>}
                 <div className="bottom-row">
                     <div>
-                        <a href="/">Sign Up</a>
+                        <span>
+                            <Link to="/signup">Sign Up</Link>
+                        </span>
                     </div>
                     <div>
                         <input className="btn-primary" type="reset" value={"Clear"} />

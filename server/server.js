@@ -5,7 +5,7 @@ const cors = require("cors");
 const cookieParser = require("cookie-parser");
 /*__*/
 const indexRouter = require("./routes/index");
-// const userRouter = require("./routes/user");
+const userRouter = require("./routes/user");
 /*__*/
 const app = express();
 
@@ -21,7 +21,7 @@ app.use(
 app.use(cookieParser());
 //add routers
 app.use("/", indexRouter);
-// app.use("/user", userRouter);
+app.use("/user", userRouter);
 
 //start server(first database connection => then express server)
 const startServer = async (_) => {

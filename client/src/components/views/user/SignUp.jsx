@@ -1,57 +1,31 @@
 import useForm from "../../../hooks/useForm";
-// import FormContainer from "../../Elements/FormContainer";
-// import FormGroup from "../../Elements/FormGroup";
-// import Title from "../../Elements/Title";
-// import Button from "../../Elements/Button";
-// import Error from "../../Elements/Error";
-// import Input from "../../Elements/Input";
-// import Label from "../../Elements/Label";
-// import Row from "../../Elements/Row";
-import checkEmail from "../../../functions/validation/checkEmail";
-import checkPassword from "../../../functions/validation/checkPassword";
+import { Link, /*useLocation, useNavigate*/ } from "react-router-dom";
+import { useState } from "react";
+import signUp from "../../../functions/requests/signUp";
 
-// A function to check the validity of the form inputs
-const validate = (values) => {
-    let errors = {};
-
-    // Email validation
-    if (!values.email) {
-        errors.email = "Email is required";
-    } else if (!checkEmail(values.email)) {
-        errors.email = "Email is invalid";
-    }
-
-    // Password validation
-    if (!values.password) {
-        errors.password = "Password is required";
-    } else if (!checkPassword(values.password).validation) {
-        errors.password = checkPassword(values.password).message;
-    }
-
-    // Repeat password validation
-    if (!values.repeatPassword) {
-        errors.repeatPassword = "Please repeat your password";
-    } else if (values.repeatPassword !== values.password) {
-        errors.repeatPassword = "Passwords do not match";
-    }
-
-    return errors;
-};
-
-// The main component that renders the sign up form
 const SignUp = () => {
-    const { handleChange, handleSubmit, handleReset, values, errors } = useForm({
+    // const navigate = useNavigate()
+    // const location = useLocation()
+    const [requesting] = useState(false);
+    const {
+        values, message,
+        handleChange,
+        handleSubmit,
+        handleReset,
+    } = useForm({
         email: "",
         password: "",
         repeatPassword: "",
-    }, validate);
+    }, signUp);
 
     return (
         <div className="form-container">
             <h2 className="form-title">Sign Up</h2>
             <form onSubmit={handleSubmit} onReset={handleReset}>
                 <div className="form-group">
-                    <label htmlFor="email">Email</label>
+                    <label htmlFor="email">
+                        Email
+                    </label>
                     <input
                         type="email"
                         className="text-input"
@@ -61,39 +35,46 @@ const SignUp = () => {
                     />
                 </div>
                 <div className="form-group">
-                    <label htmlFor="password">Password</label>
-                    <input
+                    <label htmlFor="password">
+                        Password
+                    </label>
+                    <input className="text-input"
                         type="password"
-                        className="text-input"
                         name="password"
                         value={values.password}
                         onChange={handleChange}
                     />
                 </div>
                 <div className="form-group">
-                    <label htmlFor="repeatPassword">Repeat Password</label>
-                    <input
+                    <label htmlFor="repeatPassword">
+                        Repeat Password
+                    </label>
+                    <input className="text-input"
                         type="password"
-                        className="text-input"
                         name="repeatPassword"
                         value={values.repeatPassword}
                         onChange={handleChange}
                     />
                 </div>
-                {errors.email
-                    ? <span className="error-output">{errors.email}</span>
-                    : errors.password
-                        ? <span className="error-output">{errors.password}</span>
-                        : errors.repeatPassword
-                            ? <span className="error-output">{errors.repeatPassword}</span>
-                            : <span className="error-output">.</span>}
+                {console.log(message)}
+                {message.error !== ""
+                    ? <span className="error-output">{message.error}</span>
+                    : message.success !== ""
+                        ? <span className="error-output">{message.success}</span>
+                        : <span className="error-output">.</span>}
                 <div className="bottom-row">
                     <div>
-                        <a href="/" style={{ "marginLeft": "auto", "marginRight": 0 }}>Sign In</a>
+                        <Link to="/signin">Sign In</Link>
                     </div>
                     <div>
-                        <input className="btn-primary" type="reset" value={"Clear"} />
-                        <input className="btn-primary" type="submit" value={"Sign In"} />
+                        <input className="btn-primary"
+                            type="reset" value="Clear"
+                            disabled={requesting}
+                        />
+                        <input className="btn-primary"
+                            type="submit" value="Sign Up"
+                            disabled={requesting}
+                        />
                     </div>
                 </div>
             </form>

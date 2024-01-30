@@ -1,4 +1,4 @@
-const checkPassword = (password) => {
+const regex = (password) => {
   const checkingResult = { strengthNeeds: [], length: false };
 
   if (!password.match(/[0-9]+/)) checkingResult.strengthNeeds.push("number");
@@ -20,6 +20,16 @@ const checkPassword = (password) => {
       return { validation: false, message: message };
     }
   }
+};
+
+const checkPassword = (password) => {
+  if (!password) {
+    return "Password is required";
+  } else if (!regex(password).validation) {
+    return regex(password).message;
+  }
+
+  return "";
 };
 
 export default checkPassword;

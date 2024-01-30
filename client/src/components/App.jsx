@@ -8,6 +8,7 @@ import SignIn from './views/user/SignIn';
 import { Route, Routes } from 'react-router-dom';
 import { useContext } from 'react';
 import { GlobalContext } from '../contexts/GlobalStates'
+import Loading from './Elements/Loading';
 
 // const Container = styled.div`
 //   width: 100%;
@@ -40,9 +41,8 @@ export default function App() {
   const { auth } = useContext(GlobalContext);
 
   return (
-
     < Routes >
-      {auth === null && <Route path='*' element={<></>} />}
+      {auth === null && <Route path='*' element={<Loading />} />}
       {auth === undefined && <Route path='*' element={<></>} />}
       {auth === true && <Route path='/' element={<></>} />}
       {

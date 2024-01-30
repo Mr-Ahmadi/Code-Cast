@@ -1,10 +1,11 @@
 import { useState } from "react";
+// import useStateCB from "./useStateCB";
 
-const useForm = (valuesObject, validate) => {
+const useForm = (valuesObject, submit) => {
   const [values, setValues] = useState({
     ...valuesObject,
   });
-  const [errors, setErrors] = useState({});
+  const [message, setMessage] = useState({ error: "", success: "" });
 
   const handleChange = (event) => {
     const { name, value } = event.target;
@@ -16,7 +17,7 @@ const useForm = (valuesObject, validate) => {
 
   const handleSubmit = (event) => {
     event.preventDefault();
-    setErrors(validate(values));
+    submit(values, setMessage);
   };
 
   const handleReset = (event) => {
@@ -24,10 +25,16 @@ const useForm = (valuesObject, validate) => {
     setValues({
       ...valuesObject,
     });
-    setErrors({});
+    setMessage({ error: "", success: "" });
   };
 
-  return { handleChange, handleSubmit, handleReset, values, errors };
+  return {
+    handleChange,
+    handleSubmit,
+    handleReset,
+    message,
+    values,
+  };
 };
 
 export default useForm;

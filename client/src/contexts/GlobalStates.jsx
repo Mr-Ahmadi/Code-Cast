@@ -4,7 +4,7 @@ import PropTypes from "prop-types";
 
 const initialState = {
     recording: false,
-    auth: null
+    auth: false
 };
 
 export const GlobalContext = createContext(initialState);

@@ -43,10 +43,6 @@ const RecordSchema = new mongoose.Schema({
 });
 
 const UserSchema = new mongoose.Schema({
-  name: {
-    type: String,
-    required: [true, "Name is required"],
-  },
   email: {
     type: String,
     unique: true,
