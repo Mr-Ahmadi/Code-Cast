@@ -1,19 +1,15 @@
-.loading {
-  background-color: #ecebec;
-  height: 100vh;
-}
-.loading span {
+.loading > span {
   display: block;
   height: 30px;
   width: 30px;
-  background: #ddd;
+  background: #f2f2f2;
   position: absolute;
   top: 50%;
   left: 50%;
   transform: translate(-50%, -50%);
   border-radius: 50%;
 }
-.loading span:after {
+.loading > span:after {
   content: "";
   display: block;
   width: 30px;
@@ -23,18 +19,19 @@
   top: -2px;
   left: -2px;
   border: 2px solid transparent;
-  border-top-color: orangered;
-  border-bottom-color: orangered;
+  border-width: 5px;
+  border-top-color: #f96d00;
+  border-bottom-color: #f96d00;
   animation: spin 0.5s linear infinite;
 }
-.loading span:nth-of-type(1) {
+.loading > span:nth-of-type(1) {
   animation: bounce 0.55s ease-in-out infinite;
   margin-left: -50px;
 }
-.loading span:nth-of-type(2) {
+.loading > span:nth-of-type(2) {
   animation: bounce 0.55s ease-in-out 0.33s infinite;
 }
-.loading span:nth-of-type(3) {
+.loading > span:nth-of-type(3) {
   animation: bounce 0.55s ease-in-out 0.66s infinite;
   margin-left: 50px;
 }

@@ -12,12 +12,7 @@ const app = express();
 //add middlewares
 app.use(express.json());
 app.use(express.urlencoded({ extended: false }));
-app.use(
-  cors({
-    // origin: "http://127.0.0.1:5173",
-    credentials: true,
-  })
-);
+app.use(cors());
 app.use(cookieParser());
 //add routers
 app.use("/", indexRouter);
@@ -38,4 +33,5 @@ const startServer = async (_) => {
     console.log("Failed to connect database =>\n" + err);
   }
 };
+
 startServer();

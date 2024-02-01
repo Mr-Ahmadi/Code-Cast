@@ -1,11 +1,19 @@
 import { useState } from "react";
-// import useStateCB from "./useStateCB";
+import { useLocation, useNavigate } from "react-router-dom";
 
 const useForm = (valuesObject, submit) => {
   const [values, setValues] = useState({
     ...valuesObject,
   });
-  const [message, setMessage] = useState({ error: "", success: "" });
+
+  const navigate = useNavigate();
+  const location = useLocation();
+
+  const [message, setMessage] = useState(
+    location.state && location.state.message
+      ? location.state.message
+      : [null, null]
+  );
 
   const handleChange = (event) => {
     const { name, value } = event.target;
@@ -17,7 +25,7 @@ const useForm = (valuesObject, submit) => {
 
   const handleSubmit = (event) => {
     event.preventDefault();
-    submit(values, setMessage);
+    submit(values, setMessage, navigate);
   };
 
   const handleReset = (event) => {
@@ -25,7 +33,7 @@ const useForm = (valuesObject, submit) => {
     setValues({
       ...valuesObject,
     });
-    setMessage({ error: "", success: "" });
+    setMessage([null, null]);
   };
 
   return {

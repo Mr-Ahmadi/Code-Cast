@@ -1,50 +1,29 @@
-// import Tree from './Tree'
-// import Preview from './Preview/Index'
-// import Editor from './Editor/Index';
-// import { styled } from 'styled-components';
-// import Top from './Top/Index';
-import SignUp from './views/user/SignUp';
-import SignIn from './views/user/SignIn';
-import { Route, Routes } from 'react-router-dom';
-import { useContext } from 'react';
-import { GlobalContext } from '../contexts/GlobalStates'
+import SignUp from './mains/SignUp';
+import SignIn from './mains/SignIn';
+import checkAuth from '../functions/requests/checkAuth';
+import { Route, Routes, useLocation } from 'react-router-dom';
+import { useEffect, useState } from 'react';
 import Loading from './Elements/Loading';
-
-// const Container = styled.div`
-//   width: 100%;
-//   display: flex;
-//   flex-wrap: no-wrap;
-//   justify-content: space-between;
-// `
-
-// const structure = [
-//   {
-//     type: "folder",
-//     name: "src",
-//     childrens: [
-//       {
-//         type: "folder",
-//         name: "Components",
-//         childrens: [
-//           { type: "file", name: "Modal.jsx" },
-//           { type: "file", name: "Modal.css" }
-//         ]
-//       },
-//       { type: "file", name: "index.js" },
-//       { type: "file", name: "index.html" }
-//     ]
-//   },
-//   { type: "file", name: "package.json" }
-// ];
+import NotFound from './mains/NotFound';
+import MainPage from './mains/MainPage';
+import InternalError from './mains/InternalError';
 
 export default function App() {
-  const { auth } = useContext(GlobalContext);
+  const location = useLocation()
+  const [auth, setAuth] = useState(null)
+
+  useEffect(() => {
+    checkAuth(setAuth)
+    return () => setAuth(null)
+  }, [location])
 
   return (
     < Routes >
       {auth === null && <Route path='*' element={<Loading />} />}
-      {auth === undefined && <Route path='*' element={<></>} />}
-      {auth === true && <Route path='/' element={<></>} />}
+      {auth === undefined && <Route path='*' element={
+        <InternalError checkAuth={() => checkAuth(setAuth)} />
+      } />}
+      {auth === true && <Route path='/' element={<MainPage />} />}
       {
         auth === false &&
         <>
@@ -52,19 +31,7 @@ export default function App() {
           <Route path='/signup' element={<SignUp />} />
         </>
       }
-      <Route path='*' element={<></>} />
+      <Route path='*' element={<NotFound auth={auth} />} />
     </ Routes>
   );
 }
-
-// <>
-// {/* <Container> */}
-// {/* <SignUp /> */}
-// {/* <Tree data={structure} />
-// <Preview />
-//  <div>
-//  {/* <Top /> */}
-// {/* <Editor /> */}
-// {/* // </div> */} */}
-// {/* </Container> */}
-// {/* </> */}

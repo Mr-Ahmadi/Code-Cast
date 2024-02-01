@@ -2,16 +2,17 @@ import axios from "axios";
 import checkEmail from "../validation/checkEmail";
 import checkPassword from "../validation/checkPassword";
 
-const signUp = async (values, setMessage) => {
-  // setRequesting(true);
+const signUp = async (values, setMessage, navigate) => {
+  setMessage(["LOADING", null]);
+
   if (checkEmail(values.email)) {
-    setMessage({ success: "", error: checkEmail(values.email) });
+    setMessage(["ERROR", checkEmail(values.email)]);
   } else if (checkPassword(values.password)) {
-    setMessage({ success: "", error: checkPassword(values.password) });
+    setMessage(["ERROR", checkPassword(values.password)]);
   } else if (!values.repeatPassword) {
-    setMessage({ success: "", error: "Please repeat your password" });
+    setMessage(["ERROR", "Please repeat your password"]);
   } else if (values.repeatPassword !== values.password) {
-    setMessage({ success: "", error: "Passwords do not match" });
+    setMessage(["ERROR", "Passwords do not match"]);
   } else {
     let data = JSON.stringify({
       email: values.email,
@@ -25,25 +26,21 @@ const signUp = async (values, setMessage) => {
         "Content-Type": "application/json",
       },
       data,
+      withCredentials: true,
     };
 
     axios
       .request(config)
       .then(({ data: { message }, status }) => {
         if (status === 201) {
-          // setRequesting(false);
-          console.log(message);
-          setMessage({ error: "", success: "done!" });
+          setMessage(["SUCCESS", "done!"]);
+          navigate("/signin", { state: { message: ["SUCCESS", message] } });
         } else {
-          // setRequesting(false);
-          console.log(message);
-          setMessage({ error: message, success: "" });
+          setMessage(["ERROR", message]);
         }
       })
       .catch((err) => {
-        // setRequesting(false);
-        console.log(err.message);
-        setMessage({ error: err.message, success: "" });
+        setMessage(["ERROR", err.message]);
       });
   }
 };

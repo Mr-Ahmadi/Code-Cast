@@ -1,12 +1,8 @@
-import useForm from "../../../hooks/useForm";
-import { Link, /*useLocation, useNavigate*/ } from "react-router-dom";
-import { useState } from "react";
-import signUp from "../../../functions/requests/signUp";
+import useForm from "../../hooks/useForm";
+import { Link } from "react-router-dom";
+import signIn from "../../functions/requests/signIn";
 
 const SignUp = () => {
-    // const navigate = useNavigate()
-    // const location = useLocation()
-    const [requesting] = useState(false);
     const {
         values, message,
         handleChange,
@@ -15,12 +11,11 @@ const SignUp = () => {
     } = useForm({
         email: "",
         password: "",
-        repeatPassword: "",
-    }, signUp);
+    }, signIn);
 
     return (
-        <div className="form-container">
-            <h2 className="form-title">Sign Up</h2>
+        <div className="partial-container">
+            <h2 className="partial-title">Sign In</h2>
             <form onSubmit={handleSubmit} onReset={handleReset}>
                 <div className="form-group">
                     <label htmlFor="email">
@@ -45,35 +40,25 @@ const SignUp = () => {
                         onChange={handleChange}
                     />
                 </div>
-                <div className="form-group">
-                    <label htmlFor="repeatPassword">
-                        Repeat Password
-                    </label>
-                    <input className="text-input"
-                        type="password"
-                        name="repeatPassword"
-                        value={values.repeatPassword}
-                        onChange={handleChange}
-                    />
-                </div>
-                {console.log(message)}
-                {message.error !== ""
-                    ? <span className="error-output">{message.error}</span>
-                    : message.success !== ""
-                        ? <span className="error-output">{message.success}</span>
-                        : <span className="error-output">.</span>}
+                {message[0] === "ERROR"
+                    ? <span className="message-output">{message[1]}</span>
+                    : message[0] === "SUCCESS"
+                        ? <span className="message-output">{message[1]}</span>
+                        : message[0] === "LOADING"
+                            ? <span className="message-output">Loading...</span>
+                            : <></>}
                 <div className="bottom-row">
                     <div>
-                        <Link to="/signin">Sign In</Link>
+                        <Link to="/signup">Sign Up</Link>
                     </div>
                     <div>
                         <input className="btn-primary"
                             type="reset" value="Clear"
-                            disabled={requesting}
+                            disabled={message[0] === "LOADING"}
                         />
                         <input className="btn-primary"
                             type="submit" value="Sign Up"
-                            disabled={requesting}
+                            disabled={message[0] === "LOADING"}
                         />
                     </div>
                 </div>

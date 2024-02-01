@@ -1,10 +1,9 @@
-body {
+* {
   margin: 0;
+  border: 0;
   padding: 0;
-  box-sizing: border-box;
 }
-
-.form-container {
+.partial-container {
   font-family: "consolas";
   position: absolute;
   width: 300px;
@@ -12,11 +11,15 @@ body {
   left: 50%;
   transform: translate(-50%, -50%);
   padding: 20px;
-  background-color: #1e1e1e;
-  color: #d4d4d4;
+  background-color: #222831;
+  border-radius: 5px;
+  box-shadow: 10px 10px 25px 0px rgba(34, 40, 49, 0.8);
+  transition: all 2s linear;
 }
-.form-container > h2 {
-  color: #c586c0;
+.partial-container > .partial-title {
+  color: #f96d00;
+  margin-bottom: 10px;
+  margin-top: 10px;
 }
 
 .form-group {
@@ -32,18 +35,19 @@ body {
 }
 
 .text-input {
+  transition: all 0.2s linear;
   display: block;
   width: 98%;
   margin-bottom: 5px;
   border: none;
-  border-bottom: 2px solid #9cdcfe;
+  border-bottom: 2px solid #ffa866;
   outline: none;
   font-size: 16px;
   color: #d4d4d4;
   background-color: transparent;
 }
 .text-input:focus {
-  border-color: #264f78;
+  border-color: #f96d00;
 }
 
 .bottom-row {
@@ -55,10 +59,11 @@ body {
   align-items: center;
 }
 
-.error-output {
+.message-output {
   margin: 0;
   margin-bottom: 5%;
-  color: #f48771;
+  color: #ff5c16;
+  display: block;
   font-style: italic;
 }
 
@@ -69,10 +74,22 @@ body {
   border-radius: 5px;
   font-size: 14px;
   font-weight: bold;
-  color: #1e1e1e;
-  background-color: #c586c0;
+  color: #222831;
+  background-color: #f96c00f0;
   cursor: pointer;
 }
 .btn-primary:hover {
-  background-color: #264f78;
+  background-color: #f96d00;
+}
+.btn-primary:disabled {
+  background-color: #f96c009f;
+}
+
+a:link {
+  color: #dcdcaa;
+}
+
+/* visited link */
+a:visited {
+  color: #f96d00;
 }

@@ -1,0 +1,36 @@
+@import url(https://fonts.googleapis.com/css?family=Fira+Sans:200,400,500,600,700|Monoton|Plaster);
+
+.hypertube {
+  font-family: "Plaster", cursive;
+  text-transform: uppercase;
+}
+.error {
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+}
+.error > h1,
+.error > h2,
+.error > h3,
+.error > h4 {
+  text-align: center;
+  width: 100%;
+  color: #e59500;
+}
+.error > h1 {
+  font-size: 100px;
+}
+.error > h3 {
+  text-align: right;
+  margin-top: 10px;
+  margin-bottom: 10px;
+}
+.error > h4 {
+  text-align: left;
+}
+.text-success {
+  color: #5f8670;
+}
+.text-danger {
+  color: #b80000;
+}

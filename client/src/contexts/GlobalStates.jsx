@@ -25,28 +25,10 @@ export const GlobalProvider = ({ children }) => {
         })
     }
 
-    function setAuthUnknown() {
+    function setAuth(value) {
         dispatch({
-            type: "STOP_RECORDING",
-            payload: {}
-        })
-    }
-    function setAuthFailed() {
-        dispatch({
-            type: "STOP_RECORDING",
-            payload: {}
-        })
-    }
-    function setAuthTrue() {
-        dispatch({
-            type: "STOP_RECORDING",
-            payload: {}
-        })
-    }
-    function setAuthFalse() {
-        dispatch({
-            type: "STOP_RECORDING",
-            payload: {}
+            type: "SET_AUTH",
+            payload: { value }
         })
     }
 
@@ -56,10 +38,7 @@ export const GlobalProvider = ({ children }) => {
             startRecording,
             stopRecording,
             auth: state.auth,
-            setAuthUnknown,
-            setAuthFailed,
-            setAuthTrue,
-            setAuthFalse,
+            setAuth
         }}>
             {children}
         </GlobalContext.Provider>
