@@ -17,7 +17,7 @@ const signUp = async (values, setMessage, navigate) => {
 
     let config = {
       method: "post",
-      url: "http://localhost:4000/user/signin",
+      url: "user/signin",
       headers: {
         "Content-Type": "application/json",
       },

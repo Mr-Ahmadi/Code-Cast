@@ -1,5 +1,5 @@
 import Tree from '../Tree'
-import Preview from '../Preview/Index'
+// import Preview from '../Preview/Index'
 import Editor from '../Editor/Index';
 import { styled } from 'styled-components';
 import Top from '../Top/Index';
@@ -37,7 +37,7 @@ export default function App() {
         <>
             <Container>
                 <Tree data={structure} />
-                <Preview />
+                {/* <Preview /> */}
                 <div>
                     <Top />
                     <Editor />

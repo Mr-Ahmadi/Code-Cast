@@ -1,28 +1,33 @@
 import axios from "axios";
 import cookies from "js-cookie";
 
-const checkAuth = async (setAuth) => {
+const checkAuth = async (setAuth, setVerified) => {
   if (cookies.get("jwt")) {
     let config = {
-      method: "post",
-      url: "http://localhost:4000/user/signin",
-      headers: {
-        "Content-Type": "application/json",
-      },
+      method: "get",
+      url: "user/checkAuth",
+      // headers: {
+      //   "Content-Type": "application/json",
+      // },
       withCredentials: true,
     };
 
     axios
       .request(config)
-      .then(({ status }) => {
+      .then(({ status, data: { verified } }) => {
         if (status === 200) {
           setAuth(true);
+          setVerified(verified);
         } else {
           setAuth(false);
         }
       })
-      .catch(() => {
-        setAuth(undefined);
+      .catch(({ response: { status } }) => {
+        if (status === 401) {
+          setAuth(false);
+        } else {
+          setAuth(undefined);
+        }
       });
   } else setAuth(false);
 };

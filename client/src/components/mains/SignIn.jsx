@@ -2,7 +2,7 @@ import useForm from "../../hooks/useForm";
 import { Link } from "react-router-dom";
 import signIn from "../../functions/requests/signIn";
 
-const SignUp = () => {
+const SignIn = () => {
     const {
         values, message,
         handleChange,
@@ -57,7 +57,7 @@ const SignUp = () => {
                             disabled={message[0] === "LOADING"}
                         />
                         <input className="btn-primary"
-                            type="submit" value="Sign Up"
+                            type="submit" value="Sign In"
                             disabled={message[0] === "LOADING"}
                         />
                     </div>
@@ -67,4 +67,4 @@ const SignUp = () => {
     );
 };
 
-export default SignUp;
+export default SignIn;

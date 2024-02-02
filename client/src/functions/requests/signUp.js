@@ -21,7 +21,7 @@ const signUp = async (values, setMessage, navigate) => {
 
     let config = {
       method: "post",
-      url: "http://localhost:4000/user/signup",
+      url: "user/signup",
       headers: {
         "Content-Type": "application/json",
       },

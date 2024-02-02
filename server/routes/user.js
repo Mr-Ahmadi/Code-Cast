@@ -1,15 +1,16 @@
+const jwt = require("jsonwebtoken");
 const express = require("express");
 const bcrypt = require("bcryptjs");
 const crypto = require("crypto");
-const jwt = require("jsonwebtoken");
-
-const router = express.Router();
-
-const sendEmail = require("../functions/sendEmail");
-const authenticated = require("../middlewares/authenticated");
 
 const User = require("../models/User");
 const Token = require("../models/Token");
+
+const authenticated = require("../middlewares/authenticated");
+
+const sendEmail = require("../functions/sendEmail");
+
+const router = express.Router();
 
 const createToken = (id) => {
   return jwt.sign({ id }, "secret", {
@@ -18,7 +19,33 @@ const createToken = (id) => {
 };
 
 router.get("/checkauth", authenticated, (req, res) => {
-  res.status(200).json({ user: { email: res.locals.user.email } });
+  res.status(200).json({
+    email: res.locals.user.email,
+    verified: res.locals.user.verified,
+  });
+});
+
+router.get("/newlink", authenticated, async (req, res) => {
+  try {
+    if (!res.locals.user.verified) {
+      const newToken = crypto.randomBytes(32).toString("hex");
+      const userId = res.locals.user._id;
+      await Token.findOneAndUpdate(
+        { userId },
+        {
+          $set: { token: newToken },
+        }
+      );
+      const message = `${process.env.BASE_URL}/user/verify/${userId}/${newToken}`;
+      await sendEmail(res.locals.user.email, "Verify Email", message);
+      res.status(200).json({ message: "New link sent" });
+    } else {
+      res.status(400).json({ message: "Account already verified" });
+    }
+  } catch (err) {
+    console.log(err);
+    res.status(500).json({ message: "Internal error" });
+  }
 });
 
 router.post("/signup", async (req, res) => {
@@ -57,13 +84,12 @@ router.post("/signin", async (req, res) => {
     const user = await User.login({ email, password });
     const token = createToken(user._id);
     res.cookie("jwt", token, {
-      withCredentials: true,
       httpOnly: false,
+      withCredentials: true,
       maxAge: 3 * 24 * 60 * 60 * 1000,
     });
     res.status(200).json({ message: "Sign in successful" });
   } catch (err) {
-    console.log(err);
     if ((err.message = "Incurrect email/password")) {
       res.status(400).json({ message: "Incurrect email/password" });
     } else {
@@ -89,11 +115,11 @@ router.get("/verify/:id/:token", async (req, res) => {
         $set: { verified: true },
       }
     );
-    await Token.findByIdAndRemove(token._id);
+    await Token.findByIdAndDelete(token._id);
 
     res.json({ message: "email verified sucessfully" });
   } catch (err) {
-    res.status(400).json({ message: "An error occured" });
+    res.status(400).json({ message: err });
   }
 });
 

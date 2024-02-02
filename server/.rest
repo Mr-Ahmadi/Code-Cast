@@ -1,8 +1,4 @@
-POST http://localhost:4000/saveData
-Content-Type: application/json
-
-{ "gtgt": "Tgtgy" }
-
+GET http://localhost:4000/user/checkAuth
 ###
 POST  http://localhost:4000/user/signup 
 Content-Type: application/json
