@@ -5,12 +5,15 @@ class Typist {
   #changesList = [];
   #totalSaves = [];
   currentValue;
+  #recordName;
   firstValue;
   #startTime;
   #recording;
+  #recordID;
 
   constructor() {
     this.#recording = false;
+    this.#recordID = null;
   }
 
   startRecord(_startTime, _firstValue) {
@@ -101,24 +104,37 @@ class Typist {
   }
 
   #sendData() {
-    let data = JSON.stringify(this.#changesList.slice(0, 100));
-
+    const selectedChanges = this.#changesList.slice(0, 100);
+    let data = JSON.stringify({
+      changes: selectedChanges,
+      id: this.#recordID,
+    });
+    console.log(data);
     let config = {
       method: "post",
-      url: "http://localhost:4000/saveData",
+      url: "index/saveData",
       headers: {
         "Content-Type": "application/json",
       },
       data,
+      withCredentials: true,
     };
 
     axios
       .request(config)
-      .then((response) => {
-        console.log(JSON.stringify(response.data));
+      .then(({ status, data: { id } }) => {
+        if (status === 201) {
+          this.#recordID = id;
+
+          this.#changesList = this.#changesList.filter((item) => {
+            return selectedChanges.indexOf(item) === -1;
+          });
+        } else {
+          console.log("Error");
+        }
       })
-      .catch((error) => {
-        console.log(error);
+      .catch((err) => {
+        console.log("Error => " + err);
       });
   }
 

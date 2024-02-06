@@ -16,32 +16,6 @@ User => 1.Name     => (String)
 const mongoose = require("mongoose");
 const bcrypt = require("bcryptjs");
 
-const ChangeSchema = new mongoose.Schema({
-  millis: {
-    type: String,
-  },
-  type: {
-    type: Boolean,
-  },
-  index: {
-    type: Boolean,
-  },
-  value: {
-    type: Boolean,
-  },
-});
-
-const RecordSchema = new mongoose.Schema({
-  name: {
-    type: String,
-  },
-  voice: {
-    type: String,
-  },
-  breakPoints: [String],
-  changes: [ChangeSchema],
-});
-
 const UserSchema = new mongoose.Schema({
   email: {
     type: String,
@@ -58,7 +32,13 @@ const UserSchema = new mongoose.Schema({
     type: String,
     required: [true, "Password is required"],
   },
-  records: RecordSchema,
+  records: [
+    {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "Record",
+      required: true,
+    },
+  ],
 });
 
 UserSchema.statics.login = async function ({ email, password }) {

@@ -3,7 +3,7 @@ import newLink from '../../functions/requests/newLink';
 import { useState } from 'react';
 
 
-const InternalError = ({ checkAuth }) => {
+const NotVerified = ({ checkAuth }) => {
     const [message, setMessage] = useState([null, null]);
 
     return (
@@ -29,9 +29,9 @@ const InternalError = ({ checkAuth }) => {
     )
 }
 
-InternalError.propTypes = {
+NotVerified.propTypes = {
     checkAuth: PropTypes.func
 }
 
 
-export default InternalError
+export default NotVerified

@@ -1,0 +1,25 @@
+.main-container {
+  height: 100%;
+  width: 100%;
+}
+.main-container > .top-bar {
+  background-color: #363a3f;
+  display: flex;
+  align-items: center;
+  padding: 5px;
+  width: calc(100%-5px);
+  height: 30px;
+}
+.main-container > .editor-container {
+  width: calc(100% - 14px);
+  height: calc(100vh - 240px - 14px);
+  padding: 7px;
+  background-color: rgb(30, 30, 30);
+}
+.main-container > .output-container {
+  padding: 5px;
+  width: calc(100% - 10px);
+  height: calc(200px - 10px);
+  background-color: #424242;
+  color: #d4d4d4;
+}

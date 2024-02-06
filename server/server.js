@@ -22,7 +22,7 @@ app.use(
 app.use(cookieParser());
 
 //add routers
-app.use("/", indexRouter);
+app.use("/index", indexRouter);
 app.use("/user", userRouter);
 
 //start server(first database connection => then express server)

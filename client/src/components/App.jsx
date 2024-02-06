@@ -3,7 +3,7 @@ import SignIn from './mains/SignIn';
 import checkAuth from '../functions/requests/checkAuth';
 import { Route, Routes, useLocation } from 'react-router-dom';
 import { useEffect, useState } from 'react';
-import Loading from './Elements/Loading';
+import Loading from './mains/Loading';
 import NotFound from './mains/NotFound';
 import MainPage from './mains/MainPage';
 import InternalError from './mains/InternalError';

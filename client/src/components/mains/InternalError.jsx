@@ -1,7 +1,7 @@
 import PropTypes from 'prop-types';
 
 
-const NotVerifird = ({ checkAuth }) => {
+const InternalError = ({ checkAuth }) => {
     return (
         <div className="partial-container">
             <h2 className="partial-title">Internal Error</h2>
@@ -16,9 +16,9 @@ const NotVerifird = ({ checkAuth }) => {
     )
 }
 
-NotVerifird.propTypes = {
+InternalError.propTypes = {
     checkAuth: PropTypes.func
 }
 
 
-export default NotVerifird
+export default InternalError
