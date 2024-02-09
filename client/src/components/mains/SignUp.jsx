@@ -1,5 +1,5 @@
-import useForm from "../../hooks/useForm";
 import { Link } from "react-router-dom";
+import useForm from "../../hooks/useForm";
 import signUp from "../../functions/requests/signUp";
 
 const SignUp = () => {
@@ -24,7 +24,7 @@ const SignUp = () => {
                     </label>
                     <input
                         type="email"
-                        className="text-input"
+                        className="text-input full-width"
                         name="email"
                         value={values.email}
                         onChange={handleChange}
@@ -34,7 +34,7 @@ const SignUp = () => {
                     <label htmlFor="password">
                         Password
                     </label>
-                    <input className="text-input"
+                    <input className="text-input full-width"
                         type="password"
                         name="password"
                         value={values.password}
@@ -45,7 +45,7 @@ const SignUp = () => {
                     <label htmlFor="repeatPassword">
                         Repeat Password
                     </label>
-                    <input className="text-input"
+                    <input className="text-input full-width"
                         type="password"
                         name="repeatPassword"
                         value={values.repeatPassword}

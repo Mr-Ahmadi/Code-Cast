@@ -1,25 +1,37 @@
 const express = require("express");
-const path = require("path");
+const mongoose = require("mongoose");
+
+const User = require("../models/User");
+const Record = require("../models/Record");
+
+const authenticated = require("../middlewares/authenticated");
 
 const router = express.Router();
 
-const authenticated = require("../middlewares/authenticated");
-const User = require("../models/User");
-const Record = require("../models/Record");
-const mongoose = require("mongoose");
-
-router.get("/loadData", authenticated, (req, res) => {
-  res.status(200).json(res.locals.user.plans[req.params.planType]);
+router.get("/loaddata/:id", authenticated, async (req, res) => {
+  try {
+    const { changes, breakPoints, firstValue, name } = await Record.findOne({
+      _id: new mongoose.Types.ObjectId(req.params.id),
+      userId: res.locals.user._id,
+    });
+    res.status(200).json({ changes, breakPoints, firstValue, name });
+  } catch (err) {
+    console.log(err);
+    res.status(500).json({ message: err });
+  }
 });
-router.post("/saveData", authenticated, async (req, res) => {
-  console.log(req.body);
-  const { id, changes } = req.body;
+
+router.post("/savedata", authenticated, async (req, res) => {
+  const { id, name, changes, firstValue, breakPoint } = req.body;
 
   try {
     if (id === null) {
       let record = await new Record({
         changes,
         userId: res.locals.user._id,
+        name,
+        breakPoints: breakPoint ? [breakPoint] : [],
+        firstValue,
       }).save();
       await User.updateOne(
         { _id: res.locals.user._id },
@@ -32,17 +44,27 @@ router.post("/saveData", authenticated, async (req, res) => {
       res.status(201).json({ id: record._id });
     } else {
       await Record.updateOne(
-        { _id: new mongoose.Types.ObjectId(id) },
-        {
-          $push: {
-            changes: {
-              $each: changes,
-            },
-          },
-        }
+        { _id: new mongoose.Types.ObjectId(id), userId: res.locals.user._id },
+        breakPoint !== null
+          ? {
+              $push: {
+                changes: {
+                  $each: changes,
+                },
+                breakPoints: breakPoint,
+              },
+            }
+          : {
+              $push: {
+                changes: {
+                  $each: changes,
+                },
+              },
+            }
       );
     }
   } catch (err) {
+    console.log(err);
     res.status(500).json({ message: err });
   }
 });

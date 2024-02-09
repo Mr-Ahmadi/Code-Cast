@@ -1,7 +1,7 @@
 import axios from "axios";
 import cookies from "js-cookie";
 
-const checkAuth = async (setAuth, setVerified) => {
+const checkAuth = async (setAuth, setUser) => {
   if (cookies.get("jwt")) {
     let config = {
       method: "get",
@@ -14,10 +14,10 @@ const checkAuth = async (setAuth, setVerified) => {
 
     axios
       .request(config)
-      .then(({ status, data: { verified } }) => {
+      .then(({ status, data }) => {
         if (status === 200) {
           setAuth(true);
-          setVerified(verified);
+          setUser(data);
         } else {
           setAuth(false);
         }

@@ -1,0 +1,47 @@
+.hide {
+  display: none;
+}
+.modal-container {
+  background-color: #d4d4d490;
+  color: #d4d4d4;
+  height: 100vh;
+  width: 100vw;
+  position: absolute;
+  z-index: 100;
+  top: 0;
+  left: 0;
+}
+.modal-container > .modal-box {
+  background-color: #222831;
+  padding: 10px;
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  box-shadow: 10px 10px 25px 0px rgba(34, 40, 49, 0.8);
+}
+.modal-container > .modal-box > .modal-title {
+  padding: 10px;
+}
+.modal-container > .modal-box > .list-container {
+  overflow-y: auto;
+  height: 320px;
+  width: 360px;
+  margin: 10px;
+}
+.modal-container > .modal-box > .list-container > .file-label {
+  color: #d4d4d4;
+  padding: 5px;
+  display: block;
+  border-bottom: 1px solid #d4d4d4;
+}
+.modal-container > .modal-box > .list-container > .selected {
+  color: #f96d00;
+}
+.modal-container > .modal-box > .list-container > .file-label:last-child {
+  border-bottom: 0;
+}
+.modal-container > .modal-box > .modal-bottom {
+  text-align: right;
+  padding: 5px;
+}

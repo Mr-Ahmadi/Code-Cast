@@ -23,6 +23,11 @@ const RecordSchema = new mongoose.Schema({
   },
   name: {
     type: String,
+    required: true,
+  },
+  firstValue: {
+    type: String,
+    
   },
   voice: {
     type: String,

@@ -3,40 +3,54 @@ import axios from "axios";
 
 class Typist {
   #changesList = [];
-  #totalSaves = [];
-  currentValue;
-  #recordName;
+  #breakPoints = [];
+  recordName;
   firstValue;
-  #startTime;
-  #recording;
   #recordID;
 
-  constructor() {
-    this.#recording = false;
-    this.#recordID = null;
-  }
+  #recordingMode;
+  #currValue;
 
-  startRecord(_startTime, _firstValue) {
-    if (!this.#recording) {
-      this.firstValue = _firstValue;
-      this.currentValue = "";
-      this.#startTime = _startTime;
-      this.#recording = true;
+  #startTime;
+  recording;
+
+  constructor(_recordID = null) {
+    this.#recordID = _recordID;
+    this.recording = false;
+    this.#currValue = "";
+
+    if (_recordID !== null) {
+      this.#loadData(_recordID);
+      this.#recordingMode = false;
+    } else {
+      this.#recordingMode = true;
     }
   }
 
+  startRecord(_startTime, _firstValue, _recordName) {
+    if (!this.recording && this.#recordingMode) {
+      this.recordName = _recordName;
+      this.firstValue = _firstValue;
+      this.#startTime = _startTime;
+      this.recording = true;
+    }
+  }
   stopRecord() {
-    if (this.#recording) this.#recording = false;
+    if (this.recording && this.#recordingMode) {
+      this.recording = false;
+      this.#sendData(this.#changesList);
+    }
     console.log(this.#changesList);
   }
-
   pushChanges(oldValue, newValue) {
-    if (this.#recording) {
+    if (this.recording && this.#recordingMode) {
       const _changes = diffChars(oldValue, newValue);
 
       if (this.#changesList.length % 100 === 0) {
-        this.#totalSaves.push(oldValue);
-        this.#changesList.length && this.#sendData();
+        if (this.#changesList.length) {
+          this.#breakPoints.push(oldValue);
+          this.#sendData(this.#changesList.slice(0, 100), oldValue);
+        }
       }
 
       const changes = [];
@@ -75,44 +89,44 @@ class Typist {
 
   #changeString({ type, index, value }) {
     if (type == 1) {
-      this.currentValue =
-        this.currentValue.slice(0, index) +
-        value +
-        this.currentValue.slice(index);
-      return this.currentValue;
+      this.#currValue =
+        this.#currValue.slice(0, index) + value + this.#currValue.slice(index);
+      return this.#currValue;
     } else {
-      this.currentValue =
-        this.currentValue.slice(0, index) +
-        this.currentValue.slice(index + value.length);
-      return this.currentValue;
+      this.#currValue =
+        this.#currValue.slice(0, index) +
+        this.#currValue.slice(index + value.length);
+      return this.#currValue;
     }
   }
-
   runChanges(func) {
-    if (!this.#recording) {
-      this.currentValue = this.firstValue;
-      func(this.currentValue);
+    if (!this.recording && !this.#recordingMode) {
+      this.#currValue = this.firstValue;
+      func(this.#currValue);
 
-      for (const changes of this.#changesList) {
-        for (let i = 0; i < changes.length; i++) {
+      for (let j = 0; j < this.#changesList.length; j++) {
+        for (let i = 0; i < this.#changesList[j].length; i++) {
           setTimeout(() => {
-            func && func(this.#changeString(changes[i]));
-          }, changes[i].millis);
+            func && func(this.#changeString(this.#changesList[j][i]));
+          }, this.#changesList[j][i].millis);
         }
       }
     }
   }
 
-  #sendData() {
-    const selectedChanges = this.#changesList.slice(0, 100);
+  #sendData(selectedChanges, breakPoint = null) {
+    console.log(this.#recordID);
+    console.log(this.firstValue);
     let data = JSON.stringify({
+      firstValue: this.#recordID ? null : this.firstValue,
       changes: selectedChanges,
+      breakPoint: breakPoint,
+      name: this.recordName,
       id: this.#recordID,
     });
-    console.log(data);
     let config = {
       method: "post",
-      url: "index/saveData",
+      url: "index/savedata",
       headers: {
         "Content-Type": "application/json",
       },
@@ -137,8 +151,38 @@ class Typist {
         console.log("Error => " + err);
       });
   }
+  #loadData(recordID) {
+    this.#recordID;
+    let config = {
+      method: "get",
+      url: `index/loaddata/${recordID}`,
+      headers: {
+        "Content-Type": "application/json",
+      },
+      withCredentials: true,
+    };
 
-  getData() {}
+    axios
+      .request(config)
+      .then(
+        ({
+          status,
+          data: { changes, breakPoints, recordName, firstValue },
+        }) => {
+          if (status === 200) {
+            this.#changesList = changes;
+            this.#breakPoints = breakPoints;
+            this.recordName = recordName;
+            this.firstValue = firstValue;
+          } else {
+            console.log("Error");
+          }
+        }
+      )
+      .catch((err) => {
+        console.log("Error => " + err);
+      });
+  }
 }
 
 export default Typist;

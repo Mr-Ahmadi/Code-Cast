@@ -23,7 +23,7 @@ const SignIn = () => {
                     </label>
                     <input
                         type="email"
-                        className="text-input"
+                        className="text-input full-width"
                         name="email"
                         value={values.email}
                         onChange={handleChange}
@@ -33,7 +33,7 @@ const SignIn = () => {
                     <label htmlFor="password">
                         Password
                     </label>
-                    <input className="text-input"
+                    <input className="text-input full-width"
                         type="password"
                         name="password"
                         value={values.password}

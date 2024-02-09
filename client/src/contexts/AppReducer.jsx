@@ -8,10 +8,13 @@ const defaultFunc = (state, action) => {
             return {
                 ...state, recording: false
             }
-
-        case "SET_AUTH":
+        case "SET_USER":
             return {
-                ...state, auth: action.payload.value
+                ...state, user: action.payload.value
+            }
+        case "SET_RECORD_NAME":
+            return {
+                ...state, recordName: action.payload.value
             }
         default: state
     }

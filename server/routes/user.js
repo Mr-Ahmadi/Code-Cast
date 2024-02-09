@@ -1,14 +1,15 @@
-const jwt = require("jsonwebtoken");
+const crypto = require("crypto");
 const express = require("express");
 const bcrypt = require("bcryptjs");
-const crypto = require("crypto");
+const jwt = require("jsonwebtoken");
 
 const User = require("../models/User");
 const Token = require("../models/Token");
-
-const authenticated = require("../middlewares/authenticated");
+const Record = require("../models/Record");
 
 const sendEmail = require("../functions/sendEmail");
+
+const authenticated = require("../middlewares/authenticated");
 
 const router = express.Router();
 
@@ -18,10 +19,15 @@ const createToken = (id) => {
   });
 };
 
-router.get("/checkauth", authenticated, (req, res) => {
+router.get("/checkauth", authenticated, async (req, res) => {
+  const records = [];
+  for (const recordID of res.locals.user.records) {
+    records.push([(await Record.findOne({ _id: recordID })).name, recordID]);
+  }
   res.status(200).json({
     email: res.locals.user.email,
     verified: res.locals.user.verified,
+    records,
   });
 });
 

@@ -2,24 +2,26 @@ import SignUp from './mains/SignUp';
 import SignIn from './mains/SignIn';
 import checkAuth from '../functions/requests/checkAuth';
 import { Route, Routes, useLocation } from 'react-router-dom';
-import { useEffect, useState } from 'react';
+import { useContext, useEffect, useState } from 'react';
 import Loading from './mains/Loading';
 import NotFound from './mains/NotFound';
 import MainPage from './mains/MainPage';
 import InternalError from './mains/InternalError';
 import NotVerified from './mains/NotVerified';
+import { GlobalContext } from '../contexts/GlobalStates';
 
 export default function App() {
   const location = useLocation()
 
   const [auth, setAuth] = useState(null)
-  const [verified, setVerified] = useState(null)
+
+  const { user, setUser } = useContext(GlobalContext)
 
   useEffect(() => {
-    checkAuth(setAuth, setVerified)
+    checkAuth(setAuth, setUser)
     return () => {
       setAuth(null);
-      setVerified(null);
+      setUser(null);
     }
   }, [location])
 
@@ -27,14 +29,14 @@ export default function App() {
     < Routes >
       {auth === null && <Route path='*' element={<Loading />} />}
       {auth === undefined && <Route path='*' element={
-        <InternalError checkAuth={() => checkAuth(setAuth, setVerified)} />
+        <InternalError checkAuth={() => checkAuth(setAuth, setUser)} />
       } />}
       {auth === true &&
-        ((verified === false)
+        ((user && user.verified === false)
           ? <Route path='/' element={
-            <NotVerified checkAuth={() => checkAuth(setAuth, setVerified)} />
+            <NotVerified checkAuth={() => checkAuth(setAuth, setUser)} />
           } />
-          : ((verified === true)
+          : ((user && user.verified === true)
             ? <Route path='/' element={<MainPage />} />
             : <Route path='/' element={<Loading />} />))
       }

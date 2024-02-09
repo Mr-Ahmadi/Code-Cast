@@ -2,8 +2,17 @@
 @import url("loading.css");
 @import url("error.css");
 @import url("editor.css");
+@import url("modal.css");
 
 body {
   background-color: #393e46db;
   font-family: "consolas";
+}
+hr {
+  height: 3px;
+  background-color: #d4d4d4;
+}
+::-webkit-scrollbar {
+  width: 0 !important;
+  height: 0 !important;
 }

@@ -36,15 +36,17 @@
 
 .text-input {
   transition: all 0.2s linear;
-  display: block;
-  width: 98%;
-  margin-bottom: 5px;
+  width: 100px;
   border: none;
   border-bottom: 2px solid #ffa866;
   outline: none;
   font-size: 16px;
   color: #d4d4d4;
   background-color: transparent;
+}
+.full-width {
+  width: 100%;
+  display: block;
 }
 .text-input:focus {
   border-color: #f96d00;
@@ -100,7 +102,6 @@ a:link {
   color: #dcdcaa;
 }
 
-/* visited link */
 a:visited {
   color: #f96d00;
 }

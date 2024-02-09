@@ -4,7 +4,8 @@ import PropTypes from "prop-types";
 
 const initialState = {
     recording: false,
-    auth: false
+    user: null,
+    recordName: "Untitled"
 };
 
 export const GlobalContext = createContext(initialState);
@@ -25,9 +26,15 @@ export const GlobalProvider = ({ children }) => {
         })
     }
 
-    function setAuth(value) {
+    function setUser(value) {
         dispatch({
-            type: "SET_AUTH",
+            type: "SET_USER",
+            payload: { value }
+        })
+    }
+    function setRecordName(value) {
+        dispatch({
+            type: "SET_RECORD_NAME",
             payload: { value }
         })
     }
@@ -37,8 +44,10 @@ export const GlobalProvider = ({ children }) => {
             recording: state.recording,
             startRecording,
             stopRecording,
-            auth: state.auth,
-            setAuth
+            user: state.user,
+            setUser,
+            recordName: state.recordName,
+            setRecordName
         }}>
             {children}
         </GlobalContext.Provider>
