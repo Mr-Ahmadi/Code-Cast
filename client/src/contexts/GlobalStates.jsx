@@ -5,7 +5,8 @@ import PropTypes from "prop-types";
 const initialState = {
     recording: false,
     user: null,
-    recordName: "Untitled"
+    recordName: "Untitled",
+    language: ["javascript", "18.15.0"]
 };
 
 export const GlobalContext = createContext(initialState);
@@ -25,7 +26,6 @@ export const GlobalProvider = ({ children }) => {
             payload: {}
         })
     }
-
     function setUser(value) {
         dispatch({
             type: "SET_USER",
@@ -38,6 +38,12 @@ export const GlobalProvider = ({ children }) => {
             payload: { value }
         })
     }
+    function setLanguage(lang, version) {
+        dispatch({
+            type: "SET_LANGUAGE",
+            payload: { lang, version }
+        })
+    }
 
     return (
         <GlobalContext.Provider value={{
@@ -47,7 +53,9 @@ export const GlobalProvider = ({ children }) => {
             user: state.user,
             setUser,
             recordName: state.recordName,
-            setRecordName
+            setRecordName,
+            language: state.language,
+            setLanguage
         }}>
             {children}
         </GlobalContext.Provider>

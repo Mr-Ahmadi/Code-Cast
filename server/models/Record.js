@@ -27,13 +27,13 @@ const RecordSchema = new mongoose.Schema({
   },
   firstValue: {
     type: String,
-    
   },
   voice: {
     type: String,
   },
   breakPoints: [String],
   changes: [[ChangeSchema]],
+  executions: [Number],
 });
 
 const Record = mongoose.model("Project", RecordSchema, "projects");

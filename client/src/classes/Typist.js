@@ -4,11 +4,12 @@ import axios from "axios";
 class Typist {
   #changesList = [];
   #breakPoints = [];
+  #recordingMode;
+  #firstValue;
   recordName;
-  firstValue;
   #recordID;
 
-  #recordingMode;
+  loadStatus;
   #currValue;
 
   #startTime;
@@ -16,21 +17,18 @@ class Typist {
 
   constructor(_recordID = null) {
     this.#recordID = _recordID;
+    this.loadStatus = false;
     this.recording = false;
     this.#currValue = "";
 
-    if (_recordID !== null) {
-      this.#loadData(_recordID);
-      this.#recordingMode = false;
-    } else {
-      this.#recordingMode = true;
-    }
+    if (_recordID !== null) this.#loadData(_recordID);
+    else this.#recordingMode = true;
   }
 
   startRecord(_startTime, _firstValue, _recordName) {
     if (!this.recording && this.#recordingMode) {
       this.recordName = _recordName;
-      this.firstValue = _firstValue;
+      this.#firstValue = _firstValue;
       this.#startTime = _startTime;
       this.recording = true;
     }
@@ -40,7 +38,6 @@ class Typist {
       this.recording = false;
       this.#sendData(this.#changesList);
     }
-    console.log(this.#changesList);
   }
   pushChanges(oldValue, newValue) {
     if (this.recording && this.#recordingMode) {
@@ -101,7 +98,7 @@ class Typist {
   }
   runChanges(func) {
     if (!this.recording && !this.#recordingMode) {
-      this.#currValue = this.firstValue;
+      this.#currValue = this.#firstValue;
       func(this.#currValue);
 
       for (let j = 0; j < this.#changesList.length; j++) {
@@ -115,10 +112,8 @@ class Typist {
   }
 
   #sendData(selectedChanges, breakPoint = null) {
-    console.log(this.#recordID);
-    console.log(this.firstValue);
     let data = JSON.stringify({
-      firstValue: this.#recordID ? null : this.firstValue,
+      firstValue: this.#recordID ? null : this.#firstValue,
       changes: selectedChanges,
       breakPoint: breakPoint,
       name: this.recordName,
@@ -152,7 +147,6 @@ class Typist {
       });
   }
   #loadData(recordID) {
-    this.#recordID;
     let config = {
       method: "get",
       url: `index/loaddata/${recordID}`,
@@ -170,10 +164,12 @@ class Typist {
           data: { changes, breakPoints, recordName, firstValue },
         }) => {
           if (status === 200) {
-            this.#changesList = changes;
             this.#breakPoints = breakPoints;
+            this.#firstValue = firstValue;
             this.recordName = recordName;
-            this.firstValue = firstValue;
+            this.#changesList = changes;
+            this.#recordingMode = false;
+            this.loadStatus = true;
           } else {
             console.log("Error");
           }

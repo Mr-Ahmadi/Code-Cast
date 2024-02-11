@@ -44,6 +44,7 @@
   color: #d4d4d4;
   background-color: transparent;
 }
+
 .full-width {
   width: 100%;
   display: block;
@@ -80,7 +81,18 @@
   background-color: #f96c00f0;
   cursor: pointer;
 }
-.btn-small {
+.select-box {
+  margin: 5px;
+  padding: 10px;
+  border: none;
+  border-radius: 5px;
+  font-size: 14px;
+  font-weight: bold;
+  color: #222831;
+  background-color: #f96c00f0;
+  cursor: pointer;
+}
+.size-small {
   margin: 3px;
   padding: 5px;
   border: none;

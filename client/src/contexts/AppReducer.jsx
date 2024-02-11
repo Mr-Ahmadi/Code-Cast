@@ -16,6 +16,10 @@ const defaultFunc = (state, action) => {
             return {
                 ...state, recordName: action.payload.value
             }
+        case "SET_LANGUAGE":
+            return {
+                ...state, language: [action.payload.lang, action.payload.version]
+            }
         default: state
     }
 }

@@ -2,7 +2,7 @@ import { useContext } from 'react'
 import { GlobalContext } from '../../contexts/GlobalStates';
 import PropTypes from 'prop-types';
 import { useState } from 'react';
-import { load as loadRecord } from "../../functions/record";
+import { init as initRecord, load as loadRecord } from "../../functions/record";
 
 
 const RecordsList = ({ display, setDisplay }) => {
@@ -24,19 +24,29 @@ const RecordsList = ({ display, setDisplay }) => {
                             {record[0]}
                         </span>
                     })) : <h4 className="modal-title">Nothing found as a record!</h4>}
+                    <span className={'file-label ' + (selected === true ? "selected" : "")}
+                        onClick={(() => setSelected(true))}><code>New Record...</code></span>
                 </div>
                 <hr />
                 <div className="modal-bottom">
                     <button className='btn-primary' onClick={() => {
                         setDisplay(false)
-                        setSelected(false)
+                        setSelected(null)
                     }}>Close</button>
-                    <button className='btn-primary' disabled={selected === null} onClick={() => {
-                        selected && loadRecord(selected)
+                    <button className='btn-primary' disabled={selected === null} onClick={async () => {
+                        if (selected) {
+                            if (selected === true) {
+                                initRecord()
+                            } else {
+                                loadRecord(selected)
+                                setDisplay(false)
+                                setSelected(null)
+                            }
+                        }
                     }}>Open</button>
                 </div>
             </div>
-        </div>
+        </div >
     )
 }
 

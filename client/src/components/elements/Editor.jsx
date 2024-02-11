@@ -2,12 +2,13 @@ import { useRef, useContext } from 'react';
 import { GlobalContext } from '../../contexts/GlobalStates';
 import Editor from '@monaco-editor/react';
 import { push, setEditor } from '../../functions/record';
+import PropTypes from 'prop-types';
 
-const _Editor = () => {
-    const { recording } = useContext(GlobalContext);
+const _Editor = ({ editorRef }) => {
+    const { recording, language } = useContext(GlobalContext);
 
-    const editorRef = useRef(null);
-    const oldValue = useRef("")
+    // const editorRef = useRef(null);
+    const oldValue = useRef("");
 
     function handleEditorDidMount(editor) {
         editorRef.current = editor;
@@ -19,8 +20,7 @@ const _Editor = () => {
             <Editor
                 height="100%"
                 width="100%"
-                defaultLanguage="javascript"
-                // defaultValue="// some comment"
+                language={language[0]}
                 onMount={handleEditorDidMount}
                 onChange={() => {
                     if (recording) {
@@ -32,6 +32,13 @@ const _Editor = () => {
             />
         </div>
     )
+}
+
+_Editor.propTypes = {
+    editorRef: PropTypes.oneOfType([
+        PropTypes.func,
+        PropTypes.shape({ current: PropTypes.any })
+    ])
 }
 
 export default _Editor

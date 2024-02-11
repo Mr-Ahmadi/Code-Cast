@@ -7,22 +7,17 @@ const setEditor = (_editor) => {
   editor = _editor;
 };
 
-const init = (recordName) => {
-  const firstValue = editor.current.getValue();
-
+const init = () => {
   lecture = new Lecture();
   typist = new Typist();
+};
+
+const start = (recordName) => {
+  const firstValue = editor.current.getValue();
 
   lecture.startRecord();
   typist.startRecord(Date.now(), firstValue, recordName);
 };
-
-// const start = (recordName) => {
-//   const firstValue = editor.current.getValue();
-
-//   lecture.startRecord();
-//   typist.startRecord(Date.now(), firstValue, recordName);
-// };
 
 const push = (oldValue, newValue) => {
   if (typist instanceof Typist) {
@@ -55,4 +50,4 @@ const play = () => {
   }
 };
 
-export { setEditor, init, push, stop, load, play };
+export { setEditor, init, start, push, stop, load, play };
