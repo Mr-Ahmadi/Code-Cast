@@ -8,8 +8,8 @@ import PropTypes from 'prop-types';
 
 
 const TopBar = ({ editorRef }) => {
-    const { startRecording, recording, stopRecording, setRecordName, recordName, setLanguage, language } = useContext(GlobalContext);
-    const [recordsDisplay, setRecordsDisplay] = useState(false)
+    const { startRecording, recording, stopRecording, recordName, setLanguage, language } = useContext(GlobalContext);
+    const [recordsDisplay, setRecordsDisplay] = useState(true)
 
     return (
         <>
@@ -47,7 +47,6 @@ const TopBar = ({ editorRef }) => {
                     }}>Play</button>
                 </div>
                 <div>
-                    <input type="text" className="text-input" defaultValue={"Untitled"} onChange={ev => setRecordName(ev.target.value)} />
                     <button className="btn-primary size-small" onClick={() => {
                         setRecordsDisplay(true)
                     }}>Open</button>

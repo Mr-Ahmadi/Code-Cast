@@ -3,6 +3,7 @@
 @import url("error.css");
 @import url("editor.css");
 @import url("modal.css");
+@import url("input.css");
 
 body {
   background-color: #393e46db;

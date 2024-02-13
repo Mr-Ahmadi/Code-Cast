@@ -6,7 +6,7 @@ import { init as initRecord, load as loadRecord } from "../../functions/record";
 
 
 const RecordsList = ({ display, setDisplay }) => {
-    const { user } = useContext(GlobalContext);
+    const { user, setRecordName } = useContext(GlobalContext);
     const [selected, setSelected] = useState(null)
 
     return (
@@ -16,7 +16,6 @@ const RecordsList = ({ display, setDisplay }) => {
                 <hr />
                 <div className='list-container'>
                     {user.records.length ? (user.records.map((record) => {
-                        console.log(record[1])
                         return <span
                             className={'file-label ' + (selected === record[1] ? "selected" : "")}
                             onClick={(ev => setSelected(ev.target.id))}
@@ -28,22 +27,29 @@ const RecordsList = ({ display, setDisplay }) => {
                         onClick={(() => setSelected(true))}><code>New Record...</code></span>
                 </div>
                 <hr />
-                <div className="modal-bottom">
-                    <button className='btn-primary' onClick={() => {
+                <div className="bottom-row">
+                    {/* <button className='btn-primary' onClick={() => {
                         setDisplay(false)
                         setSelected(null)
-                    }}>Close</button>
-                    <button className='btn-primary' disabled={selected === null} onClick={async () => {
-                        if (selected) {
-                            if (selected === true) {
-                                initRecord()
-                            } else {
-                                loadRecord(selected)
-                                setDisplay(false)
-                                setSelected(null)
+                    }}>Close</button> */}
+                    <div>
+                        <input type="text" className={"text-input " + (selected === true ? "" : "hide")} defaultValue={"Untitled"} onChange={ev => setRecordName(ev.target.value)} />
+                    </div>
+                    <div>
+                        <button className='btn-primary' disabled={selected === null} onClick={async () => {
+                            if (selected) {
+                                if (selected === true) {
+                                    initRecord()
+                                    setDisplay(false)
+                                    setSelected(null)
+                                } else {
+                                    loadRecord(selected)
+                                    setDisplay(false)
+                                    setSelected(null)
+                                }
                             }
-                        }
-                    }}>Open</button>
+                        }}>Open</button>
+                    </div>
                 </div>
             </div>
         </div >

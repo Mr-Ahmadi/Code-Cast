@@ -7,7 +7,6 @@ import PropTypes from 'prop-types';
 const _Editor = ({ editorRef }) => {
     const { recording, language } = useContext(GlobalContext);
 
-    // const editorRef = useRef(null);
     const oldValue = useRef("");
 
     function handleEditorDidMount(editor) {

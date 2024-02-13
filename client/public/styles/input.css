@@ -1,0 +1,60 @@
+.btn-primary {
+  margin: 5px;
+  padding: 10px;
+  border: none;
+  border-radius: 5px;
+  font-size: 14px;
+  font-weight: bold;
+  color: #222831;
+  background-color: #f96c00f0;
+  cursor: pointer;
+}
+.select-box {
+  margin: 5px;
+  padding: 10px;
+  border: none;
+  border-radius: 5px;
+  font-size: 14px;
+  font-weight: bold;
+  color: #222831;
+  background-color: #f96c00f0;
+  cursor: pointer;
+}
+.size-small {
+  margin: 3px;
+  padding: 5px;
+  border-radius: 3px;
+  font-size: 12px;
+}
+.btn-primary:hover {
+  background-color: #f96d00;
+}
+.btn-primary:disabled {
+  background-color: #f96c009f;
+  cursor: not-allowed;
+}
+a:link {
+  color: #dcdcaa;
+}
+a:visited {
+  color: #f96d00;
+}
+.text-input {
+  transition: all 0.2s linear;
+  width: 100px;
+  border: none;
+  border-bottom: 2px solid #ffa866;
+  margin: 5px;
+  outline: none;
+  font-size: 16px;
+  color: #d4d4d4;
+  background-color: transparent;
+  text-align: center;
+}
+.full-width {
+  width: 100%;
+  display: block;
+}
+.text-input:focus {
+  border-color: #f96d00;
+}

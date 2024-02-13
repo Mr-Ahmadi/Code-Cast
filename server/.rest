@@ -82,3 +82,5 @@ Content-Type: application/json
     "fileID": "6380acc04ee36844968ff272",
     "noteID": "6380ad614ee36844968ff286"
 }
+###
+GET http://localhost:4000/user/verify/65cb9242b6dd953af629f9c0/ccf069f0537f0510b4992323e944795dc0dea31de64f15676c2061f1a6015254
