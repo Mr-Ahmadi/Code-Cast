@@ -13,50 +13,55 @@ const SignIn = () => {
         password: "",
     }, signIn);
 
+    const msgType = message[0] === "ERROR" ? "error" : message[0] === "SUCCESS" ? "success" : message[0] === "LOADING" ? "loading" : null;
+
     return (
         <div className="partial-container">
             <h2 className="partial-title">Sign In</h2>
             <form onSubmit={handleSubmit} onReset={handleReset}>
                 <div className="form-group">
-                    <label htmlFor="email">
-                        Email
-                    </label>
+                    <label htmlFor="email">Email</label>
                     <input
                         type="email"
                         className="text-input full-width"
                         name="email"
+                        id="email"
                         value={values.email}
                         onChange={handleChange}
+                        autoComplete="email"
+                        required
+                        aria-required="true"
                     />
                 </div>
                 <div className="form-group">
-                    <label htmlFor="password">
-                        Password
-                    </label>
-                    <input className="text-input full-width"
+                    <label htmlFor="password">Password</label>
+                    <input
+                        className="text-input full-width"
                         type="password"
                         name="password"
+                        id="password"
                         value={values.password}
                         onChange={handleChange}
+                        autoComplete="current-password"
+                        required
+                        aria-required="true"
                     />
                 </div>
-                {message[0] === "ERROR"
-                    ? <span className="message-output">{message[1]}</span>
-                    : message[0] === "SUCCESS"
-                        ? <span className="message-output">{message[1]}</span>
-                        : message[0] === "LOADING"
-                            ? <span className="message-output">Loading...</span>
-                            : <></>}
+                {msgType && (
+                    <span className={"message-output " + msgType} role="status">
+                        {message[1]}
+                    </span>
+                )}
                 <div className="bottom-row">
                     <div>
-                        <Link to="/signup">Sign Up</Link>
+                        <Link to="/signup">Create account</Link>
                     </div>
                     <div>
-                        <input className="btn-primary"
+                        <input className="btn btn-secondary btn-sm"
                             type="reset" value="Clear"
                             disabled={message[0] === "LOADING"}
                         />
-                        <input className="btn-primary"
+                        <input className={"btn btn-primary btn-sm" + (message[0] === "LOADING" ? " btn-loading" : "")}
                             type="submit" value="Sign In"
                             disabled={message[0] === "LOADING"}
                         />

@@ -2,7 +2,7 @@ import axios from "axios";
 import checkEmail from "../validation/checkEmail";
 import checkPassword from "../validation/checkPassword";
 
-const signUp = async (values, setMessage, navigate) => {
+const signIn = async (values, setMessage, navigate) => {
   setMessage(["LOADING", null]);
 
   if (checkEmail(values.email)) {
@@ -40,4 +40,4 @@ const signUp = async (values, setMessage, navigate) => {
   }
 };
 
-export default signUp;
+export default signIn;

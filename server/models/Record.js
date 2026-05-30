@@ -1,41 +1,53 @@
-const mongoose = require("mongoose");
+const { DataTypes } = require("sequelize");
+const sequelize = require("../config/database");
+const User = require("./User");
 
-const ChangeSchema = new mongoose.Schema({
-  millis: {
-    type: Number,
+const Record = sequelize.define(
+  "Record",
+  {
+    id: {
+      type: DataTypes.UUID,
+      defaultValue: DataTypes.UUIDV4,
+      primaryKey: true,
+    },
+    userId: {
+      type: DataTypes.UUID,
+      allowNull: false,
+      references: {
+        model: User,
+        key: "id",
+      },
+    },
+    name: {
+      type: DataTypes.STRING,
+      allowNull: false,
+    },
+    firstValue: {
+      type: DataTypes.TEXT,
+    },
+    voice: {
+      type: DataTypes.TEXT,
+    },
+    breakPoints: {
+      type: DataTypes.JSONB,
+      defaultValue: [],
+    },
+    changes: {
+      type: DataTypes.JSONB,
+      defaultValue: [],
+    },
+    executions: {
+      type: DataTypes.JSONB,
+      defaultValue: [],
+    },
   },
-  type: {
-    type: Boolean,
-  },
-  index: {
-    type: Number,
-  },
-  value: {
-    type: String,
-  },
-});
+  {
+    tableName: "projects",
+    timestamps: false,
+  }
+);
 
-const RecordSchema = new mongoose.Schema({
-  userId: {
-    type: mongoose.Schema.Types.ObjectId,
-    ref: "User",
-    required: true,
-  },
-  name: {
-    type: String,
-    required: true,
-  },
-  firstValue: {
-    type: String,
-  },
-  voice: {
-    type: String,
-  },
-  breakPoints: [String],
-  changes: [[ChangeSchema]],
-  executions: [Number],
-});
-
-const Record = mongoose.model("Project", RecordSchema, "projects");
+User.hasMany(Record, { foreignKey: "userId" });
+Record.belongsTo(User, { foreignKey: "userId" });
 
 module.exports = Record;

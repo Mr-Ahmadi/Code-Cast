@@ -1,15 +1,18 @@
 import PropTypes from 'prop-types';
-
+import { FiRefreshCw } from "react-icons/fi";
 
 const InternalError = ({ checkAuth }) => {
     return (
-        <div className="partial-container">
-            <h2 className="partial-title">Internal Error</h2>
+        <div className="partial-container" role="alert">
+            <h2 className="partial-title">Connection Error</h2>
             <div className="error">
-                <h1 className="hypertube">500</h1>
-                <h4>Can <span className='text-danger'>not</span> connect server</h4>
+                <div className="error-title" aria-hidden="true">500</div>
+                <h4>Cannot connect to the server.
+                    <br />Please check your connection and try again.</h4>
                 <h3>
-                    <u onClick={checkAuth} >Retry</u>
+                    <button className="error-link" onClick={checkAuth} aria-label="Retry connection">
+                        <FiRefreshCw size={14} aria-hidden="true" /> Retry
+                    </button>
                 </h3>
             </div>
         </div>
@@ -19,6 +22,5 @@ const InternalError = ({ checkAuth }) => {
 InternalError.propTypes = {
     checkAuth: PropTypes.func
 }
-
 
 export default InternalError

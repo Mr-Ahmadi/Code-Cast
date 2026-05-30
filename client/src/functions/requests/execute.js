@@ -1,19 +1,16 @@
 import axios from "axios";
 
-const Piston_API = axios.create({
-  baseURL: "https://emkc.org/api/v2/piston",
-});
-
 export const executeCode = async (language, sourceCode) => {
-  const response = await Piston_API.post("/execute", {
-    language: language[0],
-    version: language[1],
-    files: [
-      {
-        content: sourceCode,
-      },
-    ],
+  const response = await axios.request({
+    method: "post",
+    url: "index/execute",
+    headers: { "Content-Type": "application/json" },
+    data: {
+      language: language[0],
+      version: language[1],
+      sourceCode,
+    },
+    withCredentials: true,
   });
-  console.log(response);
   return response.data;
 };

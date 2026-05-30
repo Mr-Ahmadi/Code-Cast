@@ -1,36 +1,78 @@
-@import url(https://fonts.googleapis.com/css?family=Fira+Sans:200,400,500,600,700|Monoton|Plaster);
+@import url(https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap);
 
-.hypertube {
-  font-family: "Plaster", cursive;
-  text-transform: uppercase;
-}
 .error {
+  display: flex;
   flex-direction: column;
   align-items: center;
   justify-content: center;
+  gap: 8px;
 }
+
 .error > h1,
 .error > h2,
 .error > h3,
 .error > h4 {
   text-align: center;
   width: 100%;
-  color: #e59500;
 }
-.error > h1 {
-  font-size: 100px;
+
+.error-title {
+  font-size: 72px;
+  font-weight: 700;
+  color: var(--accent);
+  letter-spacing: 2px;
+  line-height: 1;
+  margin-bottom: 8px;
 }
-.error > h3 {
-  text-align: right;
-  margin-top: 10px;
-  margin-bottom: 10px;
-}
+
 .error > h4 {
-  text-align: left;
+  font-size: 14px;
+  font-weight: 400;
+  color: var(--text-secondary);
+  font-family: var(--font-ui);
+  line-height: 1.5;
 }
+
+.error > h3 {
+  margin-top: 16px;
+  display: flex;
+  gap: 12px;
+  justify-content: center;
+}
+
+.error-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 16px;
+  background-color: var(--accent);
+  color: #fff;
+  border-radius: var(--radius-md);
+  font-size: 13px;
+  font-weight: 600;
+  text-decoration: none;
+  cursor: pointer;
+  border: none;
+  font-family: var(--font-ui);
+  transition: background-color var(--transition);
+}
+
+.error-link:hover,
+.error-link:focus-visible {
+  background-color: var(--accent-hover);
+}
+
+.error-link:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
 .text-success {
-  color: #5f8670;
+  color: var(--success);
+  font-weight: 600;
 }
+
 .text-danger {
-  color: #b80000;
+  color: var(--danger);
+  font-weight: 600;
 }

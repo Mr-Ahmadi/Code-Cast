@@ -1,8 +1,7 @@
 import cookies from "js-cookie";
 
-const signOut = async (checkAuth, navigate) => {
+const signOut = async (navigate) => {
   cookies.remove("jwt");
-  checkAuth();
   navigate("/signin");
 };
 

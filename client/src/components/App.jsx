@@ -1,20 +1,18 @@
-import SignUp from './mains/SignUp';
-import SignIn from './mains/SignIn';
-import checkAuth from '../functions/requests/checkAuth';
+import { lazy, Suspense, useContext, useEffect, useState } from 'react';
 import { Route, Routes, useLocation } from 'react-router-dom';
-import { useContext, useEffect, useState } from 'react';
+import checkAuth from '../functions/requests/checkAuth';
 import Loading from './mains/Loading';
-import NotFound from './mains/NotFound';
-import MainPage from './mains/MainPage';
-import InternalError from './mains/InternalError';
-import NotVerified from './mains/NotVerified';
 import { GlobalContext } from '../contexts/GlobalStates';
+
+const SignUp = lazy(() => import('./mains/SignUp'));
+const SignIn = lazy(() => import('./mains/SignIn'));
+const NotFound = lazy(() => import('./mains/NotFound'));
+const MainPage = lazy(() => import('./mains/MainPage'));
+const InternalError = lazy(() => import('./mains/InternalError'));
 
 export default function App() {
   const location = useLocation()
-
   const [auth, setAuth] = useState(null)
-
   const { user, setUser } = useContext(GlobalContext)
 
   useEffect(() => {
@@ -23,30 +21,28 @@ export default function App() {
       setAuth(null);
       setUser(null);
     }
-  }, [location])
+  }, [location, setUser])
 
   return (
-    < Routes >
-      {auth === null && <Route path='*' element={<Loading />} />}
-      {auth === undefined && <Route path='*' element={
-        <InternalError checkAuth={() => checkAuth(setAuth, setUser)} />
-      } />}
-      {auth === true &&
-        ((user && user.verified === false)
-          ? <Route path='/' element={
-            <NotVerified checkAuth={() => checkAuth(setAuth, setUser)} />
-          } />
-          : ((user && user.verified === true)
+    <Suspense fallback={<Loading />}>
+      <Routes>
+        {auth === null && <Route path='*' element={<Loading />} />}
+        {auth === undefined && <Route path='*' element={
+          <InternalError checkAuth={() => checkAuth(setAuth, setUser)} />
+        } />}
+        {auth === true &&
+          ((user)
             ? <Route path='/' element={<MainPage />} />
-            : <Route path='/' element={<Loading />} />))
-      }
-      {auth === false &&
-        <>
-          <Route path='/signin' element={<SignIn />} />
-          <Route path='/signup' element={<SignUp />} />
-        </>
-      }
-      <Route path='*' element={<NotFound auth={auth} />} />
-    </ Routes>
+            : <Route path='/' element={<Loading />} />)
+        }
+        {auth === false &&
+          <>
+            <Route path='/signin' element={<SignIn />} />
+            <Route path='/signup' element={<SignUp />} />
+          </>
+        }
+        <Route path='*' element={<NotFound auth={auth} />} />
+      </Routes>
+    </Suspense>
   );
 }

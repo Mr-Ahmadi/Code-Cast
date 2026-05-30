@@ -1,58 +1,91 @@
-* {
-  margin: 0;
-  border: 0;
-  padding: 0;
-}
 .partial-container {
-  font-family: "consolas";
+  font-family: var(--font-ui);
   position: absolute;
-  width: 300px;
+  width: 340px;
   top: 50%;
   left: 50%;
   transform: translate(-50%, -50%);
-  padding: 20px;
-  background-color: #222831;
-  border-radius: 5px;
-  box-shadow: 10px 10px 25px 0px rgba(34, 40, 49, 0.8);
-  transition: all 2s linear;
+  padding: 32px 28px;
+  background-color: var(--bg-secondary);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-lg);
+  border: 1px solid var(--border);
 }
+
 .partial-container > .partial-title {
-  color: #f96d00;
-  margin-bottom: 10px;
-  margin-top: 10px;
+  color: var(--accent);
+  font-size: 22px;
+  font-weight: 700;
+  margin-bottom: 20px;
+  text-align: center;
+  letter-spacing: 0.5px;
 }
 
 .form-group {
-  padding-bottom: 15px;
-  padding-top: 15px;
+  padding-bottom: 16px;
+  padding-top: 8px;
   width: 100%;
 }
-.form-group > label {
-  padding-bottom: 3px;
-  display: block;
-  font-weight: bold;
-  color: #dcdcaa;
-}
 
+.form-group > label {
+  padding-bottom: 6px;
+  display: block;
+  font-weight: 600;
+  font-size: 13px;
+  color: var(--text-secondary);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  font-family: var(--font-ui);
+}
 
 .bottom-row {
   display: flex;
   justify-content: space-between;
+  align-items: center;
+  margin-top: 8px;
 }
+
 .bottom-row > div {
   display: flex;
   align-items: center;
+  gap: 8px;
 }
 
 .message-output {
-  margin: 0;
-  margin-bottom: 5%;
-  color: #ff5c16;
+  margin: 0 0 12px 0;
   display: block;
   font-style: italic;
+  font-size: 13px;
+  text-align: center;
+  font-family: var(--font-ui);
+  padding: 8px 12px;
+  border-radius: var(--radius-sm);
 }
 
-u {
-  margin-left: 7px;
-  cursor: pointer;
+.message-output.loading {
+  color: var(--text-muted);
+}
+
+.message-output.error {
+  color: #fca5a5;
+  background-color: var(--danger-bg);
+  border: 1px solid transparent;
+}
+
+.message-output.success {
+  color: #86efac;
+  background-color: var(--success-bg);
+  border: 1px solid transparent;
+}
+
+a {
+  color: var(--text-secondary);
+  text-decoration: none;
+  font-size: 13px;
+  font-weight: 500;
+  transition: color var(--transition);
+}
+
+a:hover {
+  color: var(--accent);
 }

@@ -1,61 +1,49 @@
-/*
-User => 1.Name     => (String)
-        2.Email    => (String - lowercase)
-        3.Verified => (Boolean)
-        4.Password => (bcrypt)
-        5.Record   => 1.Name
-                      2.Voice                       
-                      3.Break-Points
-                      4.Changes       => 1.millis   => (int)
-                                         2.type     => (1 or 0)
-                                         3.index    => (int)
-                                         4.value    => (String)
-========================================================================================
-==>> Needd Schema: ChangeSchema, WorkSchema, ReminderSchema, ExpenseSchema, UserSchema
-*/
-const mongoose = require("mongoose");
+const { DataTypes } = require("sequelize");
 const bcrypt = require("bcryptjs");
+const sequelize = require("../config/database");
 
-const UserSchema = new mongoose.Schema({
-  email: {
-    type: String,
-    unique: true,
-    required: [true, "Email is required"],
-    lowercase: true,
-    match: [/^\w+([\.-]?\w+)*@\w+([\.-]?\w+)*(\.\w{2,3})+$/, "Invalid email"],
-  },
-  verified: {
-    type: Boolean,
-    default: false,
-  },
-  password: {
-    type: String,
-    required: [true, "Password is required"],
-  },
-  records: [
-    {
-      type: mongoose.Schema.Types.ObjectId,
-      ref: "Record",
-      required: true,
+const User = sequelize.define(
+  "User",
+  {
+    id: {
+      type: DataTypes.UUID,
+      defaultValue: DataTypes.UUIDV4,
+      primaryKey: true,
     },
-  ],
-});
+    email: {
+      type: DataTypes.STRING,
+      allowNull: false,
+      unique: true,
+      validate: {
+        isEmail: true,
+      },
+    },
+    verified: {
+      type: DataTypes.BOOLEAN,
+      defaultValue: false,
+    },
+    password: {
+      type: DataTypes.STRING,
+      allowNull: false,
+    },
+  },
+  {
+    tableName: "users",
+    timestamps: false,
+  }
+);
 
-UserSchema.statics.login = async function ({ email, password }) {
-  const user = await this.findOne({ email });
+User.login = async function ({ email, password }) {
+  const user = await this.findOne({ where: { email } });
   if (user) {
     if (await bcrypt.compare(password, user.password)) {
       return user;
     } else {
-      console.log(password);
-      console.log(user.password);
       throw Error("Incurrect email/password");
     }
   } else {
     throw Error("Incurrect email/password");
   }
 };
-
-const User = mongoose.model("User", UserSchema, "users");
 
 module.exports = User;

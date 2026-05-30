@@ -1,7 +1,9 @@
 const Loading = () => {
     return (
-        <div className="loading">
-            <span></span><span></span><span></span>
+        <div className="loading" role="status" aria-label="Loading">
+            <div className="loading-dot"></div>
+            <div className="loading-dot"></div>
+            <div className="loading-dot"></div>
         </div>
     )
 }
