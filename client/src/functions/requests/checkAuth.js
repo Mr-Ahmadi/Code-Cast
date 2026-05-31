@@ -6,9 +6,6 @@ const checkAuth = async (setAuth, setUser) => {
     let config = {
       method: "get",
       url: "user/checkAuth",
-      // headers: {
-      //   "Content-Type": "application/json",
-      // },
       withCredentials: true,
     };
 

@@ -4,6 +4,7 @@ const jwt = require("jsonwebtoken");
 
 const User = require("../models/User");
 const Record = require("../models/Record");
+const Workspace = require("../models/Project");
 
 const authenticated = require("../middlewares/authenticated");
 
@@ -18,15 +19,34 @@ const createToken = (id) => {
 };
 
 router.get("/checkauth", authenticated, async (req, res) => {
-  const records = await Record.findAll({
+  const workspaces = await Workspace.findAll({
     where: { userId: res.locals.user.id },
-    attributes: ["id", "name"],
+    attributes: ["id", "name", "files"],
     order: [["name", "ASC"]],
   });
-  const recordsList = records.map((r) => [r.name, r.id]);
+  const records = await Record.findAll({
+    where: { userId: res.locals.user.id },
+    attributes: ["id", "name", "workspaceId"],
+    order: [["name", "ASC"]],
+  });
+  const recordsByWs = {};
+  for (const r of records) {
+    const wsId = r.workspaceId || "none";
+    if (!recordsByWs[wsId]) recordsByWs[wsId] = [];
+    recordsByWs[wsId].push([r.name, r.id]);
+  }
+  const workspacesList = workspaces.map((w) => ({
+    id: w.id,
+    name: w.name,
+    files: w.files,
+    records: recordsByWs[w.id] || [],
+  }));
+  if (recordsByWs["none"]) {
+    workspacesList.push({ id: null, name: "Unorganized", files: {}, records: recordsByWs["none"] });
+  }
   res.status(200).json({
     email: res.locals.user.email,
-    records: recordsList,
+    workspaces: workspacesList,
   });
 });
 

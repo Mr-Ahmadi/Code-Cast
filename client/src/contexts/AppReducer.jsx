@@ -10,8 +10,6 @@ const defaultFunc = (state, action) => {
             return { ...state, user: action.payload.value }
         case "SET_RECORD_NAME":
             return { ...state, recordName: action.payload.value }
-        case "SET_LANGUAGE":
-            return { ...state, language: [action.payload.lang, action.payload.version] }
         case "SET_PLAYING":
             return { ...state, playing: action.payload.value }
         case "SET_OUTPUT":
@@ -24,6 +22,16 @@ const defaultFunc = (state, action) => {
             return { ...state, fontSize: action.payload.value }
         case "SET_SHOW_MINIMAP":
             return { ...state, showMinimap: action.payload.value }
+        case "SET_ACTIVE_FILE":
+            return { ...state, activeFile: action.payload.value }
+        case "SET_FILES":
+            return { ...state, files: action.payload.value }
+        case "SET_SIDEBAR_OPEN":
+            return { ...state, sidebarOpen: action.payload.value }
+        case "SET_CURRENT_WORKSPACE":
+            return { ...state, currentWorkspace: action.payload.value }
+        case "SET_CURRENT_RECORD":
+            return { ...state, currentRecord: action.payload.value }
         default:
             return state
     }

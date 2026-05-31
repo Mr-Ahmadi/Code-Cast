@@ -1,6 +1,7 @@
 import { useContext, useState, useEffect, useRef, useCallback, memo } from "react";
 import { GlobalContext } from '../../contexts/GlobalStates'
 import {
+  init as initRecord,
   start as startRecord,
   stop as stopRecord,
   pause as pauseRecord,
@@ -9,16 +10,17 @@ import {
   stopPlay,
   seek as seekTo,
   getDuration,
-  getStateAt,
   isTypistLoaded,
   isAudioRecording,
   exportRecord,
   importFromFile,
+  getFiles,
+  addFile as recordAddFile,
+  getFilesFinalContent,
 } from "../../functions/record";
 import RecordsList from "./RecordsList";
 import ShortcutsHelp from "./ShortcutsHelp";
 import ProgressBar from "./ProgressBar";
-import langVersions from '../../constants/langVersions.json'
 import { executeCode } from "../../functions/requests/execute";
 import signOut from "../../functions/requests/signOut";
 import { useNavigate } from "react-router-dom";
@@ -30,12 +32,14 @@ const SKIP_MS = 5000;
 
 const TopBar = memo(({ editorRef }) => {
   const {
-    startRecording, recording, stopRecording, paused, setPaused,
-    recordName, setRecordName, setLanguage, language, playing, setPlaying, setOutput, setToast, refreshUser,
-    audioEnabled, setAudioEnabled,
+    recording, startRecording, stopRecording, paused, setPaused,
+    recordName, setRecordName, playing, setPlaying, setOutput, setToast, refreshUser,
+    audioEnabled, setAudioEnabled, currentWorkspace, currentRecord, setCurrentRecord,
     fontSize, setFontSize, showMinimap, setShowMinimap,
+    activeFile, setActiveFile,
   } = useContext(GlobalContext);
   const [recordsDisplay, setRecordsDisplay] = useState(false);
+  window.__openProjectDialog = useCallback(() => setRecordsDisplay(true), []);
   const [showShortcuts, setShowShortcuts] = useState(false);
   const [recordTime, setRecordTime] = useState(0);
   const [speed, setSpeed] = useState(1);
@@ -47,17 +51,24 @@ const TopBar = memo(({ editorRef }) => {
   const timerRef = useRef(null);
   const speedRef = useRef(null);
   const progressPollRef = useRef(null);
+  const pausedRef = useRef(paused);
   const navigate = useNavigate();
   const audioRecording = isAudioRecording();
   const importInputRef = useRef(null);
 
   const isRecordingActive = recording && !paused;
 
+  pausedRef.current = paused;
+
+  useEffect(() => {
+    window.__activeFile = activeFile;
+  }, [activeFile]);
+
   useEffect(() => {
     if (recording) {
       setRecordTime(0);
       timerRef.current = setInterval(() => {
-        if (!paused) {
+        if (!pausedRef.current) {
           setRecordTime(t => t + 1);
         }
       }, 1000);
@@ -65,7 +76,7 @@ const TopBar = memo(({ editorRef }) => {
       clearInterval(timerRef.current);
     }
     return () => clearInterval(timerRef.current);
-  }, [recording, paused]);
+  }, [recording]);
 
   useEffect(() => {
     if (playing) {
@@ -112,7 +123,10 @@ const TopBar = memo(({ editorRef }) => {
     if (!sourceCode) return;
     setExecuting(true);
     try {
-      const { run: result } = await executeCode(language, sourceCode);
+      const ext = activeFile ? activeFile.split(".").pop().toLowerCase() : "js";
+      const langMap = { js: "javascript", ts: "typescript", py: "python", jsx: "javascript", tsx: "typescript" };
+      const lang = langMap[ext] || "javascript";
+      const { run: result } = await executeCode(lang, sourceCode);
       setOutput(result?.output || "(no output)");
     } catch (error) {
       setOutput("Error: " + error.message);
@@ -120,22 +134,45 @@ const TopBar = memo(({ editorRef }) => {
     } finally {
       setExecuting(false);
     }
-  }, [editorRef, language, setOutput, setToast]);
+  }, [editorRef, activeFile, setOutput, setToast]);
 
   const handleRecord = useCallback(async () => {
-    if (!recording && !playing) {
-      await startRecord(recordName, audioEnabled);
-      startRecording();
-    } else if (recording && !paused) {
-      await stopRecord();
-      stopRecording();
-      refreshUser();
-    } else if (recording && paused) {
-      await stopRecord();
-      stopRecording();
-      refreshUser();
+    try {
+      if (!recording && !playing) {
+        if (!currentWorkspace) {
+          setToast({ type: "WARNING", message: "Open a project first to start recording." });
+          return;
+        }
+        if (currentRecord) {
+          const finalContent = getFilesFinalContent();
+          initRecord();
+          for (const [name, content] of Object.entries(finalContent)) {
+            recordAddFile(name, null, content);
+          }
+          setCurrentRecord(null);
+        }
+        const files = getFiles();
+        if (files.length === 0) {
+          recordAddFile("index.html", "html", "");
+          recordAddFile("style.css", "css", "");
+          recordAddFile("script.js", "javascript", "");
+          setActiveFile("index.html");
+        }
+        const ws = currentWorkspace;
+        await startRecord(recordName, audioEnabled, ws?.id || null);
+        startRecording();
+      } else if (recording) {
+        const saved = await stopRecord();
+        stopRecording();
+        if (!saved) {
+          setToast({ type: "ERROR", message: "Failed to save recording. Please try again." });
+        }
+        refreshUser();
+      }
+    } catch (e) {
+      setToast({ type: "ERROR", message: e.message || "Failed to start recording" });
     }
-  }, [recording, paused, playing, recordName, audioEnabled, startRecording, stopRecording, refreshUser]);
+  }, [recording, playing, recordName, audioEnabled, startRecording, stopRecording, refreshUser, setActiveFile, setToast, currentWorkspace, currentRecord, setCurrentRecord]);
 
   const handlePauseResume = useCallback(() => {
     if (paused) {
@@ -212,14 +249,15 @@ const TopBar = memo(({ editorRef }) => {
       setToast({ type: "SUCCESS", message: `Imported "${name}"` });
       setPlaying(false);
       stopPlay();
-      if (editorRef.current) {
-        editorRef.current.setValue(getStateAt(0));
+      const files = getFiles();
+      if (files.length > 0) {
+        setActiveFile(files[0].name);
       }
     } catch (err) {
       setToast({ type: "ERROR", message: err.message || "Failed to import" });
     }
     e.target.value = "";
-  }, [setRecordName, setToast, setPlaying, editorRef]);
+  }, [setRecordName, setToast, setPlaying, setActiveFile]);
 
   return (
     <>
@@ -235,17 +273,6 @@ const TopBar = memo(({ editorRef }) => {
           >
             <FiTerminal size={14} /> Execute
           </button>
-          <select
-            name="languages"
-            className="select-box"
-            value={language[0]}
-            onChange={ev => setLanguage(ev.target.value, langVersions[ev.target.value])}
-            aria-label="Programming language"
-          >
-            {Object.keys(langVersions).filter(l => ["python", "javascript", "typescript"].includes(l)).map(lang => (
-              <option value={lang} key={lang}>{lang} {langVersions[lang]}</option>
-            ))}
-          </select>
         </div>
         <div className="top-bar-center">
           {isRecordingActive && (
@@ -282,7 +309,7 @@ const TopBar = memo(({ editorRef }) => {
             onClick={handleRecord}
             title={recording ? "Stop recording (Ctrl+R)" : "Start recording (Ctrl+R)"}
             aria-label={recording ? "Stop recording" : "Start recording"}
-            disabled={playing}
+            disabled={playing || !currentWorkspace}
             data-shortcut="record"
           >
             {recording ? <><FiSquare size={14} /> Stop</> : <><FiCircle size={14} /> Record</>}
@@ -391,7 +418,20 @@ const TopBar = memo(({ editorRef }) => {
         </div>
       </div>
       <div className="editor-settings-bar">
-        <span className="record-name-label" title="Current record">{recordName}</span>
+        <span className="record-name-label" title="Current project and record">
+          {currentWorkspace && (
+            <span className="project-name">{currentWorkspace.name}</span>
+          )}
+          {currentRecord && (
+            <span className="record-name"> — {recordName}</span>
+          )}
+          {!currentRecord && recording && (
+            <span className="record-name"> — {recordName} (recording)</span>
+          )}
+          {!currentWorkspace && !recording && (
+            <span className="project-name muted">No project open</span>
+          )}
+        </span>
         <div className="editor-settings-group">
           <button
             className="editor-toolbar-btn"

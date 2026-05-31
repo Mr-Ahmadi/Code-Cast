@@ -1,3 +1,6 @@
+if (!require('buffer').SlowBuffer) {
+  require('buffer').SlowBuffer = require('buffer').Buffer;
+}
 require("dotenv").config();
 const cors = require("cors");
 const express = require("express");
@@ -26,7 +29,7 @@ app.use("/user", userRouter);
 const startServer = async () => {
   try {
     await sequelize.authenticate();
-    await sequelize.sync();
+    await sequelize.sync({ alter: true });
     app.listen(4000, () =>
       console.log("Server running on http://localhost:4000")
     );

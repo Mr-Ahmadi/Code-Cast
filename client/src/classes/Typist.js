@@ -1,16 +1,35 @@
 import { diffChars } from "diff";
 import axios from "axios";
 
-class Typist {
-  #changesList = [];
-  #breakPoints = [];
-  #recordingMode;
-  #firstValue;
-  recordName;
-  #recordID;
+const BREAKPOINT_INTERVAL = 100;
+const FILE_EXT_LANG = {
+  html: "html", htm: "html",
+  css: "css",
+  js: "javascript", jsx: "javascript", mjs: "javascript", cjs: "javascript",
+  ts: "typescript", tsx: "typescript",
+  py: "python",
+  json: "json",
+  md: "markdown",
+  xml: "xml", svg: "xml",
+  sql: "sql",
+  sh: "shell", bash: "shell",
+  txt: "plaintext",
+};
 
+function extLang(name) {
+  const ext = name.split(".").pop().toLowerCase();
+  return FILE_EXT_LANG[ext] || "plaintext";
+}
+
+class Typist {
+  #files = {};
+  #fileTimeline = [];
+  #activeFile = null;
+  #recordingMode;
+  #recordID;
+  #workspaceId = null;
+  recordName;
   loadStatus;
-  #currValue;
 
   #startTime;
   recording;
@@ -19,22 +38,124 @@ class Typist {
 
   #playTimeouts = [];
   #playbackRunning = false;
+  #playbackCurrValues = {};
+  #activePlaybackFile = null;
+
   audioUrl = null;
   #audioEl = null;
   #blobUrl = null;
 
-  #flatChangesCache = null;
+  #flatEventsCache = null;
   #durationCache = null;
 
   constructor(_recordID = null) {
     this.#recordID = _recordID;
     this.loadStatus = false;
     this.recording = false;
-    this.#currValue = "";
-
     if (_recordID !== null) this.#recordingMode = false;
     else this.#recordingMode = true;
   }
+
+  // --- File management ---
+
+  getFiles() {
+    return Object.entries(this.#files).map(([name, f]) => ({
+      name,
+      language: f.language,
+    }));
+  }
+
+  getFileNames() {
+    return Object.keys(this.#files);
+  }
+
+  getActiveFile() {
+    return this.#activeFile;
+  }
+
+  getFileLanguage(name) {
+    return this.#files[name]?.language || "plaintext";
+  }
+
+  getFileFirstValue(name) {
+    return this.#files[name]?.firstValue || "";
+  }
+
+  getFileContent(name) {
+    return this.#files[name]?.firstValue || "";
+  }
+
+  getFileFinalContent(name) {
+    if (!this.#files[name]) return "";
+    return this.#rebuildFileFullState(name);
+  }
+
+  getFilesFinalContent() {
+    const result = {};
+    for (const name of Object.keys(this.#files)) {
+      result[name] = this.getFileFinalContent(name);
+    }
+    return result;
+  }
+
+  addFile(name, language, content = "") {
+    if (this.#files[name]) return;
+    this.#files[name] = {
+      language: language || extLang(name),
+      firstValue: content,
+      changesList: [],
+      breakPoints: [],
+      _flatCache: null,
+    };
+    this.#invalidateCaches();
+  }
+
+  removeFile(name) {
+    if (!this.#files[name]) return;
+    const wasActive = this.#activeFile === name;
+    delete this.#files[name];
+    this.#fileTimeline = this.#fileTimeline.filter(e => e.name !== name);
+    if (wasActive) {
+      const keys = Object.keys(this.#files);
+      this.#activeFile = keys.length ? keys[0] : null;
+    }
+    this.#invalidateCaches();
+  }
+
+  renameFile(oldName, newName) {
+    if (!this.#files[oldName] || this.#files[newName]) return false;
+    this.#files[newName] = this.#files[oldName];
+    delete this.#files[oldName];
+    this.#fileTimeline = this.#fileTimeline.map(e =>
+      e.name === oldName ? { ...e, name: newName } : e
+    );
+    if (this.#activeFile === oldName) this.#activeFile = newName;
+    this.#invalidateCaches();
+    return true;
+  }
+
+  switchFile(name) {
+    if (!this.#files[name]) return;
+    if (this.recording && this.#recordingMode) {
+      this.#activeFile = name;
+      const last = this.#fileTimeline[this.#fileTimeline.length - 1];
+      const millis = this.recording && !this.#paused
+        ? Date.now() - this.#startTime
+        : (last ? last.millis : 0);
+      if (!last || last.name !== name) {
+        this.#fileTimeline.push({ millis, name });
+        this.#invalidateCaches();
+      }
+    } else {
+      this.#activeFile = name;
+    }
+  }
+
+  isFileOpen(name) {
+    return !!this.#files[name];
+  }
+
+  // --- Audio ---
 
   async #initAudio() {
     if (!this.audioUrl) return;
@@ -45,11 +166,12 @@ class Typist {
       const res = await fetch(url);
       const blob = await res.blob();
       this.#blobUrl = URL.createObjectURL(blob);
-      console.log("Typist: blob URL created, size:", blob.size, "type:", blob.type);
     } catch (e) {
       console.warn("Typist: failed to decode audio:", e);
     }
   }
+
+  // --- Load / Save ---
 
   async load(id) {
     this.#recordID = id;
@@ -60,18 +182,38 @@ class Typist {
       headers: { "Content-Type": "application/json" },
       withCredentials: true,
     };
-
     const { status, data } = await axios.request(config);
     if (status === 200) {
-      this.#breakPoints = data.breakPoints || [];
-      this.#firstValue = data.firstValue || "";
       this.recordName = data.name || "";
-      this.#changesList = data.changes || [];
       this.audioUrl = data.voice || null;
-      console.log("Typist.load: audioUrl set?", !!this.audioUrl, "length:", this.audioUrl?.length);
-      if (this.audioUrl) {
-        await this.#initAudio();
+      if (data.files && Object.keys(data.files).length > 0) {
+        this.#files = {};
+        for (const [name, fd] of Object.entries(data.files)) {
+          this.#files[name] = {
+            language: fd.language || extLang(name),
+            firstValue: fd.firstValue || "",
+            changesList: fd.changes || [],
+            breakPoints: fd.breakPoints || [],
+            _flatCache: null,
+          };
+        }
+        this.#fileTimeline = data.fileTimeline || [];
+        if (!this.#fileTimeline.length && Object.keys(this.#files).length > 0) {
+          this.#fileTimeline.push({ millis: 0, name: Object.keys(this.#files)[0] });
+        }
+      } else {
+        const legacyName = "code.js";
+        this.#files[legacyName] = {
+          language: "javascript",
+          firstValue: data.firstValue || "",
+          changesList: data.changes || [],
+          breakPoints: data.breakPoints || [],
+          _flatCache: null,
+        };
+        this.#fileTimeline = [{ millis: 0, name: legacyName }];
       }
+      this.#activeFile = Object.keys(this.#files)[0] || null;
+      if (this.audioUrl) await this.#initAudio();
       this.loadStatus = true;
       this.#invalidateCaches();
     } else {
@@ -80,17 +222,22 @@ class Typist {
   }
 
   #invalidateCaches() {
-    this.#flatChangesCache = null;
+    this.#flatEventsCache = null;
     this.#durationCache = null;
+    for (const f of Object.values(this.#files)) {
+      f._flatCache = null;
+    }
   }
 
-  #getFlatChanges() {
-    if (this.#flatChangesCache) return this.#flatChangesCache;
-    this.#flatChangesCache = [];
-    for (let batchIdx = 0; batchIdx < this.#changesList.length; batchIdx++) {
-      const batch = this.#changesList[batchIdx];
+  #getFileFlatChanges(fileName) {
+    const file = this.#files[fileName];
+    if (!file) return [];
+    if (file._flatCache) return file._flatCache;
+    file._flatCache = [];
+    for (let batchIdx = 0; batchIdx < file.changesList.length; batchIdx++) {
+      const batch = file.changesList[batchIdx];
       for (let localIdx = 0; localIdx < batch.length; localIdx++) {
-        this.#flatChangesCache.push({
+        file._flatCache.push({
           millis: batch[localIdx].millis,
           type: batch[localIdx].type,
           index: batch[localIdx].index,
@@ -100,90 +247,195 @@ class Typist {
         });
       }
     }
-    return this.#flatChangesCache;
+    return file._flatCache;
   }
 
-  #rebuildFullState() {
-    let value = this.#firstValue;
-    const flat = this.#getFlatChanges();
-    const saved = this.#currValue;
-    this.#currValue = value;
-    for (const change of flat) {
-      this.#changeString(change);
+  #applyChange(str, { type, index, value }) {
+    if (type === 1) {
+      return str.slice(0, index) + value + str.slice(index);
     }
-    const result = this.#currValue;
-    this.#currValue = saved;
-    return result;
+    return str.slice(0, index) + str.slice(index + value.length);
+  }
+
+  #firstFileFlatIndexOfBatch(fileName, targetBatch) {
+    const flat = this.#getFileFlatChanges(fileName);
+    let lo = 0, hi = flat.length - 1, idx = flat.length;
+    while (lo <= hi) {
+      const mid = (lo + hi) >> 1;
+      if (flat[mid].batchIdx >= targetBatch) {
+        idx = mid;
+        hi = mid - 1;
+      } else {
+        lo = mid + 1;
+      }
+    }
+    return idx;
+  }
+
+  #rebuildFileFullState(fileName) {
+    const file = this.#files[fileName];
+    const flat = this.#getFileFlatChanges(fileName);
+    if (!flat.length) return file.firstValue;
+
+    const lastBpIdx = file.breakPoints.length - 1;
+    if (lastBpIdx >= 0) {
+      let str = file.breakPoints[lastBpIdx];
+      const startBatch = (lastBpIdx + 1) * BREAKPOINT_INTERVAL;
+      const startIdx = this.#firstFileFlatIndexOfBatch(fileName, startBatch);
+      for (let i = startIdx; i < flat.length; i++) {
+        str = this.#applyChange(str, flat[i]);
+      }
+      return str;
+    }
+    let str = file.firstValue;
+    for (const change of flat) {
+      str = this.#applyChange(str, change);
+    }
+    return str;
+  }
+
+  #buildFileStateUpTo(fileName, targetMillis) {
+    const file = this.#files[fileName];
+    if (!file) return "";
+    const flat = this.#getFileFlatChanges(fileName);
+    if (!flat.length) return file.firstValue;
+
+    const lastIdx = flat.length - 1;
+    if (flat[lastIdx].millis <= targetMillis) {
+      return this.#rebuildFileFullState(fileName);
+    }
+
+    let lo = 0, hi = lastIdx, targetIdx = -1;
+    while (lo <= hi) {
+      const mid = (lo + hi) >> 1;
+      if (flat[mid].millis <= targetMillis) {
+        targetIdx = mid;
+        lo = mid + 1;
+      } else {
+        hi = mid - 1;
+      }
+    }
+    if (targetIdx < 0) return file.firstValue;
+
+    const targetBatch = flat[targetIdx].batchIdx;
+    const bpIdx = Math.floor(targetBatch / BREAKPOINT_INTERVAL) - 1;
+    const hasBp = bpIdx >= 0 && bpIdx < file.breakPoints.length;
+    let str = hasBp ? file.breakPoints[bpIdx] : file.firstValue;
+    const startBatch = hasBp ? (bpIdx + 1) * BREAKPOINT_INTERVAL : 0;
+
+    const startFlatIdx = this.#firstFileFlatIndexOfBatch(fileName, startBatch);
+    for (let i = startFlatIdx; i <= targetIdx; i++) {
+      str = this.#applyChange(str, flat[i]);
+    }
+    return str;
+  }
+
+  #getActiveFileAt(millis) {
+    if (!this.#fileTimeline.length) {
+      const keys = Object.keys(this.#files);
+      return keys.length ? keys[0] : null;
+    }
+    let lo = 0, hi = this.#fileTimeline.length - 1, idx = 0;
+    while (lo <= hi) {
+      const mid = (lo + hi) >> 1;
+      if (this.#fileTimeline[mid].millis <= millis) {
+        idx = mid;
+        lo = mid + 1;
+      } else {
+        hi = mid - 1;
+      }
+    }
+    return this.#fileTimeline[idx].name;
+  }
+
+  #getFlatEvents() {
+    if (this.#flatEventsCache) return this.#flatEventsCache;
+    const events = [];
+
+    for (const entry of this.#fileTimeline) {
+      events.push({
+        millis: entry.millis,
+        type: "file",
+        name: entry.name,
+      });
+    }
+
+    for (const [name] of Object.entries(this.#files)) {
+      const flat = this.#getFileFlatChanges(name);
+      for (const change of flat) {
+        events.push({
+          millis: change.millis,
+          type: "change",
+          file: name,
+          data: { type: change.type, index: change.index, value: change.value },
+        });
+      }
+    }
+
+    events.sort((a, b) => a.millis - b.millis || (a.type === "file" ? -1 : 1));
+    this.#flatEventsCache = events;
+    return events;
   }
 
   getDuration() {
     if (this.#durationCache !== null) return this.#durationCache;
-    const flat = this.#getFlatChanges();
-    this.#durationCache = flat.length ? flat[flat.length - 1].millis : 0;
+    const events = this.#getFlatEvents();
+    this.#durationCache = events.length ? events[events.length - 1].millis : 0;
     return this.#durationCache;
   }
 
   getStateAt(progress) {
     if (!this.loadStatus) return "";
     const totalDuration = this.getDuration();
-    if (totalDuration === 0) return this.#firstValue;
-    const targetMillis = Math.round(progress * totalDuration);
-    return this.#buildStateUpTo(targetMillis);
-  }
-
-  #buildStateUpTo(targetMillis) {
-    const flat = this.#getFlatChanges();
-    if (!flat.length) return this.#firstValue;
-
-    const lastIdx = flat.length - 1;
-
-    if (flat[lastIdx].millis <= targetMillis) {
-      return this.#rebuildFullState();
+    if (totalDuration === 0) {
+      const f = this.#activeFile;
+      if (f && this.#files[f]) return this.#files[f].firstValue;
+      const keys = Object.keys(this.#files);
+      return keys.length ? this.#files[keys[0]].firstValue : "";
     }
-
-    let lo = 0, hi = lastIdx, targetFlatIdx = -1;
-    while (lo <= hi) {
-      const mid = (lo + hi) >> 1;
-      if (flat[mid].millis <= targetMillis) {
-        targetFlatIdx = mid;
-        lo = mid + 1;
-      } else {
-        hi = mid - 1;
-      }
-    }
-
-    if (targetFlatIdx < 0) return this.#firstValue;
-
-    const targetBatch = flat[targetFlatIdx].batchIdx;
-    const startValue = targetBatch > 0 && this.#breakPoints[targetBatch - 1]
-      ? this.#breakPoints[targetBatch - 1]
-      : this.#firstValue;
-
-    const saved = this.#currValue;
-    this.#currValue = startValue;
-
-    const batchStartFlat = flat.findIndex(
-      f => f.batchIdx === targetBatch && f.localIdx === 0
-    );
-
-    for (let i = batchStartFlat; i <= targetFlatIdx; i++) {
-      this.#changeString(flat[i]);
-    }
-
-    const result = this.#currValue;
-    this.#currValue = saved;
-    return result;
+    const millis = Math.round(progress * totalDuration);
+    const activeFile = this.#getActiveFileAt(millis);
+    return activeFile ? this.#buildFileStateUpTo(activeFile, millis) : "";
   }
 
   // --- Recording ---
 
-  startRecord(_startTime, _firstValue, _recordName) {
+  startRecord(_startTime, firstFileName, firstValue, language, _recordName, _workspaceId = null) {
     if (!this.recording && this.#recordingMode) {
       this.recordName = _recordName;
-      this.#firstValue = _firstValue;
+      this.#workspaceId = _workspaceId;
+      const hasFiles = Object.keys(this.#files).length > 0;
+
+      if (!hasFiles) {
+        this.#files = {};
+        this.#fileTimeline = [];
+        this.#activeFile = firstFileName;
+        this.#files[firstFileName] = {
+          language: language || extLang(firstFileName),
+          firstValue: firstValue || "",
+          changesList: [],
+          breakPoints: [],
+          _flatCache: null,
+        };
+        this.#fileTimeline.push({ millis: 0, name: firstFileName });
+      } else {
+        const first = Object.keys(this.#files)[0];
+        this.#activeFile = first;
+        if (this.#fileTimeline.length === 0) {
+          this.#fileTimeline.push({ millis: 0, name: first });
+        }
+        for (const name of Object.keys(this.#files)) {
+          const file = this.#files[name];
+          file.changesList = [];
+          file.breakPoints = [];
+          file._flatCache = null;
+        }
+      }
+
       this.#startTime = _startTime;
       this.recording = true;
       this.#paused = false;
+      this.#invalidateCaches();
     }
   }
 
@@ -208,7 +460,7 @@ class Typist {
     if (this.recording && this.#recordingMode) {
       this.recording = false;
       this.#paused = false;
-      return this.#sendData(this.#changesList);
+      return this.#sendFinalData();
     }
     return Promise.resolve();
   }
@@ -229,78 +481,70 @@ class Typist {
   }
 
   pushChanges(oldValue, newValue) {
-    if (this.recording && !this.#paused && this.#recordingMode) {
-      const _changes = diffChars(oldValue, newValue);
+    if (!this.recording || this.#paused || !this.#recordingMode) return;
+    const file = this.#files[this.#activeFile];
+    if (!file) return;
 
-      if (this.#changesList.length % 100 === 0) {
-        if (this.#changesList.length) {
-          this.#breakPoints.push(oldValue);
-          this.#sendData(this.#changesList.slice(0, 100), oldValue);
-        }
-      }
+    const _changes = diffChars(oldValue, newValue);
 
-      const changes = [];
-      let counter = 0;
-
-      for (let i = 0; i < _changes.length; i++) {
-        if (
-          Object.prototype.hasOwnProperty.call(_changes[i], "added") &&
-          Object.prototype.hasOwnProperty.call(_changes[i], "removed")
-        ) {
-          if (_changes[i]["added"]) {
-            changes.push({
-              millis: Date.now() - this.#startTime,
-              type: 1,
-              index: counter,
-              value: _changes[i].value,
-            });
-            counter += _changes[i].count;
-          } else {
-            changes.push({
-              millis: Date.now() - this.#startTime,
-              type: 0,
-              index: counter,
-              value: _changes[i].value,
-            });
-          }
-        } else {
-          counter += _changes[i].count;
-        }
-      }
-      this.#changesList.push(changes);
+    if (
+      file.changesList.length > 0 &&
+      file.changesList.length % BREAKPOINT_INTERVAL === 0
+    ) {
+      file.breakPoints.push(oldValue);
+      this.#sendFileBatch(this.#activeFile);
     }
+
+    const changes = [];
+    let counter = 0;
+
+    for (let i = 0; i < _changes.length; i++) {
+      if (
+        Object.prototype.hasOwnProperty.call(_changes[i], "added") &&
+        Object.prototype.hasOwnProperty.call(_changes[i], "removed")
+      ) {
+        if (_changes[i].added) {
+          changes.push({
+            millis: Date.now() - this.#startTime,
+            type: 1,
+            index: counter,
+            value: _changes[i].value,
+          });
+          counter += _changes[i].count;
+        } else {
+          changes.push({
+            millis: Date.now() - this.#startTime,
+            type: 0,
+            index: counter,
+            value: _changes[i].value,
+          });
+        }
+      } else {
+        counter += _changes[i].count;
+      }
+    }
+    file.changesList.push(changes);
+    file._flatCache = null;
+    this.#invalidateCaches();
   }
 
   // --- Playback ---
-
-  #changeString({ type, index, value }) {
-    if (type == 1) {
-      this.#currValue =
-        this.#currValue.slice(0, index) + value + this.#currValue.slice(index);
-      return this.#currValue;
-    } else {
-      this.#currValue =
-        this.#currValue.slice(0, index) +
-        this.#currValue.slice(index + value.length);
-      return this.#currValue;
-    }
-  }
 
   runChanges(func, onProgress, speed = 1, startFromMillis = 0) {
     if (this.recording || !this.loadStatus) return;
 
     this.#playbackRunning = true;
+    this.#activePlaybackFile = null;
 
-    const flat = this.#getFlatChanges();
-    if (!flat.length) return;
+    const events = this.#getFlatEvents();
+    if (!events.length) return;
 
     let seekIdx = -1;
-
     if (startFromMillis > 0) {
-      let lo = 0, hi = flat.length - 1;
+      let lo = 0, hi = events.length - 1;
       while (lo <= hi) {
         const mid = (lo + hi) >> 1;
-        if (flat[mid].millis <= startFromMillis) {
+        if (events[mid].millis <= startFromMillis) {
           seekIdx = mid;
           lo = mid + 1;
         } else {
@@ -308,18 +552,22 @@ class Typist {
         }
       }
 
-      const initialState = this.#buildStateUpTo(startFromMillis);
-      this.#currValue = initialState;
-      func(initialState);
+      this.#rebuildPlaybackState(startFromMillis);
     } else {
-      this.#currValue = this.#firstValue;
-      func(this.#currValue);
+      for (const [name, file] of Object.entries(this.#files)) {
+        this.#playbackCurrValues[name] = file.firstValue;
+      }
       seekIdx = -1;
+    }
+
+    const activeFile = this.#getActiveFileAt(startFromMillis);
+    this.#activePlaybackFile = activeFile;
+    if (activeFile) {
+      func({ name: activeFile, content: this.#playbackCurrValues[activeFile] || "", isSwitch: true });
     }
 
     if (this.#blobUrl) {
       if (!this.#audioEl) {
-        console.log("runChanges: creating audio from blob URL");
         try {
           this.#audioEl = new Audio(this.#blobUrl);
         } catch (e) {
@@ -336,21 +584,30 @@ class Typist {
     }
 
     const startIndex = seekIdx + 1;
-    const totalChanges = flat.length;
-    const completedBase = seekIdx + 1;
+    const totalEvents = events.length;
 
-    for (let i = startIndex; i < flat.length; i++) {
-      const change = flat[i];
-      const delay = Math.max(0, (change.millis - startFromMillis) / speed);
+    for (let i = startIndex; i < events.length; i++) {
+      const event = events[i];
+      const delay = Math.max(0, (event.millis - startFromMillis) / speed);
       const timeout = setTimeout(() => {
         if (!this.#playbackRunning) return;
-        const str = this.#changeString(change);
-        func(str);
-        if (onProgress) {
-          const completed = completedBase + (i - startIndex + 1);
-          onProgress(Math.min(completed / totalChanges, 1));
+
+        if (event.type === "file") {
+          this.#activePlaybackFile = event.name;
+          func({ name: event.name, content: this.#playbackCurrValues[event.name] || "", isSwitch: true });
+        } else {
+          const prev = this.#playbackCurrValues[event.file] || "";
+          const newVal = this.#applyChange(prev, event.data);
+          this.#playbackCurrValues[event.file] = newVal;
+          if (event.file === this.#activePlaybackFile) {
+            func({ name: event.file, content: newVal, isSwitch: false });
+          }
         }
-        if (i === flat.length - 1) {
+
+        if (onProgress) {
+          onProgress(Math.min((i - startIndex + 1) / totalEvents, 1));
+        }
+        if (i === events.length - 1) {
           this.#playbackRunning = false;
           if (onProgress) onProgress(1);
         }
@@ -359,11 +616,16 @@ class Typist {
     }
   }
 
+  #rebuildPlaybackState(targetMillis) {
+    for (const name of Object.keys(this.#files)) {
+      this.#playbackCurrValues[name] = this.#buildFileStateUpTo(name, targetMillis);
+    }
+  }
+
   seek(targetMillis, func, onProgress, speed) {
     if (!this.#playbackRunning) return;
     this.#playTimeouts.forEach(clearTimeout);
     this.#playTimeouts = [];
-
     this.runChanges(func, onProgress, speed, targetMillis);
   }
 
@@ -383,13 +645,23 @@ class Typist {
 
   getRecordID() { return this.#recordID; }
 
+  // --- Import / Export ---
+
   exportData() {
+    const files = {};
+    for (const [name, fd] of Object.entries(this.#files)) {
+      files[name] = {
+        language: fd.language,
+        firstValue: fd.firstValue,
+        changes: fd.changesList,
+        breakPoints: fd.breakPoints,
+      };
+    }
     return {
-      version: 1,
+      version: 2,
       name: this.recordName,
-      firstValue: this.#firstValue,
-      changes: this.#changesList,
-      breakPoints: this.#breakPoints,
+      files,
+      fileTimeline: this.#fileTimeline,
       audio: this.audioUrl,
       duration: this.getDuration(),
     };
@@ -397,29 +669,60 @@ class Typist {
 
   async loadFromData(data) {
     this.#recordingMode = false;
-    this.#changesList = data.changes || [];
-    this.#breakPoints = data.breakPoints || [];
-    this.#firstValue = data.firstValue || "";
     this.recordName = data.name || "Untitled";
     this.audioUrl = data.audio || null;
     this.loadStatus = true;
-    this.#invalidateCaches();
-    if (this.audioUrl) {
-      await this.#initAudio();
+
+    if (data.version === 2 && data.files) {
+      this.#files = {};
+      for (const [name, fd] of Object.entries(data.files)) {
+        this.#files[name] = {
+          language: fd.language || extLang(name),
+          firstValue: fd.firstValue || "",
+          changesList: fd.changes || [],
+          breakPoints: fd.breakPoints || [],
+          _flatCache: null,
+        };
+      }
+      this.#fileTimeline = data.fileTimeline || [];
+      if (!this.#fileTimeline.length && Object.keys(this.#files).length > 0) {
+        this.#fileTimeline.push({ millis: 0, name: Object.keys(this.#files)[0] });
+      }
+    } else {
+      const legacyName = "code.js";
+      this.#files[legacyName] = {
+        language: "javascript",
+        firstValue: data.firstValue || "",
+        changesList: data.changes || [],
+        breakPoints: data.breakPoints || [],
+        _flatCache: null,
+      };
+      this.#fileTimeline = [{ millis: 0, name: legacyName }];
     }
+    this.#activeFile = Object.keys(this.#files)[0] || null;
+    this.#invalidateCaches();
+    if (this.audioUrl) await this.#initAudio();
   }
 
   // --- Data persistence ---
 
-  #sendData(selectedChanges, breakPoint = null) {
-    let data = JSON.stringify({
-      firstValue: this.#recordID ? null : this.#firstValue,
-      changes: selectedChanges,
-      breakPoint: breakPoint,
-      name: this.recordName,
+  #sendFileBatch(fileName) {
+    const file = this.#files[fileName];
+    if (!file || !file.changesList.length) return;
+
+    const selectedChanges = file.changesList.slice(0, BREAKPOINT_INTERVAL);
+    const data = JSON.stringify({
       id: this.#recordID,
+      workspaceId: this.#workspaceId,
+      name: this.recordName,
+      file: fileName,
+      fileChanges: selectedChanges,
+      fileBreakPoint: file.breakPoints.length > 0 ? file.breakPoints[file.breakPoints.length - 1] : null,
+      firstFileValue: this.#recordID ? null : file.firstValue,
+      fileLanguage: file.language,
+      fileTimeline: this.#fileTimeline,
     });
-    let config = {
+    const config = {
       method: "post",
       url: "index/savedata",
       headers: { "Content-Type": "application/json" },
@@ -432,16 +735,48 @@ class Typist {
       .then(({ status, data }) => {
         if (status === 201) {
           this.#recordID = data.id;
-        } else if (status !== 200) {
-          return;
         }
-
-        this.#changesList = this.#changesList.filter((item) => {
-          return selectedChanges.indexOf(item) === -1;
-        });
+        file.changesList = file.changesList.filter(
+          (item) => selectedChanges.indexOf(item) === -1
+        );
+        file._flatCache = null;
         this.#invalidateCaches();
       })
-      .catch(() => {});
+      .catch((err) => {
+        console.error(`Failed to save batch for "${fileName}":`, err?.response?.data || err.message);
+      });
+  }
+
+  #sendFinalData() {
+    const files = {};
+    for (const [name, fd] of Object.entries(this.#files)) {
+      files[name] = {
+        language: fd.language,
+        firstValue: fd.firstValue,
+        changes: fd.changesList,
+        breakPoints: fd.breakPoints,
+      };
+    }
+    const data = JSON.stringify({
+      id: this.#recordID,
+      workspaceId: this.#workspaceId,
+      name: this.recordName,
+      files,
+      fileTimeline: this.#fileTimeline,
+    });
+    const config = {
+      method: "post",
+      url: "index/savedata",
+      headers: { "Content-Type": "application/json" },
+      data,
+      withCredentials: true,
+    };
+
+    return axios.request(config).catch((err) => {
+      const msg = err?.response?.data?.message || err.message;
+      console.error("Failed to save final data:", msg);
+      throw new Error(msg);
+    });
   }
 }
 

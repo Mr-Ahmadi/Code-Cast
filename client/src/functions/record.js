@@ -12,37 +12,40 @@ const init = () => {
   typist = new Typist();
 };
 
-const start = async (recordName, audioEnabled = true) => {
-  const firstValue = editor.current.getValue();
-
+const start = async (recordName, audioEnabled = true, workspaceId = null) => {
   if (lecture instanceof Lecture && audioEnabled) {
     try {
-      await lecture.startRecord();
+      const timeout = new Promise((_, reject) => setTimeout(() => reject(new Error("Audio permission timeout")), 3000));
+      await Promise.race([lecture.startRecord(), timeout]);
     } catch {
-      // Mic denied silently
+      // Mic denied or timeout silently
     }
   }
   if (typist instanceof Typist) {
-    typist.startRecord(Date.now(), firstValue, recordName);
+    const files = typist.getFiles();
+    let firstFileName, firstValue, language;
+    if (files.length > 0) {
+      firstFileName = files[0].name;
+      firstValue = editor.current?.getValue() || "";
+      language = files[0].language;
+    } else {
+      firstFileName = "index.html";
+      firstValue = editor.current?.getValue() || "";
+      language = "html";
+      typist.addFile(firstFileName, language, firstValue);
+    }
+    typist.startRecord(Date.now(), firstFileName, firstValue, language, recordName, workspaceId);
   }
 };
 
 const pause = () => {
-  if (lecture instanceof Lecture) {
-    lecture.pauseRecord();
-  }
-  if (typist instanceof Typist) {
-    typist.pauseRecord();
-  }
+  if (lecture instanceof Lecture) lecture.pauseRecord();
+  if (typist instanceof Typist) typist.pauseRecord();
 };
 
 const resume = () => {
-  if (lecture instanceof Lecture) {
-    lecture.resumeRecord();
-  }
-  if (typist instanceof Typist) {
-    typist.resumeRecord();
-  }
+  if (lecture instanceof Lecture) lecture.resumeRecord();
+  if (typist instanceof Typist) typist.resumeRecord();
 };
 
 const isPaused = () => {
@@ -59,7 +62,6 @@ const stop = async () => {
   let audioDataUrl = null;
   if (lecture instanceof Lecture) {
     const audioBytes = await lecture.stopRecord();
-    console.log("stop: audioBytes length:", audioBytes?.length, "mime:", lecture.mimeType);
     if (audioBytes && audioBytes.length) {
       const blob = new Blob([audioBytes], { type: lecture.mimeType });
       audioDataUrl = await new Promise((resolve) => {
@@ -67,17 +69,24 @@ const stop = async () => {
         reader.onloadend = () => resolve(reader.result);
         reader.readAsDataURL(blob);
       });
-      console.log("stop: data URL length:", audioDataUrl.length);
     }
   }
+  let success = true;
   if (typist instanceof Typist) {
-    await typist.stopRecord();
-    console.log("stop: recordID after stopRecord:", typist.getRecordID());
+    try {
+      await typist.stopRecord();
+    } catch {
+      success = false;
+    }
     if (audioDataUrl) {
-      await typist.saveAudio(audioDataUrl);
-      console.log("stop: audio saved");
+      try {
+        await typist.saveAudio(audioDataUrl);
+      } catch {
+        success = false;
+      }
     }
   }
+  return success;
 };
 
 const load = async (id) => {
@@ -88,42 +97,36 @@ const load = async (id) => {
 
 const play = (onProgress, speed) => {
   if (typist instanceof Typist) {
-    typist.runChanges((str) => {
-      if (editor && editor.current) {
-        editor.current.setValue(str);
+    typist.runChanges(({ name, content, isSwitch }) => {
+      if (window.__playbackHandler) {
+        window.__playbackHandler(name, content, isSwitch);
       }
     }, onProgress, speed, 0);
   }
 };
 
 const stopPlay = () => {
-  if (typist instanceof Typist) {
-    typist.stopPlayback();
-  }
+  if (typist instanceof Typist) typist.stopPlayback();
 };
 
 const seek = (progress, onProgress, speed) => {
   if (typist instanceof Typist) {
     const targetMillis = Math.round(progress * typist.getDuration());
-    typist.seek(targetMillis, (str) => {
-      if (editor && editor.current) {
-        editor.current.setValue(str);
+    typist.seek(targetMillis, ({ name, content, isSwitch }) => {
+      if (window.__playbackHandler) {
+        window.__playbackHandler(name, content, isSwitch);
       }
     }, onProgress, speed);
   }
 };
 
 const getDuration = () => {
-  if (typist instanceof Typist) {
-    return typist.getDuration();
-  }
+  if (typist instanceof Typist) return typist.getDuration();
   return 0;
 };
 
 const getStateAt = (progress) => {
-  if (typist instanceof Typist) {
-    return typist.getStateAt(progress);
-  }
+  if (typist instanceof Typist) return typist.getStateAt(progress);
   return "";
 };
 
@@ -166,9 +169,60 @@ const importFromFile = async (file) => {
   return typist.recordName;
 };
 
+// --- File management ---
+
+const getFiles = () => {
+  if (typist instanceof Typist) return typist.getFiles();
+  return [];
+};
+
+const getActiveFile = () => {
+  if (typist instanceof Typist) return typist.getActiveFile();
+  return null;
+};
+
+const addFile = (name, language, content) => {
+  if (typist instanceof Typist) typist.addFile(name, language, content);
+};
+
+const removeFile = (name) => {
+  if (typist instanceof Typist) typist.removeFile(name);
+};
+
+const renameFile = (oldName, newName) => {
+  if (typist instanceof Typist) return typist.renameFile(oldName, newName);
+  return false;
+};
+
+const switchFile = (name) => {
+  if (typist instanceof Typist) typist.switchFile(name);
+};
+
+const isFileOpen = (name) => {
+  if (typist instanceof Typist) return typist.isFileOpen(name);
+  return false;
+};
+
+const getFileLanguage = (name) => {
+  if (typist instanceof Typist) return typist.getFileLanguage(name);
+  return "plaintext";
+};
+
+const getFileFirstValue = (name) => {
+  if (typist instanceof Typist) return typist.getFileFirstValue(name);
+  return "";
+};
+
+const getFilesFinalContent = () => {
+  if (typist instanceof Typist) return typist.getFilesFinalContent();
+  return {};
+};
+
 export {
   setEditor, init, start, pause, resume, isPaused, push, stop, load,
   play, stopPlay, seek, getDuration, getStateAt,
   isTypistLoaded, getTypist, isAudioRecording,
   exportRecord, importFromFile,
+  getFiles, getActiveFile, addFile, removeFile, renameFile, switchFile,
+  isFileOpen, getFileLanguage, getFileFirstValue, getFilesFinalContent,
 };

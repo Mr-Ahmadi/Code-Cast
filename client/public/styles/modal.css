@@ -189,10 +189,119 @@
   border-top: 1px solid var(--border);
 }
 
+.modal-footer-input {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
 .modal-footer > div {
   display: flex;
   align-items: center;
   gap: 8px;
+}
+
+/* --- Workspace groups --- */
+
+.ws-group {
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  overflow: hidden;
+}
+
+.ws-group + .ws-group {
+  margin-top: 4px;
+}
+
+.ws-header {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 8px;
+  cursor: pointer;
+  user-select: none;
+  transition: background var(--transition);
+  font-size: 13px;
+  font-family: var(--font-ui);
+  color: var(--text-primary);
+}
+
+.ws-header:hover {
+  background: var(--bg-tertiary);
+}
+
+.ws-header.selected {
+  background: var(--accent-glow);
+  border-color: var(--accent);
+}
+
+.ws-header.selected .ws-name {
+  color: var(--accent);
+}
+
+.ws-header.confirming {
+  background: var(--danger-bg);
+}
+
+.ws-chevron {
+  display: flex;
+  align-items: center;
+  color: var(--text-muted);
+  flex-shrink: 0;
+}
+
+.ws-icon {
+  color: var(--accent);
+  flex-shrink: 0;
+}
+
+.ws-name {
+  flex: 1;
+  font-weight: 600;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.ws-count {
+  font-size: 11px;
+  color: var(--text-muted);
+  background: var(--bg-tertiary);
+  padding: 1px 6px;
+  border-radius: 8px;
+  flex-shrink: 0;
+}
+
+.ws-delete {
+  width: 24px;
+  height: 24px;
+  opacity: 0;
+}
+
+.ws-header:hover .ws-delete {
+  opacity: 1;
+}
+
+.ws-header.confirming .ws-delete {
+  opacity: 1;
+  color: #fff;
+  background: var(--danger);
+}
+
+.ws-header.confirming .ws-delete:hover {
+  background: var(--danger);
+}
+
+.ws-records {
+  padding: 2px 0 2px 16px;
+  border-top: 1px solid var(--border);
+}
+
+.ws-empty {
+  padding: 8px 12px;
+  font-size: 12px;
+  color: var(--text-muted);
+  font-style: italic;
 }
 
 .modal-empty {
@@ -236,19 +345,6 @@
 
 .search-input::placeholder {
   color: var(--text-muted);
-}
-
-.rename-input {
-  flex: 1;
-  margin: 6px 8px;
-  padding: 5px 8px;
-  border: 1px solid var(--accent);
-  border-radius: var(--radius-sm);
-  background: var(--bg-primary);
-  color: var(--text-primary);
-  font-size: 14px;
-  font-family: var(--font-ui);
-  outline: none;
 }
 
 .shortcuts-box {

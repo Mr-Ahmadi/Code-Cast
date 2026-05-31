@@ -25,7 +25,121 @@
   gap: 6px;
 }
 
-.main-container > .editor-container {
+.main-body {
+  display: flex;
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.main-content {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-width: 0;
+}
+
+/* --- File Tree --- */
+
+.file-tree {
+  background: #1e1e1e;
+  border-right: 1px solid var(--border);
+  flex-shrink: 0;
+  overflow-y: auto;
+  width: 220px;
+  transition: width 0.15s;
+}
+
+.file-tree.closed {
+  width: 32px;
+}
+
+.file-tree-header {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 8px;
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  color: var(--text-muted);
+  cursor: pointer;
+  user-select: none;
+  border-bottom: 1px solid var(--border);
+}
+
+.file-tree-header:hover {
+  color: var(--text-primary);
+}
+
+.file-tree-items {
+  padding: 4px 0;
+}
+
+.file-tree-item {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 8px 4px 20px;
+  font-size: 13px;
+  font-family: var(--font-ui);
+  color: var(--text-secondary);
+  cursor: pointer;
+  user-select: none;
+  transition: background 0.15s, color 0.15s;
+}
+
+.file-tree-item:hover {
+  background: var(--bg-hover);
+  color: var(--text-primary);
+}
+
+.file-tree-item.active {
+  background: var(--bg-tertiary);
+  color: var(--text-primary);
+}
+
+.file-tree-item.no-interact {
+  cursor: default;
+  opacity: 0.7;
+}
+
+.file-tree-item-icon {
+  display: flex;
+  align-items: center;
+  flex-shrink: 0;
+  color: var(--text-muted);
+  opacity: 0.7;
+}
+
+.file-tree-item.active .file-tree-item-icon {
+  opacity: 1;
+  color: var(--accent);
+}
+
+.file-tree-item-name {
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.file-tree-item-lang {
+  font-size: 10px;
+  color: var(--text-muted);
+  opacity: 0.5;
+  flex-shrink: 0;
+}
+
+.file-tree-empty {
+  padding: 16px 20px;
+  font-size: 12px;
+  color: var(--text-muted);
+  font-style: italic;
+}
+
+.editor-container {
   flex: 1;
   min-height: 0;
   background-color: rgb(30, 30, 30);
@@ -47,7 +161,41 @@
   min-height: 0;
 }
 
-.main-container > .output-container {
+.editor-no-project {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: #1e1e1e;
+  z-index: 10;
+}
+
+.editor-no-project-content {
+  text-align: center;
+  color: var(--text-muted);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+  max-width: 360px;
+}
+
+.editor-no-project-content h3 {
+  margin: 0;
+  font-size: 18px;
+  color: var(--text-primary);
+  font-family: var(--font-ui);
+}
+
+.editor-no-project-content p {
+  margin: 0;
+  font-size: 13px;
+  line-height: 1.5;
+  font-family: var(--font-ui);
+}
+
+.main-content > .output-container {
   padding: 10px 14px;
   height: 180px;
   min-height: 60px;
@@ -137,13 +285,32 @@
 }
 
 .record-name-label {
+  display: flex;
+  align-items: center;
+  gap: 4px;
   color: var(--text);
-  font-size: 14px;
-  font-weight: 600;
-  max-width: 200px;
+  font-size: 13px;
+  max-width: 400px;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.record-name-label .project-name {
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.record-name-label .project-name.muted {
+  font-weight: 400;
+  color: var(--text-muted);
+  font-style: italic;
+}
+
+.record-name-label .record-name {
+  font-weight: 400;
+  color: var(--text-muted);
+  font-size: 12px;
 }
 
 .editor-settings-bar {
@@ -455,4 +622,153 @@
 .progress-skip-btn:focus-visible {
   outline: 2px solid var(--accent);
   outline-offset: 2px;
+}
+
+/* --- File Tabs --- */
+
+.file-tabs {
+  display: flex;
+  align-items: center;
+  background: #1e1e1e;
+  border-bottom: 1px solid var(--border);
+  flex-shrink: 0;
+  min-height: 32px;
+  padding: 0;
+  overflow-x: auto;
+  overflow-y: hidden;
+}
+
+.file-tabs::-webkit-scrollbar {
+  height: 3px;
+}
+
+.file-tabs::-webkit-scrollbar-thumb {
+  background: var(--border);
+  border-radius: 2px;
+}
+
+.file-tabs-list {
+  display: flex;
+  align-items: center;
+  min-height: 32px;
+}
+
+.file-tab {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 12px;
+  font-size: 12px;
+  font-family: var(--font-ui);
+  color: var(--text-muted);
+  cursor: pointer;
+  border-right: 1px solid var(--border);
+  white-space: nowrap;
+  user-select: none;
+  transition: background 0.15s, color 0.15s;
+  position: relative;
+}
+
+.file-tab:hover {
+  background: var(--bg-hover);
+  color: var(--text-primary);
+}
+
+.file-tab.active {
+  background: rgb(30, 30, 30);
+  color: var(--text-primary);
+  border-bottom: 2px solid var(--accent);
+}
+
+.file-tab.no-interact {
+  cursor: default;
+  opacity: 0.8;
+}
+
+.file-tab-icon {
+  width: 12px;
+  height: 12px;
+  border-radius: 2px;
+  background: var(--text-muted);
+  opacity: 0.4;
+  flex-shrink: 0;
+}
+
+.file-tab.active .file-tab-icon {
+  opacity: 0.7;
+}
+
+.file-tab-name {
+  max-width: 140px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.file-tab-close {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 16px;
+  height: 16px;
+  border: none;
+  border-radius: 3px;
+  background: transparent;
+  color: var(--text-muted);
+  cursor: pointer;
+  padding: 0;
+  opacity: 0;
+  transition: opacity 0.15s, background 0.15s, color 0.15s;
+  flex-shrink: 0;
+}
+
+.file-tab:hover .file-tab-close,
+.file-tab.active .file-tab-close {
+  opacity: 1;
+}
+
+.file-tab-close:hover {
+  background: var(--bg-tertiary);
+  color: var(--text-primary);
+}
+
+.file-tab-add {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border: none;
+  border-radius: 4px;
+  background: transparent;
+  color: var(--text-muted);
+  cursor: pointer;
+  margin: 0 4px;
+  flex-shrink: 0;
+  transition: all 0.15s;
+}
+
+.file-tab-add:hover {
+  background: var(--bg-hover);
+  color: var(--text-primary);
+}
+
+.file-tab-new-input {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 2px 8px;
+}
+
+.file-tab-new-input .text-input {
+  width: 140px;
+  font-size: 12px;
+  padding: 3px 6px;
+}
+
+.file-tabs-empty {
+  min-height: 28px;
+}
+
+.file-tabs-empty .file-tab-add {
+  margin-left: 4px;
 }
