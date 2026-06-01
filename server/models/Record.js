@@ -51,6 +51,10 @@ const Record = sequelize.define(
       type: DataTypes.JSONB,
       defaultValue: [],
     },
+    pauseResumePoints: {
+      type: DataTypes.JSONB,
+      defaultValue: [],
+    },
   },
   {
     tableName: "projects",

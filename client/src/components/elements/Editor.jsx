@@ -98,11 +98,21 @@ const _Editor = memo(({ editorRef }) => {
   window.__ensureModel = ensureModel;
   window.__switchEditorModel = switchEditorModel;
 
-  window.__playbackHandler = useCallback((name, content, isSwitch) => {
+  const resumeFlashRef = useRef(null);
+
+  window.__playbackHandler = useCallback((name, content, isSwitch, isResume) => {
     ensureModel(name, content);
     switchEditorModel(name);
     if (isSwitch) {
       setActiveFile(name);
+    }
+    if (isResume && resumeFlashRef.current) {
+      resumeFlashRef.current.classList.remove('resume-flash');
+      void resumeFlashRef.current.offsetWidth;
+      resumeFlashRef.current.classList.add('resume-flash');
+      setTimeout(() => {
+        resumeFlashRef.current?.classList.remove('resume-flash');
+      }, 1500);
     }
   }, [ensureModel, switchEditorModel, setActiveFile]);
 
@@ -145,7 +155,7 @@ const _Editor = memo(({ editorRef }) => {
   };
 
   return (
-    <div className='editor-container' role="region" aria-label="Code editor">
+    <div className='editor-container' ref={resumeFlashRef} role="region" aria-label="Code editor">
       {noProject && (
         <div className="editor-no-project">
           <div className="editor-no-project-content">

@@ -45,7 +45,10 @@ const pause = () => {
 
 const resume = () => {
   if (lecture instanceof Lecture) lecture.resumeRecord();
-  if (typist instanceof Typist) typist.resumeRecord();
+  if (typist instanceof Typist) {
+    const currentValue = editor?.current?.getValue();
+    typist.resumeRecord(currentValue);
+  }
 };
 
 const isPaused = () => {
@@ -97,9 +100,9 @@ const load = async (id) => {
 
 const play = (onProgress, speed) => {
   if (typist instanceof Typist) {
-    typist.runChanges(({ name, content, isSwitch }) => {
+    typist.runChanges(({ name, content, isSwitch, isResume }) => {
       if (window.__playbackHandler) {
-        window.__playbackHandler(name, content, isSwitch);
+        window.__playbackHandler(name, content, isSwitch, isResume);
       }
     }, onProgress, speed, 0);
   }
@@ -112,9 +115,9 @@ const stopPlay = () => {
 const seek = (progress, onProgress, speed) => {
   if (typist instanceof Typist) {
     const targetMillis = Math.round(progress * typist.getDuration());
-    typist.seek(targetMillis, ({ name, content, isSwitch }) => {
+    typist.seek(targetMillis, ({ name, content, isSwitch, isResume }) => {
       if (window.__playbackHandler) {
-        window.__playbackHandler(name, content, isSwitch);
+        window.__playbackHandler(name, content, isSwitch, isResume);
       }
     }, onProgress, speed);
   }

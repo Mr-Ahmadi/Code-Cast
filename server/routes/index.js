@@ -20,13 +20,13 @@ router.get("/loaddata/:id", authenticated, async (req, res) => {
   try {
     const record = await Record.findOne({
       where: { id: req.params.id, userId: res.locals.user.id },
-      attributes: ["changes", "breakPoints", "firstValue", "name", "voice", "files", "fileTimeline"],
+      attributes: ["changes", "breakPoints", "firstValue", "name", "voice", "files", "fileTimeline", "pauseResumePoints"],
     });
     if (!record) {
       return res.status(404).json({ message: "Record not found" });
     }
-    const { changes, breakPoints, firstValue, name, voice, files, fileTimeline } = record;
-    res.status(200).json({ changes, breakPoints, firstValue, name, voice, files, fileTimeline, id: record.id });
+    const { changes, breakPoints, firstValue, name, voice, files, fileTimeline, pauseResumePoints } = record;
+    res.status(200).json({ changes, breakPoints, firstValue, name, voice, files, fileTimeline, pauseResumePoints, id: record.id });
   } catch (err) {
     res.status(500).json({ message: err.message });
   }
@@ -35,7 +35,7 @@ router.get("/loaddata/:id", authenticated, async (req, res) => {
 router.post("/savedata", authenticated, async (req, res) => {
   const { id, name, files, fileTimeline,
     changes, firstValue, breakPoint, voice,
-    file, fileChanges, fileBreakPoint, firstFileValue, fileLanguage, workspaceId } = req.body;
+    file, fileChanges, fileBreakPoint, firstFileValue, fileLanguage, workspaceId, pauseResumePoints } = req.body;
 
   try {
     if (id === null) {
@@ -49,6 +49,7 @@ router.post("/savedata", authenticated, async (req, res) => {
         files: files || {},
         fileTimeline: fileTimeline || [],
         workspaceId: workspaceId || null,
+        pauseResumePoints: pauseResumePoints || [],
       };
       if (files && Object.keys(files).length > 0) {
         recordData.firstValue = null;
@@ -81,6 +82,9 @@ router.post("/savedata", authenticated, async (req, res) => {
         }
       }
       record.fileTimeline = fileTimeline || [];
+      if (pauseResumePoints) {
+        record.pauseResumePoints = pauseResumePoints;
+      }
     } else if (file) {
       record.files = record.files || {};
       record.files[file] = record.files[file] || {
@@ -109,6 +113,9 @@ router.post("/savedata", authenticated, async (req, res) => {
         record.breakPoints = [...(record.breakPoints || []), breakPoint];
       }
       record.changes = [...(record.changes || []), ...(changes || [])];
+      if (pauseResumePoints) {
+        record.pauseResumePoints = pauseResumePoints;
+      }
     }
 
     if (voice) {

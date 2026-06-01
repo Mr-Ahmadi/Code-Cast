@@ -35,6 +35,7 @@ class Typist {
   recording;
   #paused = false;
   #pauseStartTime = 0;
+  #pauseResumePoints = [];
 
   #playTimeouts = [];
   #playbackRunning = false;
@@ -201,6 +202,7 @@ class Typist {
         if (!this.#fileTimeline.length && Object.keys(this.#files).length > 0) {
           this.#fileTimeline.push({ millis: 0, name: Object.keys(this.#files)[0] });
         }
+        this.#pauseResumePoints = data.pauseResumePoints || [];
       } else {
         const legacyName = "code.js";
         this.#files[legacyName] = {
@@ -211,6 +213,7 @@ class Typist {
           _flatCache: null,
         };
         this.#fileTimeline = [{ millis: 0, name: legacyName }];
+        this.#pauseResumePoints = data.pauseResumePoints || [];
       }
       this.#activeFile = Object.keys(this.#files)[0] || null;
       if (this.audioUrl) await this.#initAudio();
@@ -360,6 +363,14 @@ class Typist {
       });
     }
 
+    for (const point of this.#pauseResumePoints) {
+      events.push({
+        millis: point.millis,
+        type: "resume",
+        file: point.file,
+      });
+    }
+
     for (const [name] of Object.entries(this.#files)) {
       const flat = this.#getFileFlatChanges(name);
       for (const change of flat) {
@@ -446,10 +457,23 @@ class Typist {
     }
   }
 
-  resumeRecord() {
+  resumeRecord(editorValue) {
     if (this.recording && this.#paused && this.#recordingMode) {
       const pauseDuration = Date.now() - this.#pauseStartTime;
       this.#startTime += pauseDuration;
+      const millis = Date.now() - this.#startTime;
+      this.#pauseResumePoints.push({ millis, file: this.#activeFile });
+
+      if (editorValue !== undefined) {
+        const file = this.#files[this.#activeFile];
+        if (file) {
+          const lastState = this.#rebuildFileFullState(this.#activeFile);
+          if (lastState !== editorValue) {
+            this.#pushChangesWithMillis(lastState, editorValue, millis);
+          }
+        }
+      }
+
       this.#paused = false;
     }
   }
@@ -480,8 +504,7 @@ class Typist {
     }
   }
 
-  pushChanges(oldValue, newValue) {
-    if (!this.recording || this.#paused || !this.#recordingMode) return;
+  #pushChangesWithMillis(oldValue, newValue, millis) {
     const file = this.#files[this.#activeFile];
     if (!file) return;
 
@@ -499,26 +522,21 @@ class Typist {
     let counter = 0;
 
     for (let i = 0; i < _changes.length; i++) {
-      if (
-        Object.prototype.hasOwnProperty.call(_changes[i], "added") &&
-        Object.prototype.hasOwnProperty.call(_changes[i], "removed")
-      ) {
-        if (_changes[i].added) {
-          changes.push({
-            millis: Date.now() - this.#startTime,
-            type: 1,
-            index: counter,
-            value: _changes[i].value,
-          });
-          counter += _changes[i].count;
-        } else {
-          changes.push({
-            millis: Date.now() - this.#startTime,
-            type: 0,
-            index: counter,
-            value: _changes[i].value,
-          });
-        }
+      if (_changes[i].added) {
+        changes.push({
+          millis,
+          type: 1,
+          index: counter,
+          value: _changes[i].value,
+        });
+        counter += _changes[i].count;
+      } else if (_changes[i].removed) {
+        changes.push({
+          millis,
+          type: 0,
+          index: counter,
+          value: _changes[i].value,
+        });
       } else {
         counter += _changes[i].count;
       }
@@ -526,6 +544,11 @@ class Typist {
     file.changesList.push(changes);
     file._flatCache = null;
     this.#invalidateCaches();
+  }
+
+  pushChanges(oldValue, newValue) {
+    if (!this.recording || this.#paused || !this.#recordingMode) return;
+    this.#pushChangesWithMillis(oldValue, newValue, Date.now() - this.#startTime);
   }
 
   // --- Playback ---
@@ -595,6 +618,9 @@ class Typist {
         if (event.type === "file") {
           this.#activePlaybackFile = event.name;
           func({ name: event.name, content: this.#playbackCurrValues[event.name] || "", isSwitch: true });
+        } else if (event.type === "resume") {
+          this.#activePlaybackFile = event.file;
+          func({ name: event.file, content: this.#playbackCurrValues[event.file] || "", isResume: true });
         } else {
           const prev = this.#playbackCurrValues[event.file] || "";
           const newVal = this.#applyChange(prev, event.data);
@@ -658,10 +684,11 @@ class Typist {
       };
     }
     return {
-      version: 2,
+      version: 3,
       name: this.recordName,
       files,
       fileTimeline: this.#fileTimeline,
+      pauseResumePoints: this.#pauseResumePoints,
       audio: this.audioUrl,
       duration: this.getDuration(),
     };
@@ -673,7 +700,7 @@ class Typist {
     this.audioUrl = data.audio || null;
     this.loadStatus = true;
 
-    if (data.version === 2 && data.files) {
+    if (data.version >= 2 && data.files) {
       this.#files = {};
       for (const [name, fd] of Object.entries(data.files)) {
         this.#files[name] = {
@@ -699,6 +726,7 @@ class Typist {
       };
       this.#fileTimeline = [{ millis: 0, name: legacyName }];
     }
+    this.#pauseResumePoints = data.pauseResumePoints || [];
     this.#activeFile = Object.keys(this.#files)[0] || null;
     this.#invalidateCaches();
     if (this.audioUrl) await this.#initAudio();
@@ -763,6 +791,7 @@ class Typist {
       name: this.recordName,
       files,
       fileTimeline: this.#fileTimeline,
+      pauseResumePoints: this.#pauseResumePoints,
     });
     const config = {
       method: "post",
