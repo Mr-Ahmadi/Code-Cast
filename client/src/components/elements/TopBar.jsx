@@ -162,13 +162,18 @@ const TopBar = memo(({ editorRef }) => {
           setActiveFile("index.html");
         }
         const ws = currentWorkspace;
-        await startRecord(recordName, audioEnabled, ws?.id || null);
+        await startRecord(recordName, audioEnabled, ws?.id || null, ws?.path || null);
         startRecording();
       } else if (recording) {
-        const saved = await stopRecord();
+        let saveError = null;
+        try {
+          await stopRecord();
+        } catch (e) {
+          saveError = e;
+        }
         stopRecording();
-        if (!saved) {
-          setToast({ type: "ERROR", message: "Failed to save recording. Please try again." });
+        if (saveError) {
+          setToast({ type: "ERROR", message: saveError.message || "Failed to save recording" });
         }
         refreshUser();
       }

@@ -8,6 +8,10 @@ const fs = require("fs");
 const path = require("path");
 const os = require("os");
 
+const CPU_LIMIT_SEC = parseInt(process.env.CVID_CPU_LIMIT || "10", 10);
+const MEM_LIMIT_MB = parseInt(process.env.CVID_MEM_LIMIT || "128", 10);
+const CODE_TMP_BASE = path.join(os.tmpdir(), "codevideo-exec");
+
 const DEFAULT_FILES = {
   "index.html": { language: "html", firstValue: "<!DOCTYPE html>\n<html lang=\"en\">\n<head>\n  <meta charset=\"UTF-8\">\n  <meta name=\"viewport\" content=\"width=device-width, initial-scale=1.0\">\n  <title>Project</title>\n</head>\n<body>\n</body>\n</html>" },
   "style.css": { language: "css", firstValue: "" },
@@ -191,6 +195,7 @@ router.post("/execute", authenticated, async (req, res) => {
       return res.status(400).json({ message: "language and sourceCode required" });
     }
 
+    const userId = res.locals.user.id;
     let cmd, ext;
     switch (language) {
       case "javascript":
@@ -209,10 +214,16 @@ router.post("/execute", authenticated, async (req, res) => {
         return res.status(400).json({ message: `Unsupported language: ${language}` });
     }
 
-    const tmpFile = path.join(os.tmpdir(), `cvid_${Date.now()}_${Math.random().toString(36).slice(2, 8)}${ext}`);
+    // Per-user temp directory for sandboxing
+    const userTmp = path.join(CODE_TMP_BASE, userId);
+    fs.mkdirSync(userTmp, { recursive: true });
+
+    const tmpFile = path.join(userTmp, `cvid_${Date.now()}_${Math.random().toString(36).slice(2, 8)}${ext}`);
     fs.writeFileSync(tmpFile, sourceCode);
 
-    exec(`${cmd} "${tmpFile}"`, { timeout: 10000 }, (err, stdout, stderr) => {
+    // Run with resource limits
+    const limitCmd = `ulimit -t ${CPU_LIMIT_SEC} -m ${MEM_LIMIT_MB * 1024} 2>/dev/null; ${cmd} "${tmpFile}"`;
+    exec(limitCmd, { timeout: CPU_LIMIT_SEC * 1000, maxBuffer: 1024 * 1024 }, (err, stdout, stderr) => {
       fs.unlink(tmpFile, () => {});
       const output = stdout + (stderr ? "\n" + stderr : "");
       res.json({

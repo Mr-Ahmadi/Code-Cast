@@ -208,6 +208,18 @@
   gap: 8px;
 }
 
+.modal-footer-left {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+/* --- Create Project Form --- */
+
+.create-project-form {
+  padding: 16px 0;
+}
+
 /* --- Workspace Groups --- */
 
 .ws-group {

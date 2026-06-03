@@ -8,6 +8,22 @@ const os = require("os");
 const JWT_SECRET = process.env.JWT_SECRET || "secret";
 const WORKSPACE_BASE = path.join(os.tmpdir(), "codevideo-terminals");
 
+// Resource limits for user processes
+const CPU_LIMIT_SEC = parseInt(process.env.CVID_CPU_LIMIT || "30", 10);  // max 30s CPU
+const MEM_LIMIT_MB = parseInt(process.env.CVID_MEM_LIMIT || "256", 10);  // max 256MB
+const PROC_LIMIT = parseInt(process.env.CVID_PROC_LIMIT || "50", 10);     // max 50 processes
+
+function shellWithLimits(shell, userDir, extraEnv) {
+  // On Unix, wrap the shell with ulimit to enforce resource limits
+  const limitCmd = `ulimit -t ${CPU_LIMIT_SEC} -m ${MEM_LIMIT_MB * 1024} -u ${PROC_LIMIT} 2>/dev/null; exec "${shell}"`;
+  return {
+    file: "/bin/sh",
+    args: ["-c", limitCmd],
+    cwd: userDir,
+    env: { ...process.env, TERM: "xterm-256color", USER_WORKSPACE: userDir, ...extraEnv },
+  };
+}
+
 function setupTerminalWebSocket(server) {
   const wss = new WebSocketServer({ server, path: "/terminal" });
 
@@ -40,13 +56,9 @@ function setupTerminalWebSocket(server) {
       return;
     }
 
-    // --- Create per-user workspace directory ---
+    // --- Create per-user workspace directory (sandboxed) ---
     const userDir = path.join(WORKSPACE_BASE, userId);
-    try {
-      fs.mkdirSync(userDir, { recursive: true });
-    } catch {
-      // best effort
-    }
+    fs.mkdirSync(userDir, { recursive: true });
 
     const shell = process.platform === "win32"
       ? "cmd.exe"
@@ -54,14 +66,15 @@ function setupTerminalWebSocket(server) {
 
     ws.send(`\x1b[32m[Connected — user: ${userId.slice(0, 8)}...]\x1b[0m\r\n`);
 
-    if (usePty) {
+    if (usePty && process.platform !== "win32") {
       try {
-        const term = pty.spawn(shell, [], {
+        const opts = shellWithLimits(shell, userDir, {});
+        const term = pty.spawn(opts.file, opts.args, {
           name: "xterm-256color",
           cols: 80,
           rows: 24,
-          cwd: userDir,
-          env: { ...process.env, TERM: "xterm-256color", USER_WORKSPACE: userDir },
+          cwd: opts.cwd,
+          env: opts.env,
         });
 
         term.onData((data) => {
@@ -82,12 +95,15 @@ function setupTerminalWebSocket(server) {
       }
     }
 
-    // Fallback spawn
-    const proc = spawn(shell, [], {
-      cwd: userDir,
-      env: { ...process.env, TERM: "xterm-256color", USER_WORKSPACE: userDir },
+    // Fallback spawn with resource limits
+    const opts = shellWithLimits(shell, userDir, {});
+    const proc = spawn(opts.file, opts.args, {
+      cwd: opts.cwd,
+      env: opts.env,
       stdio: ["pipe", "pipe", "pipe"],
     });
+
+    try { os.setPriority(proc.pid, os.constants.priority.PRIORITY_BELOW_NORMAL); } catch {}
 
     proc.stdout.on("data", (d) => { if (ws.readyState === ws.OPEN) ws.send(d.toString()); });
     proc.stderr.on("data", (d) => { if (ws.readyState === ws.OPEN) ws.send(d.toString()); });

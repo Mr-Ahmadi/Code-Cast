@@ -28,6 +28,7 @@ class Typist {
   #recordingMode;
   #recordID;
   #workspaceId = null;
+  #workspacePath = null;
   recordName;
   loadStatus;
 
@@ -411,10 +412,11 @@ class Typist {
 
   // --- Recording ---
 
-  startRecord(_startTime, firstFileName, firstValue, language, _recordName, _workspaceId = null) {
+  startRecord(_startTime, firstFileName, firstValue, language, _recordName, _workspaceId = null, _workspacePath = null) {
     if (!this.recording && this.#recordingMode) {
       this.recordName = _recordName;
       this.#workspaceId = _workspaceId;
+      this.#workspacePath = _workspacePath;
       const hasFiles = Object.keys(this.#files).length > 0;
 
       if (!hasFiles) {
@@ -668,6 +670,7 @@ class Typist {
   isLoaded() { return this.loadStatus; }
 
   _getWorkspaceId() { return this.#workspaceId; }
+  _getWorkspacePath() { return this.#workspacePath; }
 
   hasAudio() { return !!this.#blobUrl; }
 
@@ -693,6 +696,7 @@ class Typist {
       pauseResumePoints: this.#pauseResumePoints,
       audio: this.audioUrl,
       duration: this.getDuration(),
+      workspacePath: this.#workspacePath,
     };
   }
 

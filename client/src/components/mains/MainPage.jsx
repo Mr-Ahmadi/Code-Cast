@@ -26,8 +26,12 @@ export default function App() {
     const isLocal = mode === MODES.LOCAL;
 
     useEffect(() => {
-        if (isLocal && window.electronAPI?.isElectron && !isConfigured()) {
-            setShowSetup(true);
+        if (isLocal && window.electronAPI?.isElectron) {
+            const seen = localStorage.getItem('codevideo_welcome_seen');
+            if (!seen) {
+                setShowSetup(true);
+                localStorage.setItem('codevideo_welcome_seen', '1');
+            }
         }
     }, [isLocal]);
 

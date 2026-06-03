@@ -238,6 +238,27 @@ ipcMain.handle('file:mkdir', async (event, dirPath) => {
   }
 });
 
+ipcMain.handle('file:listRecursive', async (event, dirPath) => {
+  const results = [];
+  function walk(dir) {
+    let entries;
+    try {
+      entries = fs.readdirSync(dir, { withFileTypes: true });
+    } catch { return; }
+    for (const e of entries) {
+      if (e.name.startsWith('.')) continue;
+      const fullPath = path.join(dir, e.name);
+      if (e.isDirectory()) {
+        walk(fullPath);
+      } else if (e.isFile()) {
+        results.push(fullPath);
+      }
+    }
+  }
+  walk(dirPath);
+  return results;
+});
+
 ipcMain.handle('execute:run', async (event, { language, sourceCode }) => {
   return new Promise((resolve) => {
     let command;

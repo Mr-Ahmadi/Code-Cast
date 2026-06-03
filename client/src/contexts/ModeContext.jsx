@@ -11,8 +11,9 @@ export function ModeProvider({ children }) {
   const [mode, setModeState] = useState(() => {
     const saved = localStorage.getItem('codevideo_mode');
     if (saved === MODES.ONLINE || saved === MODES.LOCAL) return saved;
-    if (window.electronAPI?.isElectron) return MODES.LOCAL;
-    return MODES.ONLINE;
+    const defaultMode = window.electronAPI?.isElectron ? MODES.LOCAL : MODES.ONLINE;
+    localStorage.setItem('codevideo_mode', defaultMode);
+    return defaultMode;
   });
 
   const setMode = useCallback((newMode) => {

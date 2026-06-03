@@ -78,7 +78,7 @@ export async function getLocalRecordings(projectId) {
   return records.map((r) => [r.name, r.id]);
 }
 
-export async function getLocalRecording(id) {
+export async function getLocalRecording(id, projectPath) {
   return db.recordings.get(id);
 }
 

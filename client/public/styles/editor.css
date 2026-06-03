@@ -435,6 +435,20 @@
   font-style: italic;
 }
 
+.file-tree-folder {
+  color: var(--text-primary);
+  font-weight: 500;
+}
+
+.file-tree-folder:hover {
+  background: var(--bg-hover);
+}
+
+.file-tree-folder-icon {
+  color: var(--accent);
+  flex-shrink: 0;
+}
+
 /* ============================================================
    FILE TABS
    ============================================================ */

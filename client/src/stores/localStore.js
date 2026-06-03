@@ -51,20 +51,20 @@ export async function getLocalProject(id) {
   return d.getLocalProject(id);
 }
 
-export async function saveLocalRecording(projectId, name, data) {
-  if (fsStore.isConfigured()) return fsStore.saveLocalRecording(projectId, name, data);
+export async function saveLocalRecording(projectId, name, data, projectPath) {
+  if (fsStore.isConfigured()) return fsStore.saveLocalRecording(projectId, name, data, projectPath);
   const d = await getDexie();
   return d.saveLocalRecording(projectId, name, data);
 }
 
-export async function getLocalRecordings(projectId) {
-  if (fsStore.isConfigured()) return fsStore.getLocalRecordings(projectId);
+export async function getLocalRecordings(projectId, projectPath) {
+  if (fsStore.isConfigured()) return fsStore.getLocalRecordings(projectId, projectPath);
   const d = await getDexie();
   return d.getLocalRecordings(projectId);
 }
 
-export async function getLocalRecording(id) {
-  if (fsStore.isConfigured()) return fsStore.getLocalRecording(id);
+export async function getLocalRecording(id, projectPath) {
+  if (fsStore.isConfigured()) return fsStore.getLocalRecording(id, projectPath);
   const d = await getDexie();
   return d.getLocalRecording(id);
 }

@@ -34,5 +34,6 @@ contextBridge.exposeInMainWorld('electronAPI', {
     list: (dirPath) => ipcRenderer.invoke('file:list', dirPath),
     exists: (filePath) => ipcRenderer.invoke('file:exists', filePath),
     mkdir: (dirPath) => ipcRenderer.invoke('file:mkdir', dirPath),
+    listRecursive: (dirPath, filter) => ipcRenderer.invoke('file:listRecursive', dirPath, filter),
   },
 });

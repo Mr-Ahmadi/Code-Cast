@@ -157,16 +157,16 @@ const _Editor = memo(({ editorRef }) => {
   return (
     <div className='editor-container' ref={resumeFlashRef} role="region" aria-label="Code editor">
       {noProject && (
-        <div className="editor-no-project">
-          <div className="editor-no-project-content">
-            <FiFolder size={48} />
-            <h3>No Project Open</h3>
-            <p>Open an existing project or create a new one to start coding.</p>
-            <button className="btn btn-primary" onClick={() => window.__openProjectDialog?.()}>
-              <FiFolder size={14} /> Open Project
-            </button>
+          <div className="editor-no-project">
+            <div className="editor-no-project-content">
+              <FiFolder size={48} />
+              <h3>No Project Open</h3>
+              <p>Open a folder, create a project, or open an existing one to start coding.</p>
+              <button className="btn btn-primary" onClick={() => window.__openProjectDialog?.()}>
+                <FiFolder size={14} /> Open Project
+              </button>
+            </div>
           </div>
-        </div>
       )}
       <div className="editor-monaco-wrapper">
         <Editor

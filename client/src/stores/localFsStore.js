@@ -57,7 +57,8 @@ function recordingFilePath(dir, recId) {
 }
 
 export function isConfigured() {
-  return !!rootDir();
+  // File system is available if running in Electron (no root dir needed for Open Folder)
+  return !!(api());
 }
 
 export async function configureRoot() {
@@ -178,24 +179,33 @@ export async function getLocalProject(id) {
   }
 }
 
-export async function saveLocalRecording(projectId, name, data) {
+export async function saveLocalRecording(projectId, name, data, projectPath) {
   const f = api();
   if (!f) throw new Error('File system not available');
-  const dir = await getProjectDir(projectId);
+
+  let dir = projectPath;
+  if (!dir) {
+    dir = await getProjectDir(projectId);
+  }
   if (!dir) throw new Error('Project directory not found');
 
   const now = Date.now();
   const id = uuidv4();
   const rec = {
     id,
-    projectId,
+    projectId: projectId || 'opened-folder',
     name,
     data: JSON.parse(JSON.stringify(data)),
     createdAt: now,
   };
 
-  await f.mkdir(projectRecordsDir(dir));
-  await f.write(recordingFilePath(dir, id), JSON.stringify(rec, null, 2));
+  const recDir = `${dir}/.record`;
+  const mkdirOk = await f.mkdir(recDir);
+  if (!mkdirOk) throw new Error(`Failed to create directory: ${recDir}`);
+
+  const filePath = `${recDir}/${id}.json`;
+  const writeOk = await f.write(filePath, JSON.stringify(rec, null, 2));
+  if (!writeOk) throw new Error(`Failed to write recording file: ${filePath}`);
 
   if (projectId) {
     await updateLocalProject(projectId, { updatedAt: now });
@@ -203,39 +213,88 @@ export async function saveLocalRecording(projectId, name, data) {
   return id;
 }
 
-export async function getLocalRecordings(projectId) {
+export async function getLocalRecordings(projectId, projectPath) {
   const f = api();
   if (!f) return [];
-  const dir = await getProjectDir(projectId);
-  if (!dir) return [];
 
-  const recDir = projectRecordsDir(dir);
-  const entries = await f.list(recDir);
+  const dirs = [];
+  if (projectPath) {
+    dirs.push(`${projectPath}/.record`);
+  } else if (projectId) {
+    const dir = await getProjectDir(projectId);
+    if (dir) {
+      dirs.push(projectRecordsDir(dir));
+      dirs.push(`${dir}/.record`);
+    }
+  } else {
+    const index = await readIndex();
+    for (const dir of Object.values(index)) {
+      dirs.push(projectRecordsDir(dir));
+      dirs.push(`${dir}/.record`);
+    }
+  }
+
   const results = [];
-  for (const e of entries) {
-    if (!e.name.endsWith('.json')) continue;
-    const raw = await f.read(`${recDir}/${e.name}`);
-    if (!raw) continue;
+  for (const recDir of dirs) {
+    let entries;
     try {
-      const rec = JSON.parse(raw);
-      if (rec.projectId === projectId) {
+      entries = await f.list(recDir);
+    } catch {
+      continue;
+    }
+    for (const e of entries) {
+      if (!e.name.endsWith('.json')) continue;
+      const raw = await f.read(`${recDir}/${e.name}`);
+      if (!raw) continue;
+      try {
+        const rec = JSON.parse(raw);
         results.push([rec.name, rec.id]);
-      }
-    } catch {}
+      } catch {}
+    }
   }
   results.sort((a, b) => a[0].localeCompare(b[0]));
   return results;
 }
 
-export async function getLocalRecording(id) {
+export async function getLocalRecording(id, projectPath) {
   const f = api();
   if (!f) return null;
 
+  // If projectPath is given, check there first (for opened folders not in the index)
+  if (projectPath) {
+    for (const recDir of [projectRecordsDir(projectPath), `${projectPath}/.record`]) {
+      const raw = await f.read(`${recDir}/${id}.json`);
+      if (raw) {
+        try { return JSON.parse(raw); } catch { return null; }
+      }
+    }
+  }
+
+  const searchDirs = [];
   const index = await readIndex();
   for (const dir of Object.values(index)) {
-    const raw = await f.read(recordingFilePath(dir, id));
-    if (raw) {
-      try { return JSON.parse(raw); } catch { return null; }
+    searchDirs.push(dir);
+  }
+
+  const rootDirVal = rootDir();
+  if (rootDirVal) {
+    const folders = await f.list(rootDirVal);
+    for (const entry of folders) {
+      if (entry.isDirectory) {
+        const fullPath = `${rootDirVal}/${entry.name}`;
+        if (!searchDirs.includes(fullPath)) {
+          searchDirs.push(fullPath);
+        }
+      }
+    }
+  }
+
+  for (const dir of searchDirs) {
+    for (const recDir of [projectRecordsDir(dir), `${dir}/.record`]) {
+      const raw = await f.read(`${recDir}/${id}.json`);
+      if (raw) {
+        try { return JSON.parse(raw); } catch { return null; }
+      }
     }
   }
   return null;
@@ -245,13 +304,33 @@ export async function deleteLocalRecording(id) {
   const f = api();
   if (!f) return;
 
+  const searchDirs = [];
   const index = await readIndex();
   for (const dir of Object.values(index)) {
-    const path = recordingFilePath(dir, id);
-    const exists = await f.exists(path);
-    if (exists) {
-      await f.remove(path);
-      return;
+    searchDirs.push(dir);
+  }
+
+  const rDir = rootDir();
+  if (rDir) {
+    const folders = await f.list(rDir);
+    for (const entry of folders) {
+      if (entry.isDirectory) {
+        const fullPath = `${rDir}/${entry.name}`;
+        if (!searchDirs.includes(fullPath)) {
+          searchDirs.push(fullPath);
+        }
+      }
+    }
+  }
+
+  for (const dir of searchDirs) {
+    for (const recDir of [projectRecordsDir(dir), `${dir}/.record`]) {
+      const p = `${recDir}/${id}.json`;
+      const exists = await f.exists(p);
+      if (exists) {
+        await f.remove(p);
+        return;
+      }
     }
   }
 }
@@ -259,18 +338,40 @@ export async function deleteLocalRecording(id) {
 export async function getAllLocalRecordings() {
   const f = api();
   if (!f) return [];
+
+  const searchDirs = [];
   const index = await readIndex();
-  const results = [];
   for (const dir of Object.values(index)) {
-    const recDir = projectRecordsDir(dir);
-    const entries = await f.list(recDir);
-    for (const e of entries) {
-      if (!e.name.endsWith('.json')) continue;
-      const raw = await f.read(`${recDir}/${e.name}`);
-      if (!raw) continue;
+    searchDirs.push(dir);
+  }
+
+  const rootDirVal = rootDir();
+  if (rootDirVal) {
+    const folders = await f.list(rootDirVal);
+    for (const entry of folders) {
+      if (entry.isDirectory) {
+        searchDirs.push(`${rootDirVal}/${entry.name}`);
+      }
+    }
+  }
+
+  const results = [];
+  for (const dir of searchDirs) {
+    for (const recDir of [projectRecordsDir(dir), `${dir}/.record`]) {
+      let entries;
       try {
-        results.push(JSON.parse(raw));
-      } catch {}
+        entries = await f.list(recDir);
+      } catch {
+        continue;
+      }
+      for (const e of entries) {
+        if (!e.name.endsWith('.json')) continue;
+        const raw = await f.read(`${recDir}/${e.name}`);
+        if (!raw) continue;
+        try {
+          results.push(JSON.parse(raw));
+        } catch {}
+      }
     }
   }
   results.sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0));
