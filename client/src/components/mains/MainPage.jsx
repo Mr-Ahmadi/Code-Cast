@@ -27,10 +27,10 @@ export default function App() {
 
     useEffect(() => {
         if (isLocal && window.electronAPI?.isElectron) {
-            const seen = localStorage.getItem('codevideo_welcome_seen');
+            const seen = localStorage.getItem('codecast_welcome_seen');
             if (!seen) {
                 setShowSetup(true);
-                localStorage.setItem('codevideo_welcome_seen', '1');
+                localStorage.setItem('codecast_welcome_seen', '1');
             }
         }
     }, [isLocal]);

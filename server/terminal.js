@@ -6,7 +6,7 @@ const path = require("path");
 const os = require("os");
 
 const JWT_SECRET = process.env.JWT_SECRET || "secret";
-const WORKSPACE_BASE = path.join(os.tmpdir(), "codevideo-terminals");
+const WORKSPACE_BASE = path.join(os.tmpdir(), "codecast-terminals");
 
 // Resource limits for user processes
 const CPU_LIMIT_SEC = parseInt(process.env.CVID_CPU_LIMIT || "30", 10);  // max 30s CPU

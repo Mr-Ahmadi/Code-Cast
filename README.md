@@ -1,4 +1,4 @@
-# Code Video
+# Code Cast
 
 Record and replay code typing sessions with synchronized audio. Capture your keystrokes in a Monaco editor along with voice narration, then play back the entire session as a seamless video-like experience.
 

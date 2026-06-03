@@ -1,6 +1,6 @@
 import { v4 as uuidv4 } from 'uuid';
 
-const ROOT_DIR_KEY = 'codevideo_fs_root';
+const ROOT_DIR_KEY = 'codecast_fs_root';
 
 const DEFAULT_FILES = {
   'index.html': { language: 'html', firstValue: '<!DOCTYPE html>\n<html lang="en">\n<head>\n  <meta charset="UTF-8">\n  <meta name="viewport" content="width=device-width, initial-scale=1.0">\n  <title>Project</title>\n</head>\n<body>\n</body>\n</html>' },
@@ -16,7 +16,7 @@ const api = () => window.electronAPI?.file;
 
 function projectsDir() {
   const r = rootDir();
-  return r ? `${r}/codevideo-projects` : '';
+  return r ? `${r}/codecast-projects` : '';
 }
 
 function indexFilePath() {

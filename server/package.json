@@ -1,5 +1,5 @@
 {
-  "name": "code-video",
+  "name": "code-cast",
   "version": "1.0.0",
   "description": "To record typing in interactive way!",
   "main": "server.js",

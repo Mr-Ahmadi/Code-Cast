@@ -69,7 +69,7 @@ function extLang(name) {
   return map[ext] || 'plaintext';
 }
 
-const OPENED_FOLDERS_KEY = 'codevideo_opened_folders';
+const OPENED_FOLDERS_KEY = 'codecast_opened_folders';
 
 const RecordsList = memo(({ display, setDisplay }) => {
   const { user, setRecordName, setToast, refreshUser, setCurrentWorkspace, setCurrentRecord } = useContext(GlobalContext);

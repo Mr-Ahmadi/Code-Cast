@@ -10,7 +10,7 @@ const os = require("os");
 
 const CPU_LIMIT_SEC = parseInt(process.env.CVID_CPU_LIMIT || "10", 10);
 const MEM_LIMIT_MB = parseInt(process.env.CVID_MEM_LIMIT || "128", 10);
-const CODE_TMP_BASE = path.join(os.tmpdir(), "codevideo-exec");
+const CODE_TMP_BASE = path.join(os.tmpdir(), "codecast-exec");
 
 const DEFAULT_FILES = {
   "index.html": { language: "html", firstValue: "<!DOCTYPE html>\n<html lang=\"en\">\n<head>\n  <meta charset=\"UTF-8\">\n  <meta name=\"viewport\" content=\"width=device-width, initial-scale=1.0\">\n  <title>Project</title>\n</head>\n<body>\n</body>\n</html>" },

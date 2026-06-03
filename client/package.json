@@ -1,5 +1,5 @@
 {
-  "name": "code-video",
+  "name": "code-cast",
   "private": true,
   "version": "0.0.0",
   "type": "module",
@@ -43,8 +43,8 @@
     "wait-on": "^8.0.3"
   },
   "build": {
-    "appId": "com.codevideo.app",
-    "productName": "Code Video",
+    "appId": "com.codecast.app",
+    "productName": "CodeCast",
     "directories": {
       "output": "release"
     },

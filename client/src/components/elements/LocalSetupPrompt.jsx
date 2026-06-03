@@ -6,7 +6,7 @@ export default function LocalSetupPrompt({ onComplete }) {
   return (
     <div className="partial-container" style={{ textAlign: 'center' }}>
       <h2 className="partial-title" style={{ fontSize: 20, marginBottom: 12 }}>
-        Welcome to Code Video
+        Welcome to CodeCast
       </h2>
       <p style={{ color: 'var(--text-secondary)', fontSize: 13, marginBottom: 20, lineHeight: 1.6 }}>
         You are using the app in <strong>offline mode</strong>.

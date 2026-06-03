@@ -1,7 +1,7 @@
 import axios from "axios";
 
 export const executeCode = async (language, sourceCode) => {
-  const mode = localStorage.getItem('codevideo_mode') || 'online';
+  const mode = localStorage.getItem('codecast_mode') || 'online';
   const lang = Array.isArray(language) ? language[0] : language;
 
   if (mode === 'local' && window.electronAPI?.execute) {

@@ -62,7 +62,7 @@ const push = (oldValue, newValue) => {
 };
 
 const stop = async () => {
-  const mode = localStorage.getItem('codevideo_mode') || 'online';
+  const mode = localStorage.getItem('codecast_mode') || 'online';
   let audioDataUrl = null;
   if (lecture instanceof Lecture) {
     try {
@@ -110,7 +110,7 @@ async function stopLocal(typistInstance, audioDataUrl = null) {
 }
 
 const load = async (id, projectPath) => {
-  const mode = localStorage.getItem('codevideo_mode') || 'online';
+  const mode = localStorage.getItem('codecast_mode') || 'online';
   if (mode === 'local') {
     const localStore = await import("../stores/localStore");
     const rec = await localStore.getLocalRecording(id, projectPath);
