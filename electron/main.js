@@ -95,19 +95,19 @@ function getShell() {
   return '/bin/zsh';
 }
 
-ipcMain.handle('terminal:create', (event, terminalId) => {
+ipcMain.handle('terminal:create', (event, terminalId, cwd) => {
   const shell = getShell();
-  const cwd = path.join(__dirname, '..', 'client');
+  const defaultCwd = cwd || path.join(__dirname, '..', 'client');
   let shellProcess;
 
   if (process.platform === 'win32') {
-    shellProcess = spawn('cmd.exe', [], { cwd, env: { ...process.env, TERM: 'xterm-256color' } });
+    shellProcess = spawn('cmd.exe', [], { cwd: defaultCwd, env: { ...process.env, TERM: 'xterm-256color' } });
   } else {
     // Use Python's pty module to create a real PTY — avoids stdout buffering, gives TTY echo/prompt
     // Use SHELL env var so we don't need to embed the path in Python string
     const pythonCmd = `import pty,os; pty.spawn([os.environ.get('SHELL','/bin/zsh'),'-i'])`;
     shellProcess = spawn('python3', ['-c', pythonCmd], {
-      cwd,
+      cwd: defaultCwd,
       env: { ...process.env, TERM: 'xterm-256color' },
     });
   }
@@ -170,6 +170,15 @@ ipcMain.handle('select-directory', async () => {
   const result = await dialog.showOpenDialog(mainWindow, {
     properties: ['openDirectory', 'createDirectory'],
     title: 'Choose a folder for your projects',
+  });
+  if (result.canceled) return null;
+  return result.filePaths[0];
+});
+
+ipcMain.handle('select-project-directory', async (event, projectName) => {
+  const result = await dialog.showOpenDialog(mainWindow, {
+    properties: ['openDirectory', 'createDirectory'],
+    title: `Choose a folder for project "${projectName}"`,
   });
   if (result.canceled) return null;
   return result.filePaths[0];

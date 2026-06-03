@@ -89,3 +89,7 @@ export async function deleteLocalRecording(id) {
 export async function getAllLocalRecordings() {
   return db.recordings.orderBy('createdAt').reverse().toArray();
 }
+
+export async function getProjectDir(id) {
+  return null;
+}

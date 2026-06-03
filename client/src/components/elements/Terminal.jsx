@@ -12,7 +12,7 @@ export default function TerminalPanel({ visible, onClose }) {
   const terminalRef = useRef(null);
   const xtermRef = useRef(null);
   const fitAddonRef = useRef(null);
-  const { setToast } = useContext(GlobalContext);
+  const { setToast, currentWorkspace } = useContext(GlobalContext);
   const { mode } = useMode();
 
   const isLocal = mode === MODES.LOCAL;
@@ -83,7 +83,8 @@ export default function TerminalPanel({ visible, onClose }) {
     if (isLocal && window.electronAPI?.isElectron) {
       const id = `terminal-${++terminalCounter}`;
 
-      window.electronAPI.terminal.create(id)
+      const cwd = currentWorkspace?.path || undefined;
+      window.electronAPI.terminal.create(id, cwd)
         .then(() => {
           if (!alive) {
             window.electronAPI.terminal.kill(id);
@@ -156,7 +157,7 @@ export default function TerminalPanel({ visible, onClose }) {
       term.dispose();
       xtermRef.current = null;
     };
-  }, [visible, isLocal, setToast]);
+  }, [visible, isLocal, setToast, currentWorkspace?.path]);
 
   if (!visible) return null;
 

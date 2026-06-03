@@ -80,3 +80,8 @@ export async function getAllLocalRecordings() {
   const d = await getDexie();
   return d.getAllLocalRecordings();
 }
+
+export async function getProjectDir(id) {
+  if (fsStore.isConfigured()) return fsStore.getProjectDir(id);
+  return null;
+}

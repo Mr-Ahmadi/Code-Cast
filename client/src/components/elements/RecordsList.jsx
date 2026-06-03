@@ -64,7 +64,7 @@ const RecordsList = memo(({ display, setDisplay }) => {
       for (const [name, fd] of Object.entries(ws.files || {})) {
         recordAddFile(name, fd.language, fd.firstValue || "");
       }
-      setCurrentWorkspace({ id: ws.id, name: ws.name, files: ws.files });
+      setCurrentWorkspace({ id: ws.id, name: ws.name, files: ws.files, path: ws.path || null });
       setCurrentRecord(null);
       setRecordName("Untitled");
       setToast({ type: "SUCCESS", message: `Opened "${ws.name}"` });
@@ -90,12 +90,12 @@ const RecordsList = memo(({ display, setDisplay }) => {
           }
         }
         setRecordName(name);
-        setCurrentWorkspace(ws ? { id: ws.id, name: ws.name, files: ws.files } : null);
+        setCurrentWorkspace(ws ? { id: ws.id, name: ws.name, files: ws.files, path: ws.path || null } : null);
         setCurrentRecord(recordId);
       } else {
         await loadRecord(recordId);
         setRecordName(name);
-        setCurrentWorkspace(ws ? { id: ws.id, name: ws.name, files: ws.files } : null);
+        setCurrentWorkspace(ws ? { id: ws.id, name: ws.name, files: ws.files, path: ws.path || null } : null);
         setCurrentRecord(recordId);
       }
       setToast({ type: "SUCCESS", message: `Opened "${name}"` });
@@ -112,11 +112,15 @@ const RecordsList = memo(({ display, setDisplay }) => {
     try {
       if (isLocal) {
         const ws = await localStore.createLocalProject("New Project");
+        if (!ws) {
+          setCreatingWs(false);
+          return;
+        }
         initRecord();
         for (const [name, fd] of Object.entries(ws.files || {})) {
           recordAddFile(name, fd.language, fd.firstValue || "");
         }
-        setCurrentWorkspace({ id: ws.id, name: ws.name, files: ws.files });
+        setCurrentWorkspace({ id: ws.id, name: ws.name, files: ws.files, path: ws.path || null });
         setCurrentRecord(null);
         setRecordName("Untitled");
         setToast({ type: "SUCCESS", message: `Project "${ws.name}" created` });

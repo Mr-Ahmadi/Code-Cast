@@ -19,17 +19,41 @@ function projectsDir() {
   return r ? `${r}/codevideo-projects` : '';
 }
 
-function recordingsDir() {
-  const r = rootDir();
-  return r ? `${r}/codevideo-recordings` : '';
+function indexFilePath() {
+  return `${projectsDir()}/index.json`;
 }
 
-function projectPath(id) {
-  return `${projectsDir()}/${id}.json`;
+async function readIndex() {
+  const f = api();
+  if (!f) return {};
+  await f.mkdir(projectsDir());
+  const raw = await f.read(indexFilePath());
+  if (!raw) return {};
+  try { return JSON.parse(raw); } catch { return {}; }
 }
 
-function recordingPath(id) {
-  return `${recordingsDir()}/${id}.json`;
+async function writeIndex(index) {
+  const f = api();
+  if (!f) return;
+  await f.mkdir(projectsDir());
+  await f.write(indexFilePath(), JSON.stringify(index, null, 2));
+}
+
+export async function getProjectDir(id) {
+  const index = await readIndex();
+  return index[id] || null;
+}
+
+function projectJsonPath(dir) {
+  return `${dir}/project.json`;
+}
+
+function projectRecordsDir(dir) {
+  return `${dir}/records`;
+}
+
+function recordingFilePath(dir, recId) {
+  return `${projectRecordsDir(dir)}/${recId}.json`;
 }
 
 export function isConfigured() {
@@ -43,7 +67,6 @@ export async function configureRoot() {
   if (!dir) return false;
   localStorage.setItem(ROOT_DIR_KEY, dir);
   await f.mkdir(projectsDir());
-  await f.mkdir(recordingsDir());
   return true;
 }
 
@@ -54,15 +77,13 @@ export function getRootDir() {
 export async function getLocalProjects() {
   const f = api();
   if (!f) return [];
-  const dir = projectsDir();
-  const entries = await f.list(dir);
+  const index = await readIndex();
   const projects = [];
-  for (const e of entries) {
-    if (!e.name.endsWith('.json')) continue;
-    const data = await f.read(`${dir}/${e.name}`);
-    if (!data) continue;
+  for (const dir of Object.values(index)) {
+    const raw = await f.read(projectJsonPath(dir));
+    if (!raw) continue;
     try {
-      const p = JSON.parse(data);
+      const p = JSON.parse(raw);
       projects.push(p);
     } catch {}
   }
@@ -73,45 +94,85 @@ export async function getLocalProjects() {
 export async function createLocalProject(name = 'New Project') {
   const f = api();
   if (!f) throw new Error('File system not available');
+
+  const dir = await f.selectProjectDirectory(name);
+  if (!dir) return null;
+
+  const existing = await f.read(projectJsonPath(dir));
+  if (existing) {
+    throw new Error('This folder already contains a project');
+  }
+
   const now = Date.now();
   const id = uuidv4();
   const project = {
     id,
     name,
+    path: dir,
     files: JSON.parse(JSON.stringify(DEFAULT_FILES)),
     createdAt: now,
     updatedAt: now,
   };
-  await f.write(projectPath(id), JSON.stringify(project, null, 2));
+
+  await f.mkdir(dir);
+  await f.write(projectJsonPath(dir), JSON.stringify(project, null, 2));
+  await f.mkdir(projectRecordsDir(dir));
+
+  const index = await readIndex();
+  index[id] = dir;
+  await writeIndex(index);
+
   return project;
 }
 
 export async function updateLocalProject(id, data) {
   const f = api();
   if (!f) return;
-  const existing = await getLocalProject(id);
-  if (!existing) return;
-  const updated = { ...existing, ...data, updatedAt: Date.now() };
-  await f.write(projectPath(id), JSON.stringify(updated, null, 2));
+  const dir = await getProjectDir(id);
+  if (!dir) return;
+  const raw = await f.read(projectJsonPath(dir));
+  if (!raw) return;
+  try {
+    const existing = JSON.parse(raw);
+    const updated = { ...existing, ...data, updatedAt: Date.now() };
+    await f.write(projectJsonPath(dir), JSON.stringify(updated, null, 2));
+  } catch {}
 }
 
 export async function deleteLocalProject(id) {
   const f = api();
   if (!f) return;
+  const dir = await getProjectDir(id);
+  if (!dir) return;
+
   const recs = await getLocalRecordings(id);
   for (const [, rid] of recs) {
-    await f.remove(recordingPath(rid));
+    await f.remove(recordingFilePath(dir, rid));
   }
-  await f.remove(projectPath(id));
+
+  await f.remove(projectJsonPath(dir));
+
+  try {
+    const entries = await f.list(projectRecordsDir(dir));
+    if (entries.length === 0) {
+      await f.remove(projectRecordsDir(dir));
+    }
+  } catch {}
+
+  const index = await readIndex();
+  delete index[id];
+  await writeIndex(index);
 }
 
 export async function getLocalProject(id) {
   const f = api();
   if (!f) return null;
-  const data = await f.read(projectPath(id));
-  if (!data) return null;
+  const dir = await getProjectDir(id);
+  if (!dir) return null;
+  const raw = await f.read(projectJsonPath(dir));
+  if (!raw) return null;
   try {
-    return JSON.parse(data);
+    return JSON.parse(raw);
   } catch {
     return null;
   }
@@ -120,6 +181,9 @@ export async function getLocalProject(id) {
 export async function saveLocalRecording(projectId, name, data) {
   const f = api();
   if (!f) throw new Error('File system not available');
+  const dir = await getProjectDir(projectId);
+  if (!dir) throw new Error('Project directory not found');
+
   const now = Date.now();
   const id = uuidv4();
   const rec = {
@@ -129,7 +193,10 @@ export async function saveLocalRecording(projectId, name, data) {
     data: JSON.parse(JSON.stringify(data)),
     createdAt: now,
   };
-  await f.write(recordingPath(id), JSON.stringify(rec, null, 2));
+
+  await f.mkdir(projectRecordsDir(dir));
+  await f.write(recordingFilePath(dir, id), JSON.stringify(rec, null, 2));
+
   if (projectId) {
     await updateLocalProject(projectId, { updatedAt: now });
   }
@@ -139,16 +206,19 @@ export async function saveLocalRecording(projectId, name, data) {
 export async function getLocalRecordings(projectId) {
   const f = api();
   if (!f) return [];
-  const dir = recordingsDir();
-  const entries = await f.list(dir);
+  const dir = await getProjectDir(projectId);
+  if (!dir) return [];
+
+  const recDir = projectRecordsDir(dir);
+  const entries = await f.list(recDir);
   const results = [];
   for (const e of entries) {
     if (!e.name.endsWith('.json')) continue;
-    const raw = await f.read(`${dir}/${e.name}`);
+    const raw = await f.read(`${recDir}/${e.name}`);
     if (!raw) continue;
     try {
       const rec = JSON.parse(raw);
-      if (rec.projectId === (projectId || null)) {
+      if (rec.projectId === projectId) {
         results.push([rec.name, rec.id]);
       }
     } catch {}
@@ -160,34 +230,48 @@ export async function getLocalRecordings(projectId) {
 export async function getLocalRecording(id) {
   const f = api();
   if (!f) return null;
-  const data = await f.read(recordingPath(id));
-  if (!data) return null;
-  try {
-    return JSON.parse(data);
-  } catch {
-    return null;
+
+  const index = await readIndex();
+  for (const dir of Object.values(index)) {
+    const raw = await f.read(recordingFilePath(dir, id));
+    if (raw) {
+      try { return JSON.parse(raw); } catch { return null; }
+    }
   }
+  return null;
 }
 
 export async function deleteLocalRecording(id) {
   const f = api();
   if (!f) return;
-  await f.remove(recordingPath(id));
+
+  const index = await readIndex();
+  for (const dir of Object.values(index)) {
+    const path = recordingFilePath(dir, id);
+    const exists = await f.exists(path);
+    if (exists) {
+      await f.remove(path);
+      return;
+    }
+  }
 }
 
 export async function getAllLocalRecordings() {
   const f = api();
   if (!f) return [];
-  const dir = recordingsDir();
-  const entries = await f.list(dir);
+  const index = await readIndex();
   const results = [];
-  for (const e of entries) {
-    if (!e.name.endsWith('.json')) continue;
-    const raw = await f.read(`${dir}/${e.name}`);
-    if (!raw) continue;
-    try {
-      results.push(JSON.parse(raw));
-    } catch {}
+  for (const dir of Object.values(index)) {
+    const recDir = projectRecordsDir(dir);
+    const entries = await f.list(recDir);
+    for (const e of entries) {
+      if (!e.name.endsWith('.json')) continue;
+      const raw = await f.read(`${recDir}/${e.name}`);
+      if (!raw) continue;
+      try {
+        results.push(JSON.parse(raw));
+      } catch {}
+    }
   }
   results.sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0));
   return results;
