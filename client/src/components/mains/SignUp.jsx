@@ -77,7 +77,7 @@ const SignUp = () => {
                         <Link to="/signin">Already have an account?</Link>
                     </div>
                     <div>
-                        <input className="btn btn-secondary btn-sm"
+                        <input className="btn btn-sm"
                             type="reset" value="Clear"
                             disabled={message[0] === "LOADING"}
                         />

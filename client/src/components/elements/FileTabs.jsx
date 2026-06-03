@@ -4,7 +4,21 @@ import {
   getFiles, getActiveFile, addFile as recordAddFile,
   removeFile as recordRemoveFile, switchFile as recordSwitchFile,
 } from "../../functions/record";
-import { FiPlus, FiX } from "react-icons/fi";
+import { FiPlus, FiX, FiFileText, FiCode, FiImage } from "react-icons/fi";
+
+const tabIcon = (name) => {
+  const ext = name.split(".").pop().toLowerCase();
+  switch (ext) {
+    case "js": case "jsx": case "ts": case "tsx":
+    case "html": case "htm":
+    case "css": case "scss": case "less":
+      return <FiCode size={12} />;
+    case "png": case "jpg": case "jpeg": case "gif": case "svg":
+      return <FiImage size={12} />;
+    default:
+      return <FiFileText size={12} />;
+  }
+};
 
 const FileTabs = memo(() => {
   const { recording, playing, activeFile, setActiveFile, setToast, currentWorkspace } = useContext(GlobalContext);
@@ -76,7 +90,7 @@ const FileTabs = memo(() => {
             onClick={() => handleTabClick(f.name)}
             title={f.name}
           >
-            <span className="file-tab-icon" />
+            <span className="file-tab-icon">{tabIcon(f.name)}</span>
             <span className="file-tab-name">{f.name}</span>
             {files.length > 1 && !playing && (
               <button
@@ -114,7 +128,6 @@ const FileTabs = memo(() => {
           <button className="btn btn-sm btn-primary" onClick={handleNewFileSubmit}>Add</button>
         </div>
       )}
-
     </div>
   );
 });

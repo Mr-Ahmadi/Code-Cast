@@ -5,7 +5,9 @@ require("dotenv").config();
 const cors = require("cors");
 const express = require("express");
 const cookieParser = require("cookie-parser");
+const http = require("http");
 const sequelize = require("./config/database");
+const { setupTerminalWebSocket } = require("./terminal");
 
 const userRouter = require("./routes/user");
 const indexRouter = require("./routes/index");
@@ -26,11 +28,15 @@ app.use(cookieParser());
 app.use("/index", indexRouter);
 app.use("/user", userRouter);
 
+const server = http.createServer(app);
+
+setupTerminalWebSocket(server);
+
 const startServer = async () => {
   try {
     await sequelize.authenticate();
     await sequelize.sync({ alter: true });
-    app.listen(4000, () =>
+    server.listen(4000, () =>
       console.log("Server running on http://localhost:4000")
     );
   } catch (err) {

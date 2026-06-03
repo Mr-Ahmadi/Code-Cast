@@ -667,6 +667,8 @@ class Typist {
 
   isLoaded() { return this.loadStatus; }
 
+  _getWorkspaceId() { return this.#workspaceId; }
+
   hasAudio() { return !!this.#blobUrl; }
 
   getRecordID() { return this.#recordID; }

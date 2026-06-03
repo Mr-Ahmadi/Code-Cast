@@ -1,12 +1,16 @@
 import { useContext, useState, useEffect, useRef, useCallback, memo } from 'react'
 import { GlobalContext } from '../../contexts/GlobalStates';
+import { useMode, MODES } from '../../contexts/ModeContext';
 import PropTypes from 'prop-types';
 import { init as initRecord, load as loadRecord, addFile as recordAddFile } from "../../functions/record";
+import * as localStore from "../../stores/localStore";
 import axios from "axios";
 import { FiFileText, FiPlus, FiX, FiTrash2, FiSearch, FiChevronRight, FiChevronDown, FiFolder } from "react-icons/fi";
 
 const RecordsList = memo(({ display, setDisplay }) => {
   const { user, setRecordName, setToast, refreshUser, setCurrentWorkspace, setCurrentRecord } = useContext(GlobalContext);
+  const { mode } = useMode();
+  const isLocal = mode === MODES.LOCAL;
   const [selected, setSelected] = useState(null)
   const [selectedWs, setSelectedWs] = useState(null)
   const [confirmDelete, setConfirmDelete] = useState(null)
@@ -14,15 +18,35 @@ const RecordsList = memo(({ display, setDisplay }) => {
   const [search, setSearch] = useState("")
   const [expanded, setExpanded] = useState({})
   const [creatingWs, setCreatingWs] = useState(false)
+  const [localProjects, setLocalProjects] = useState([])
   const modalRef = useRef(null);
   const listRef = useRef(null);
 
+  const projects = isLocal ? localProjects : (user?.workspaces || []);
+
+  const refreshLocal = useCallback(async () => {
+    if (!isLocal) return;
+    const projects = await localStore.getLocalProjects();
+    const result = [];
+    for (const p of projects) {
+      const records = await localStore.getLocalRecordings(p.id);
+      result.push({ id: p.id, name: p.name, files: p.files, records });
+    }
+    setLocalProjects(result);
+  }, [isLocal]);
+
+  useEffect(() => {
+    if (display && isLocal) {
+      refreshLocal();
+    }
+  }, [display, isLocal, refreshLocal]);
+
   const filtered = search
-    ? (user?.workspaces || []).map(ws => ({
+    ? projects.map(ws => ({
         ...ws,
         records: ws.records.filter(([name]) => name.toLowerCase().includes(search.toLowerCase())),
       })).filter(ws => ws.records.length > 0 || ws.name.toLowerCase().includes(search.toLowerCase()))
-    : (user?.workspaces || []);
+    : projects;
 
   const closeModal = useCallback(() => {
     setDisplay(false);
@@ -55,10 +79,25 @@ const RecordsList = memo(({ display, setDisplay }) => {
   const handleOpenRecord = useCallback(async (recordId, name, ws) => {
     setLoading(recordId);
     try {
-      await loadRecord(recordId);
-      setRecordName(name);
-      setCurrentWorkspace(ws ? { id: ws.id, name: ws.name, files: ws.files } : null);
-      setCurrentRecord(recordId);
+      if (isLocal) {
+        const rec = await localStore.getLocalRecording(recordId);
+        if (!rec) throw new Error("Recording not found");
+        initRecord();
+        const data = rec.data;
+        if (data.files) {
+          for (const [fName, fd] of Object.entries(data.files)) {
+            recordAddFile(fName, fd.language || "plaintext", fd.firstValue || "");
+          }
+        }
+        setRecordName(name);
+        setCurrentWorkspace(ws ? { id: ws.id, name: ws.name, files: ws.files } : null);
+        setCurrentRecord(recordId);
+      } else {
+        await loadRecord(recordId);
+        setRecordName(name);
+        setCurrentWorkspace(ws ? { id: ws.id, name: ws.name, files: ws.files } : null);
+        setCurrentRecord(recordId);
+      }
       setToast({ type: "SUCCESS", message: `Opened "${name}"` });
       closeModal();
     } catch {
@@ -66,46 +105,66 @@ const RecordsList = memo(({ display, setDisplay }) => {
     } finally {
       setLoading(null);
     }
-  }, [closeModal, setToast, setRecordName, setCurrentWorkspace, setCurrentRecord]);
+  }, [closeModal, setToast, setRecordName, setCurrentWorkspace, setCurrentRecord, isLocal]);
 
   const handleCreateWorkspace = useCallback(async () => {
     setCreatingWs(true);
     try {
-      const { data } = await axios.request({
-        method: "post",
-        url: "index/workspace/create",
-        data: { name: "New Project" },
-        headers: { "Content-Type": "application/json" },
-        withCredentials: true,
-      });
-      initRecord();
-      for (const [name, fd] of Object.entries(data.files || {})) {
-        recordAddFile(name, fd.language, fd.firstValue || "");
+      if (isLocal) {
+        const ws = await localStore.createLocalProject("New Project");
+        initRecord();
+        for (const [name, fd] of Object.entries(ws.files || {})) {
+          recordAddFile(name, fd.language, fd.firstValue || "");
+        }
+        setCurrentWorkspace({ id: ws.id, name: ws.name, files: ws.files });
+        setCurrentRecord(null);
+        setRecordName("Untitled");
+        setToast({ type: "SUCCESS", message: `Project "${ws.name}" created` });
+        await refreshLocal();
+        setExpanded(prev => ({ ...prev, [ws.id]: true }));
+        closeModal();
+      } else {
+        const { data } = await axios.request({
+          method: "post",
+          url: "index/workspace/create",
+          data: { name: "New Project" },
+          headers: { "Content-Type": "application/json" },
+          withCredentials: true,
+        });
+        initRecord();
+        for (const [name, fd] of Object.entries(data.files || {})) {
+          recordAddFile(name, fd.language, fd.firstValue || "");
+        }
+        setCurrentWorkspace({ id: data.id, name: data.name, files: data.files });
+        setCurrentRecord(null);
+        setRecordName("Untitled");
+        setToast({ type: "SUCCESS", message: `Project "${data.name}" created` });
+        refreshUser();
+        setExpanded(prev => ({ ...prev, [data.id]: true }));
+        closeModal();
       }
-      setCurrentWorkspace({ id: data.id, name: data.name, files: data.files });
-      setCurrentRecord(null);
-      setRecordName("Untitled");
-      setToast({ type: "SUCCESS", message: `Project "${data.name}" created` });
-      refreshUser();
-      setExpanded(prev => ({ ...prev, [data.id]: true }));
-      closeModal();
-    } catch {
-      setToast({ type: "ERROR", message: "Failed to create project" });
+    } catch (err) {
+      setToast({ type: "ERROR", message: err?.response?.data?.message || err.message || "Failed to create project" });
     } finally {
       setCreatingWs(false);
     }
-  }, [setToast, refreshUser, setCurrentWorkspace, setCurrentRecord, setRecordName, closeModal]);
+  }, [isLocal, setToast, refreshUser, setCurrentWorkspace, setCurrentRecord, setRecordName, closeModal, refreshLocal]);
 
   const handleDeleteRecord = useCallback(async (id, name) => {
     if (confirmDelete === id) {
       try {
-        await axios.request({
-          method: "delete",
-          url: `index/delete/${id}`,
-          withCredentials: true,
-        });
+        if (isLocal) {
+          await localStore.deleteLocalRecording(id);
+          await refreshLocal();
+        } else {
+          await axios.request({
+            method: "delete",
+            url: `index/delete/${id}`,
+            withCredentials: true,
+          });
+          refreshUser();
+        }
         setToast({ type: "SUCCESS", message: `"${name}" deleted` });
-        refreshUser();
       } catch {
         setToast({ type: "ERROR", message: "Failed to delete record" });
       }
@@ -113,18 +172,23 @@ const RecordsList = memo(({ display, setDisplay }) => {
     } else {
       setConfirmDelete(id);
     }
-  }, [confirmDelete, setToast, refreshUser]);
+  }, [confirmDelete, setToast, refreshUser, isLocal, refreshLocal]);
 
   const handleDeleteWorkspace = useCallback(async (id, name) => {
     if (confirmDelete === `ws-${id}`) {
       try {
-        await axios.request({
-          method: "delete",
-          url: `index/workspace/${id}`,
-          withCredentials: true,
-        });
+        if (isLocal) {
+          await localStore.deleteLocalProject(id);
+          await refreshLocal();
+        } else {
+          await axios.request({
+            method: "delete",
+            url: `index/workspace/${id}`,
+            withCredentials: true,
+          });
+          refreshUser();
+        }
         setToast({ type: "SUCCESS", message: `Project "${name}" deleted` });
-        refreshUser();
       } catch {
         setToast({ type: "ERROR", message: "Failed to delete project" });
       }
@@ -132,7 +196,7 @@ const RecordsList = memo(({ display, setDisplay }) => {
     } else {
       setConfirmDelete(`ws-${id}`);
     }
-  }, [confirmDelete, setToast, refreshUser]);
+  }, [confirmDelete, setToast, refreshUser, isLocal, refreshLocal]);
 
   const handleSelect = useCallback((id, wsId) => {
     setSelected(id);
@@ -168,7 +232,7 @@ const RecordsList = memo(({ display, setDisplay }) => {
         closeModal();
       }
       if (e.key === 'Enter' && selectedRef.current) {
-        const ws = user?.workspaces?.find(w => w.id === selectedRef.current);
+        const ws = projects.find(w => w.id === selectedRef.current);
         if (ws) {
           handleOpenProject(ws);
         }
@@ -180,7 +244,7 @@ const RecordsList = memo(({ display, setDisplay }) => {
       document.removeEventListener('keydown', handleKeyDown);
       prev?.focus();
     };
-  }, [display, closeModal, user?.workspaces, handleOpenProject]);
+  }, [display, closeModal, projects, handleOpenProject]);
 
   if (!display) return null;
 
@@ -200,7 +264,7 @@ const RecordsList = memo(({ display, setDisplay }) => {
             <FiX size={18} />
           </button>
         </div>
-        {(user?.workspaces || []).length > 0 && (
+        {projects.length > 0 && (
           <div className="search-bar">
             <FiSearch size={14} className="search-icon" aria-hidden="true" />
             <input
@@ -276,7 +340,7 @@ const RecordsList = memo(({ display, setDisplay }) => {
                 </div>
               )}
             </div>
-          )) : (user?.workspaces || []).length ? (
+          )) : projects.length ? (
             <div className="modal-empty" role="status">No matches for &quot;{search}&quot;</div>
           ) : (
             <div className="modal-empty" role="status">
@@ -303,7 +367,7 @@ const RecordsList = memo(({ display, setDisplay }) => {
                 className={"btn btn-primary btn-sm" + (loading === selectedWs ? " btn-loading" : "")}
                 disabled={!!loading}
                 onClick={() => {
-                  const ws = user?.workspaces?.find(w => w.id === selectedWs);
+                  const ws = projects.find(w => w.id === selectedWs);
                   if (ws) handleOpenProject(ws);
                 }}
               >
@@ -315,7 +379,7 @@ const RecordsList = memo(({ display, setDisplay }) => {
                 className={"btn btn-primary btn-sm" + (loading === selected ? " btn-loading" : "")}
                 disabled={!!loading}
                 onClick={() => {
-                  const ws = user?.workspaces?.find(w => w.id === selectedWs);
+                  const ws = projects.find(w => w.id === selectedWs);
                   const rec = ws?.records?.find(r => r[1] === selected);
                   if (rec) handleOpenRecord(rec[1], rec[0], ws);
                 }}

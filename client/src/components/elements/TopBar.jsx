@@ -24,7 +24,9 @@ import ProgressBar from "./ProgressBar";
 import { executeCode } from "../../functions/requests/execute";
 import signOut from "../../functions/requests/signOut";
 import { useNavigate } from "react-router-dom";
-import { FiTerminal, FiFolder, FiLogOut, FiPlay, FiSquare, FiCircle, FiPause, FiMic, FiMicOff, FiChevronDown, FiHelpCircle, FiZoomIn, FiZoomOut, FiMaximize2, FiMinimize2, FiDownload, FiUpload } from "react-icons/fi";
+import { FiTerminal, FiFolder, FiLogOut, FiPlay, FiSquare, FiCircle, FiPause, FiMic, FiMicOff, FiChevronDown, FiHelpCircle, FiZoomIn, FiZoomOut, FiMaximize2, FiMinimize2, FiDownload, FiUpload, FiCode } from "react-icons/fi";
+import ModeSwitcher from "./ModeSwitcher";
+import { useMode, MODES } from "../../contexts/ModeContext";
 import PropTypes from 'prop-types';
 
 const speeds = [0.5, 0.75, 1, 1.5, 2, 4];
@@ -55,6 +57,7 @@ const TopBar = memo(({ editorRef }) => {
   const navigate = useNavigate();
   const audioRecording = isAudioRecording();
   const importInputRef = useRef(null);
+  const { mode } = useMode();
 
   const isRecordingActive = recording && !paused;
 
@@ -237,8 +240,12 @@ const TopBar = memo(({ editorRef }) => {
       setToast({ type: "WARNING", message: "Stop recording before signing out." });
       return;
     }
+    if (mode === MODES.LOCAL) {
+      setToast({ type: "SUCCESS", message: "Local mode: no sign out needed." });
+      return;
+    }
     signOut(navigate);
-  }, [recording, setToast, navigate]);
+  }, [recording, mode, setToast, navigate]);
 
   const handleImport = useCallback(async (e) => {
     const file = e.target.files?.[0];
@@ -263,15 +270,17 @@ const TopBar = memo(({ editorRef }) => {
     <>
       <div className="top-bar" role="toolbar" aria-label="Editor controls">
         <div className="top-bar-left">
+          <ModeSwitcher />
+          <div className="top-bar-separator" />
           <button
-            className={"btn btn-primary btn-sm" + (executing ? " btn-loading" : "")}
+            className={"toolbar-btn toolbar-btn-primary" + (executing ? " btn-loading" : "")}
             onClick={handleExecute}
             title="Execute code (Ctrl+Enter)"
             aria-label="Execute code"
             disabled={executing}
             data-shortcut="execute"
           >
-            <FiTerminal size={14} /> Execute
+            <FiTerminal size={13} /> Run
           </button>
         </div>
         <div className="top-bar-center">
@@ -279,7 +288,7 @@ const TopBar = memo(({ editorRef }) => {
             <span className="recording-indicator" role="status" aria-live="polite" aria-label="Recording in progress">
               <span className="recording-dot" aria-hidden="true"></span>
               <span className="recording-timer">{formatTime(recordTime)}</span>
-              {audioRecording && <FiMic size={12} aria-label="Microphone active" />}
+              {audioRecording && <FiMic size={11} aria-label="Microphone active" />}
             </span>
           )}
           {paused && (
@@ -296,44 +305,44 @@ const TopBar = memo(({ editorRef }) => {
           )}
           {recording && (
             <button
-              className="btn btn-sm btn-secondary"
+              className="toolbar-btn"
               onClick={handlePauseResume}
               title={paused ? "Resume recording" : "Pause recording"}
               aria-label={paused ? "Resume recording" : "Pause recording"}
             >
-              {paused ? <><FiCircle size={14} /> Resume</> : <><FiPause size={14} /> Pause</>}
+              {paused ? <><FiCircle size={13} /> Resume</> : <><FiPause size={13} /> Pause</>}
             </button>
           )}
           <button
-            className="btn btn-sm btn-secondary"
+            className="toolbar-btn"
             onClick={handleRecord}
             title={recording ? "Stop recording (Ctrl+R)" : "Start recording (Ctrl+R)"}
             aria-label={recording ? "Stop recording" : "Start recording"}
             disabled={playing || !currentWorkspace}
             data-shortcut="record"
           >
-            {recording ? <><FiSquare size={14} /> Stop</> : <><FiCircle size={14} /> Record</>}
+            {recording ? <><FiSquare size={13} /> Stop</> : <><FiCircle size={13} /> Record</>}
           </button>
           <button
-            className={"btn btn-sm " + (playing ? "btn-danger" : "btn-secondary")}
+            className={"toolbar-btn" + (playing ? " toolbar-btn-danger" : "")}
             onClick={handlePlay}
             title={playing ? "Stop playback (Ctrl+P)" : "Play recording (Ctrl+P)"}
             aria-label={playing ? "Stop playback" : "Play recording"}
             disabled={recording}
             data-shortcut="play"
           >
-            {playing ? <><FiSquare size={14} /> Stop</> : <><FiPlay size={14} /> Play</>}
+            {playing ? <><FiSquare size={13} /> Stop</> : <><FiPlay size={13} /> Play</>}
           </button>
           <div className="speed-selector" ref={speedRef}>
             <button
-              className="btn btn-sm btn-secondary"
+              className="toolbar-btn"
               onClick={() => setShowSpeed(!showSpeed)}
               title="Playback speed"
               aria-label="Playback speed"
               aria-expanded={showSpeed}
               aria-haspopup="listbox"
             >
-              {speed}x <FiChevronDown size={12} aria-hidden="true" />
+              {speed}x <FiChevronDown size={10} aria-hidden="true" />
             </button>
             {showSpeed && (
               <div className="speed-dropdown" role="listbox" aria-label="Select speed">
@@ -355,41 +364,41 @@ const TopBar = memo(({ editorRef }) => {
         </div>
         <div className="top-bar-right">
           <button
-            className={"btn btn-sm " + (audioEnabled ? "btn-secondary" : "btn-danger")}
+            className={"toolbar-btn" + (audioEnabled ? "" : " toolbar-btn-danger")}
             onClick={() => setAudioEnabled(!audioEnabled)}
             title={audioEnabled ? "Disable audio recording" : "Enable audio recording"}
             aria-label={audioEnabled ? "Disable audio recording" : "Enable audio recording"}
             disabled={recording}
           >
-            {audioEnabled ? <FiMic size={14} /> : <FiMicOff size={14} />}
+            {audioEnabled ? <FiMic size={13} /> : <FiMicOff size={13} />}
           </button>
           <button
-            className="btn btn-secondary btn-sm"
+            className="toolbar-btn"
             onClick={() => setRecordsDisplay(true)}
             title="Open recordings (Ctrl+O)"
             aria-label="Open recordings"
             data-shortcut="open"
           >
-            <FiFolder size={14} /> Open
+            <FiFolder size={13} /> Open
           </button>
           {isTypistLoaded() && !recording && (
             <button
-              className="btn btn-sm btn-secondary"
+              className="toolbar-btn"
               onClick={exportRecord}
               title="Export recording as .cvid"
               aria-label="Export recording"
             >
-              <FiDownload size={14} /> Export
+              <FiDownload size={13} /> Export
             </button>
           )}
           <button
-            className="btn btn-sm btn-secondary"
+            className="toolbar-btn"
             onClick={() => importInputRef.current?.click()}
             title="Import .cvid file"
             aria-label="Import recording"
             disabled={recording}
           >
-            <FiUpload size={14} /> Import
+            <FiUpload size={13} /> Import
           </button>
           <input
             ref={importInputRef}
@@ -400,20 +409,28 @@ const TopBar = memo(({ editorRef }) => {
             aria-hidden="true"
           />
           <button
-            className="btn btn-sm btn-secondary"
+            className="toolbar-btn toolbar-btn-icon"
             onClick={() => setShowShortcuts(true)}
             title="Keyboard shortcuts (?)"
             aria-label="Keyboard shortcuts"
           >
-            <FiHelpCircle size={14} />
+            <FiHelpCircle size={13} />
           </button>
           <button
-            className="btn btn-secondary btn-sm"
+            className="toolbar-btn"
+            onClick={() => window.__setTerminalVisible?.(v => !v)}
+            title="Toggle terminal (Ctrl+`)"
+            aria-label="Toggle terminal"
+          >
+            <FiCode size={13} /> Terminal
+          </button>
+          <button
+            className="toolbar-btn"
             onClick={handleSignOut}
             aria-label="Sign out"
             disabled={recording}
           >
-            <FiLogOut size={14} /> Sign Out
+            <FiLogOut size={13} /> {mode === MODES.LOCAL ? 'Desktop' : 'Sign Out'}
           </button>
         </div>
       </div>
@@ -440,7 +457,7 @@ const TopBar = memo(({ editorRef }) => {
             aria-label="Decrease font size"
             disabled={fontSize <= 10}
           >
-            <FiZoomOut size={12} />
+            <FiZoomOut size={11} />
           </button>
           <span className="editor-font-size">{fontSize}px</span>
           <button
@@ -450,7 +467,7 @@ const TopBar = memo(({ editorRef }) => {
             aria-label="Increase font size"
             disabled={fontSize >= 28}
           >
-            <FiZoomIn size={12} />
+            <FiZoomIn size={11} />
           </button>
           <button
             className="editor-toolbar-btn"
@@ -458,7 +475,7 @@ const TopBar = memo(({ editorRef }) => {
             title={showMinimap ? "Hide minimap" : "Show minimap"}
             aria-label={showMinimap ? "Hide minimap" : "Show minimap"}
           >
-            {showMinimap ? <FiMinimize2 size={12} /> : <FiMaximize2 size={12} />}
+            {showMinimap ? <FiMinimize2 size={11} /> : <FiMaximize2 size={11} />}
           </button>
         </div>
       </div>

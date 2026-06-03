@@ -4,15 +4,13 @@ import {
   getFiles, getActiveFile, switchFile as recordSwitchFile,
   getFileLanguage,
 } from "../../functions/record";
-import { FiChevronRight, FiChevronDown, FiFileText, FiFolder, FiCode, FiImage } from "react-icons/fi";
+import { FiFileText, FiCode, FiImage } from "react-icons/fi";
 
 const extIcon = (name) => {
   const ext = name.split(".").pop().toLowerCase();
   switch (ext) {
     case "js": case "jsx": case "ts": case "tsx": case "mjs": case "cjs":
-      return <FiCode size={14} />;
     case "html": case "htm":
-      return <FiCode size={14} />;
     case "css": case "scss": case "less":
       return <FiCode size={14} />;
     case "png": case "jpg": case "jpeg": case "gif": case "svg": case "ico":
@@ -23,7 +21,7 @@ const extIcon = (name) => {
 };
 
 const FileTree = memo(() => {
-  const { activeFile, setActiveFile, playing, sidebarOpen, setSidebarOpen } = useContext(GlobalContext);
+  const { activeFile, setActiveFile, playing } = useContext(GlobalContext);
 
   const files = getFiles();
 
@@ -36,31 +34,22 @@ const FileTree = memo(() => {
   const currentActive = playing ? activeFile : (getActiveFile() || activeFile);
 
   return (
-    <div className={"file-tree" + (sidebarOpen ? " open" : " closed")}>
-      <div className="file-tree-header" onClick={() => setSidebarOpen(!sidebarOpen)}>
-        {sidebarOpen ? <FiChevronDown size={14} /> : <FiChevronRight size={14} />}
-        <FiFolder size={14} />
-        <span>Project</span>
-      </div>
-      {sidebarOpen && (
-        <div className="file-tree-items">
-          {files.length === 0 && (
-            <div className="file-tree-empty">No files</div>
-          )}
-          {files.map((f) => (
-            <div
-              key={f.name}
-              className={"file-tree-item" + (f.name === currentActive ? " active" : "") + (playing ? " no-interact" : "")}
-              onClick={() => handleFileClick(f.name)}
-              title={f.name}
-            >
-              <span className="file-tree-item-icon">{extIcon(f.name)}</span>
-              <span className="file-tree-item-name">{f.name}</span>
-              <span className="file-tree-item-lang">{getFileLanguage(f.name)}</span>
-            </div>
-          ))}
-        </div>
+    <div className="file-tree-items">
+      {files.length === 0 && (
+        <div className="file-tree-empty">No files</div>
       )}
+      {files.map((f) => (
+        <div
+          key={f.name}
+          className={"file-tree-item" + (f.name === currentActive ? " active" : "") + (playing ? " no-interact" : "")}
+          onClick={() => handleFileClick(f.name)}
+          title={f.name}
+        >
+          <span className="file-tree-item-icon">{extIcon(f.name)}</span>
+          <span className="file-tree-item-name">{f.name}</span>
+          <span className="file-tree-item-lang">{getFileLanguage(f.name)}</span>
+        </div>
+      ))}
     </div>
   );
 });

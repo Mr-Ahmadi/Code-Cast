@@ -3,6 +3,7 @@ import { Route, Routes, useLocation } from 'react-router-dom';
 import checkAuth from '../functions/requests/checkAuth';
 import Loading from './mains/Loading';
 import { GlobalContext } from '../contexts/GlobalStates';
+import { useMode, MODES } from '../contexts/ModeContext';
 
 const SignUp = lazy(() => import('./mains/SignUp'));
 const SignIn = lazy(() => import('./mains/SignIn'));
@@ -14,14 +15,20 @@ export default function App() {
   const location = useLocation()
   const [auth, setAuth] = useState(null)
   const { user, setUser } = useContext(GlobalContext)
+  const { mode } = useMode()
 
   useEffect(() => {
+    if (mode === MODES.LOCAL) {
+      setAuth(true);
+      setUser({ email: 'local@desktop', workspaces: [] });
+      return;
+    }
     checkAuth(setAuth, setUser)
     return () => {
       setAuth(null);
       setUser(null);
     }
-  }, [location, setUser])
+  }, [location, setUser, mode])
 
   return (
     <Suspense fallback={<Loading />}>

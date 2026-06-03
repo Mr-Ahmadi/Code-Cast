@@ -77,13 +77,25 @@ const stop = async () => {
   let success = true;
   if (typist instanceof Typist) {
     try {
-      await typist.stopRecord();
+      const mode = localStorage.getItem('codevideo_mode') || 'online';
+      if (mode === 'local') {
+        await stopLocal(typist);
+      } else {
+        await typist.stopRecord();
+      }
     } catch {
       success = false;
     }
     if (audioDataUrl) {
       try {
-        await typist.saveAudio(audioDataUrl);
+        if (success) {
+          const mode = localStorage.getItem('codevideo_mode') || 'online';
+          if (mode === 'local') {
+            // audio already stored with record
+          } else {
+            await typist.saveAudio(audioDataUrl);
+          }
+        }
       } catch {
         success = false;
       }
@@ -92,7 +104,23 @@ const stop = async () => {
   return success;
 };
 
+async function stopLocal(typistInstance) {
+  const { default: localStore } = await import("../stores/localStore");
+  const data = typistInstance.exportData();
+  const projectId = typistInstance._getWorkspaceId?.() || null;
+  await localStore.saveLocalRecording(projectId, typistInstance.recordName || "Untitled", data);
+}
+
 const load = async (id) => {
+  const mode = localStorage.getItem('codevideo_mode') || 'online';
+  if (mode === 'local') {
+    const { default: localStore } = await import("../stores/localStore");
+    const rec = await localStore.getLocalRecording(id);
+    if (!rec) throw new Error("Recording not found");
+    typist = new Typist();
+    await typist.loadFromData(rec.data);
+    return typist.recordName;
+  }
   typist = new Typist(id);
   await typist.load(id);
   return typist.recordName;

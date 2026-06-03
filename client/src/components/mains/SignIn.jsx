@@ -1,6 +1,7 @@
 import useForm from "../../hooks/useForm";
-import { Link } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import signIn from "../../functions/requests/signIn";
+import { useMode, MODES } from "../../contexts/ModeContext";
 
 const SignIn = () => {
     const {
@@ -14,6 +15,13 @@ const SignIn = () => {
     }, signIn);
 
     const msgType = message[0] === "ERROR" ? "error" : message[0] === "SUCCESS" ? "success" : message[0] === "LOADING" ? "loading" : null;
+    const { setMode } = useMode();
+    const navigate = useNavigate();
+
+    const handleOffline = () => {
+        setMode(MODES.LOCAL);
+        navigate('/');
+    };
 
     return (
         <div className="partial-container">
@@ -57,7 +65,7 @@ const SignIn = () => {
                         <Link to="/signup">Create account</Link>
                     </div>
                     <div>
-                        <input className="btn btn-secondary btn-sm"
+                        <input className="btn btn-sm"
                             type="reset" value="Clear"
                             disabled={message[0] === "LOADING"}
                         />
@@ -68,6 +76,12 @@ const SignIn = () => {
                     </div>
                 </div>
             </form>
+            <div className="offline-divider">
+                <span>or</span>
+            </div>
+            <button className="btn btn-primary btn-full" onClick={handleOffline}>
+                Continue Offline
+            </button>
         </div>
     );
 };

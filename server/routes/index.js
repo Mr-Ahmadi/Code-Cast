@@ -268,6 +268,10 @@ router.get("/workspace/list", authenticated, async (req, res) => {
 router.post("/workspace/create", authenticated, async (req, res) => {
   try {
     const { name } = req.body;
+    const count = await Workspace.count({ where: { userId: res.locals.user.id } });
+    if (count >= 5) {
+      return res.status(403).json({ message: "Project limit reached. Maximum 5 projects per user." });
+    }
     const ws = await Workspace.create({
       userId: res.locals.user.id,
       name: name || "Untitled Project",

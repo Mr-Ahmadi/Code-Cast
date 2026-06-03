@@ -7,6 +7,7 @@ const shortcuts = [
   { keys: "Ctrl+R", desc: "Start / Stop recording", icon: FiCircle },
   { keys: "Ctrl+P", desc: "Play / Stop playback", icon: FiPlay },
   { keys: "Ctrl+O", desc: "Open recordings", icon: FiFolder },
+  { keys: "Ctrl+`", desc: "Toggle terminal", icon: FiTerminal },
   { keys: "← / →", desc: "Skip back / forward 5s", icon: FiSkipBack },
   { keys: "?", desc: "Toggle this help", icon: FiHelpCircle },
 ];
