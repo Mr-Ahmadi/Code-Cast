@@ -21,12 +21,31 @@ const tabIcon = (name) => {
 };
 
 const FileTabs = memo(() => {
-  const { recording, playing, activeFile, setActiveFile, setToast, currentWorkspace } = useContext(GlobalContext);
+  const { recording, playing, activeFile, files, setActiveFile, setToast, currentWorkspace } = useContext(GlobalContext);
   const [showNewFile, setShowNewFile] = useState(false);
   const [newFileName, setNewFileName] = useState("");
 
-  const files = getFiles();
   const currentActive = playing ? activeFile : (getActiveFile() || activeFile);
+
+  const createWorkspaceFile = useCallback(async (name, content = "") => {
+    const f = window.electronAPI?.file;
+    if (!window.electronAPI?.isElectron || !f || !currentWorkspace?.path) {
+      return true;
+    }
+
+    try {
+      const normalized = name.replace(/^\/+/, "");
+      const fullPath = `${currentWorkspace.path}/${normalized}`;
+      const parentDir = fullPath.split('/').slice(0, -1).join('/');
+      if (parentDir) {
+        await f.mkdir(parentDir);
+      }
+      const ok = await f.write(fullPath, content);
+      return !!ok;
+    } catch {
+      return false;
+    }
+  }, [currentWorkspace?.path]);
 
   const handleTabClick = useCallback((name) => {
     if (playing || !currentWorkspace) return;
@@ -34,26 +53,39 @@ const FileTabs = memo(() => {
     setActiveFile(name);
   }, [playing, currentWorkspace, setActiveFile]);
 
-  const handleAddTab = useCallback(() => {
+  const handleAddTab = useCallback(async () => {
     if (playing || !currentWorkspace) return;
     const existing = getFiles();
     const unnamedIdx = existing.filter(f => f.name.startsWith("untitled")).length;
     const name = `untitled${unnamedIdx > 0 ? unnamedIdx : ""}.txt`;
+
+    const created = await createWorkspaceFile(name, "");
+    if (!created) {
+      setToast({ type: "ERROR", message: "Failed to create file in project directory" });
+      return;
+    }
+
     recordAddFile(name, "plaintext", "");
     setActiveFile(name);
     if (recording) {
       recordSwitchFile(name);
     }
-  }, [recording, playing, currentWorkspace, setActiveFile]);
+  }, [recording, playing, currentWorkspace, setActiveFile, createWorkspaceFile, setToast]);
 
-  const handleNewFileSubmit = useCallback(() => {
+  const handleNewFileSubmit = useCallback(async () => {
     let name = newFileName.trim();
     if (!name) {
-      const files = getFiles();
       const count = files.filter(f => f.name.startsWith("untitled")).length;
       name = `untitled${count > 0 ? count : ""}.txt`;
     }
     if (!name.includes(".")) name += ".txt";
+
+    const created = await createWorkspaceFile(name, "");
+    if (!created) {
+      setToast({ type: "ERROR", message: "Failed to create file in project directory" });
+      return;
+    }
+
     recordAddFile(name, "", "");
     setActiveFile(name);
     if (recording) {
@@ -61,7 +93,7 @@ const FileTabs = memo(() => {
     }
     setShowNewFile(false);
     setNewFileName("");
-  }, [newFileName, recording, setActiveFile]);
+  }, [newFileName, recording, setActiveFile, files, createWorkspaceFile, setToast]);
 
   const handleCloseTab = useCallback((e, name) => {
     e.stopPropagation();
@@ -91,7 +123,12 @@ const FileTabs = memo(() => {
             title={f.name}
           >
             <span className="file-tab-icon">{tabIcon(f.name)}</span>
-            <span className="file-tab-name">{f.name}</span>
+            <span className="file-tab-label">
+              <span className="file-tab-name">{f.name.split("/").pop()}</span>
+              {f.name.includes("/") && (
+                <span className="file-tab-path">{f.name.slice(0, f.name.lastIndexOf("/"))}</span>
+              )}
+            </span>
             {files.length > 1 && !playing && (
               <button
                 className="file-tab-close"

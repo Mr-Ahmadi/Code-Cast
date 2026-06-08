@@ -1,18 +1,147 @@
-import { app, BrowserWindow, ipcMain, dialog } from 'electron';
+import { app, BrowserWindow, ipcMain, dialog, Menu } from 'electron';
 import path from 'path';
 import { fileURLToPath } from 'url';
-import { spawn, exec } from 'child_process';
-import { createServer } from 'net';
+import { exec } from 'child_process';
 import os from 'os';
 import fs from 'fs';
+import { createRequire } from 'module';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const __root = path.resolve(__dirname, '..');
+// Resolve modules from client/ where node_modules lives
+const require = createRequire(path.resolve(__root, 'client', 'package.json'));
 
 const isDev = process.env.NODE_ENV === 'development' || !app.isPackaged;
 
 let mainWindow;
 let terminalProcesses = {};
+
+function sendMenuAction(action) {
+  if (!mainWindow || mainWindow.isDestroyed()) return;
+  mainWindow.webContents.send('app-menu:action', action);
+}
+
+function buildApplicationMenu() {
+  if (process.platform !== 'darwin') return;
+
+  const template = [
+    { role: 'appMenu' },
+    {
+      label: 'File',
+      submenu: [
+        {
+          label: 'Open Project…',
+          accelerator: 'CmdOrCtrl+O',
+          click: () => sendMenuAction('open-project'),
+        },
+        { type: 'separator' },
+        {
+          label: 'Import Recording…',
+          click: () => sendMenuAction('import-recording'),
+        },
+        {
+          label: 'Export Recording',
+          click: () => sendMenuAction('export-recording'),
+        },
+        { type: 'separator' },
+        { role: 'close' },
+      ],
+    },
+    {
+      label: 'Edit',
+      submenu: [
+        { role: 'undo' },
+        { role: 'redo' },
+        { type: 'separator' },
+        { role: 'cut' },
+        { role: 'copy' },
+        { role: 'paste' },
+        { role: 'pasteAndMatchStyle' },
+        { role: 'delete' },
+        { role: 'selectAll' },
+        { type: 'separator' },
+        {
+          label: 'Speech',
+          submenu: [{ role: 'startSpeaking' }, { role: 'stopSpeaking' }],
+        },
+      ],
+    },
+    {
+      label: 'Selection',
+      submenu: [{ role: 'selectAll' }],
+    },
+    {
+      label: 'View',
+      submenu: [
+        {
+          label: 'Toggle Explorer',
+          click: () => sendMenuAction('toggle-explorer'),
+        },
+        {
+          label: 'Toggle Terminal',
+          accelerator: 'CmdOrCtrl+`',
+          click: () => sendMenuAction('toggle-terminal'),
+        },
+        {
+          label: 'Toggle Minimap',
+          click: () => sendMenuAction('toggle-minimap'),
+        },
+        { type: 'separator' },
+        { role: 'togglefullscreen' },
+      ],
+    },
+    {
+      label: 'Run',
+      submenu: [
+        {
+          label: 'Run Code',
+          accelerator: 'CmdOrCtrl+Enter',
+          click: () => sendMenuAction('run-code'),
+        },
+        {
+          label: 'Toggle Recording',
+          accelerator: 'CmdOrCtrl+R',
+          click: () => sendMenuAction('toggle-recording'),
+        },
+        {
+          label: 'Toggle Playback',
+          accelerator: 'CmdOrCtrl+P',
+          click: () => sendMenuAction('toggle-playback'),
+        },
+      ],
+    },
+    {
+      label: 'Terminal',
+      submenu: [
+        {
+          label: 'New Terminal',
+          accelerator: 'CmdOrCtrl+Shift+`',
+          click: () => sendMenuAction('new-terminal'),
+        },
+        {
+          label: 'Close Active Terminal',
+          click: () => sendMenuAction('close-terminal'),
+        },
+      ],
+    },
+    {
+      role: 'windowMenu',
+    },
+    {
+      label: 'Help',
+      submenu: [
+        {
+          label: 'Keyboard Shortcuts',
+          accelerator: 'CmdOrCtrl+/',
+          click: () => sendMenuAction('show-shortcuts'),
+        },
+      ],
+    },
+  ];
+
+  const menu = Menu.buildFromTemplate(template);
+  Menu.setApplicationMenu(menu);
+}
 
 function createWindow() {
   mainWindow = new BrowserWindow({
@@ -21,6 +150,8 @@ function createWindow() {
     minWidth: 800,
     minHeight: 600,
     title: 'CodeCast',
+    frame: false,
+    titleBarStyle: 'hidden',
     webPreferences: {
       preload: path.join(__dirname, 'preload.cjs'),
       contextIsolation: true,
@@ -40,6 +171,22 @@ function createWindow() {
     mainWindow.once('ready-to-show', () => mainWindow.show());
   }
 }
+
+ipcMain.on('window:minimize', () => {
+  mainWindow.minimize();
+});
+
+ipcMain.on('window:maximize', () => {
+  if (mainWindow.isMaximized()) {
+    mainWindow.unmaximize();
+  } else {
+    mainWindow.maximize();
+  }
+});
+
+ipcMain.on('window:close', () => {
+  mainWindow.close();
+});
 
 function loadDevServer() {
   let retries = 30;
@@ -72,7 +219,10 @@ function loadDevServer() {
   tryConnect();
 }
 
-app.whenReady().then(createWindow);
+app.whenReady().then(() => {
+  createWindow();
+  buildApplicationMenu();
+});
 
 app.on('window-all-closed', () => {
   for (const key of Object.keys(terminalProcesses)) {
@@ -84,54 +234,137 @@ app.on('window-all-closed', () => {
 
 app.on('activate', () => {
   if (BrowserWindow.getAllWindows().length === 0) createWindow();
+  if (!Menu.getApplicationMenu()) buildApplicationMenu();
 });
 
-// --- Terminal IPC for local mode ---
+// --- Terminal IPC for local mode (node-pty) ---
 
 function getShell() {
   if (process.platform === 'win32') return 'cmd.exe';
-  const shell = process.env.SHELL;
-  if (shell) return shell;
-  return '/bin/zsh';
+  
+  const shells = [
+    process.env.SHELL,
+    '/bin/zsh',
+    '/bin/bash',
+    '/usr/bin/zsh',
+    '/usr/bin/bash',
+    '/bin/sh'
+  ];
+
+  for (const s of shells) {
+    if (s && fs.existsSync(s)) return s;
+  }
+  
+  return '/bin/sh';
 }
 
-ipcMain.handle('terminal:create', (event, terminalId, cwd) => {
-  const shell = getShell();
-  const defaultCwd = cwd || path.join(__dirname, '..', 'client');
-  let shellProcess;
+let pty;
+let ptyError;
+try {
+  pty = require('node-pty');
+} catch (e) {
+  ptyError = e.message;
+  console.error('node-pty not available, terminal will not work:', e.message);
+}
 
-  if (process.platform === 'win32') {
-    shellProcess = spawn('cmd.exe', [], { cwd: defaultCwd, env: { ...process.env, TERM: 'xterm-256color' } });
-  } else {
-    // Use Python's pty module to create a real PTY — avoids stdout buffering, gives TTY echo/prompt
-    // Use SHELL env var so we don't need to embed the path in Python string
-    const pythonCmd = `import pty,os; pty.spawn([os.environ.get('SHELL','/bin/zsh'),'-i'])`;
-    shellProcess = spawn('python3', ['-c', pythonCmd], {
-      cwd: defaultCwd,
-      env: { ...process.env, TERM: 'xterm-256color' },
-    });
+ipcMain.handle('terminal:isPtyAvailable', () => {
+  return { available: !!pty, error: ptyError };
+});
+
+ipcMain.handle('terminal:create', (event, terminalId, cwd) => {
+  console.log(`[Terminal] Creating terminal "${terminalId}" at "${cwd || 'default'}"`);
+  
+  const shell = getShell();
+  console.log(`[Terminal] Using shell: ${shell}`);
+  let defaultCwd = cwd || os.homedir();
+  
+  // Verify CWD exists, fallback to home if not
+  if (!fs.existsSync(defaultCwd)) {
+    console.warn(`[Terminal] CWD "${defaultCwd}" does not exist, falling back to home directory`);
+    defaultCwd = os.homedir();
   }
 
-  terminalProcesses[terminalId] = shellProcess;
-
-  shellProcess.stdout.on('data', (data) => {
-    if (mainWindow && !mainWindow.isDestroyed()) {
-      mainWindow.webContents.send('terminal:data', terminalId, data.toString());
+  // Kill existing process with same ID if any
+  if (terminalProcesses[terminalId]) {
+    console.log(`[Terminal] Killing existing process for ID "${terminalId}"`);
+    try {
+      const oldProc = terminalProcesses[terminalId];
+      if (typeof oldProc.kill === 'function') oldProc.kill();
+      else if (typeof oldProc.kill === 'number') process.kill(oldProc.kill);
+    } catch (e) {
+      console.error(`[Terminal] Failed to kill old terminal process: ${e.message}`);
     }
-  });
-
-  shellProcess.stderr.on('data', (data) => {
-    if (mainWindow && !mainWindow.isDestroyed()) {
-      mainWindow.webContents.send('terminal:data', terminalId, data.toString());
-    }
-  });
-
-  shellProcess.on('exit', () => {
     delete terminalProcesses[terminalId];
-    if (mainWindow && !mainWindow.isDestroyed()) {
-      mainWindow.webContents.send('terminal:exit', terminalId);
+  }
+  const cols = 80;
+  const rows = 24;
+
+  try {
+    if (pty) {
+      console.log(`[Terminal] Spawning PTY with node-pty`);
+      const term = pty.spawn(shell, [], {
+        name: 'xterm-256color',
+        cols,
+        rows,
+        cwd: defaultCwd,
+        env: { ...process.env, TERM: 'xterm-256color' },
+      });
+
+      terminalProcesses[terminalId] = term;
+
+      term.onData((data) => {
+        if (mainWindow && !mainWindow.isDestroyed()) {
+          mainWindow.webContents.send('terminal:data', terminalId, data);
+        }
+      });
+
+      term.onExit(() => {
+        console.log(`[Terminal] Process for ID "${terminalId}" exited`);
+        if (terminalProcesses[terminalId] === term) {
+          delete terminalProcesses[terminalId];
+        }
+        if (mainWindow && !mainWindow.isDestroyed()) {
+          mainWindow.webContents.send('terminal:exit', terminalId);
+        }
+      });
+    } else {
+      console.warn(`[Terminal] node-pty not available, falling back to child_process.spawn`);
+      // Fallback: spawn without PTY (basic, no TUI support)
+      const { spawn } = require('child_process');
+      const proc = spawn(shell, [], {
+        cwd: defaultCwd,
+        env: { ...process.env, TERM: 'xterm-256color' },
+        stdio: ['pipe', 'pipe', 'pipe'],
+      });
+
+      terminalProcesses[terminalId] = proc;
+
+      proc.stdout.on('data', (data) => {
+        if (mainWindow && !mainWindow.isDestroyed()) {
+          mainWindow.webContents.send('terminal:data', terminalId, data.toString());
+        }
+      });
+
+      proc.stderr.on('data', (data) => {
+        if (mainWindow && !mainWindow.isDestroyed()) {
+          mainWindow.webContents.send('terminal:data', terminalId, data.toString());
+        }
+      });
+
+      proc.on('exit', () => {
+        console.log(`[Terminal] Fallback process for ID "${terminalId}" exited`);
+        if (terminalProcesses[terminalId] === proc) {
+          delete terminalProcesses[terminalId];
+        }
+        if (mainWindow && !mainWindow.isDestroyed()) {
+          mainWindow.webContents.send('terminal:exit', terminalId);
+        }
+      });
     }
-  });
+  } catch (err) {
+    console.error(`[Terminal] Creation failed:`, err);
+    throw new Error(`Failed to create terminal: ${err.message}`);
+  }
 
   return true;
 });
@@ -139,25 +372,51 @@ ipcMain.handle('terminal:create', (event, terminalId, cwd) => {
 ipcMain.handle('terminal:write', (event, terminalId, data) => {
   const proc = terminalProcesses[terminalId];
   if (proc) {
-    proc.stdin.write(data);
+    try {
+      if (typeof proc.write === 'function') {
+        proc.write(data);
+      } else if (proc.stdin && proc.stdin.writable) {
+        proc.stdin.write(data);
+      }
+    } catch (e) {
+      console.error('Terminal write error:', e.message);
+    }
   }
 });
 
 ipcMain.handle('terminal:resize', (event, terminalId, cols, rows) => {
-  // no-op for now
+  const proc = terminalProcesses[terminalId];
+  if (proc && typeof proc.resize === 'function') {
+    try {
+      cols = Math.max(cols, 1);
+      rows = Math.max(rows, 1);
+      proc.resize(cols, rows);
+    } catch (e) {
+      console.error('resize error:', e.message);
+    }
+  }
 });
 
 ipcMain.handle('terminal:kill', (event, terminalId) => {
   const proc = terminalProcesses[terminalId];
   if (proc) {
-    proc.kill();
+    if (typeof proc.kill === 'function') {
+      try { proc.kill(); } catch {}
+    } else if (typeof proc.kill === 'number') {
+      try { process.kill(proc.kill); } catch {}
+    }
     delete terminalProcesses[terminalId];
   }
 });
 
 ipcMain.handle('terminal:killAll', () => {
   for (const key of Object.keys(terminalProcesses)) {
-    terminalProcesses[key].kill();
+    const proc = terminalProcesses[key];
+    if (typeof proc.kill === 'function') {
+      try { proc.kill(); } catch {}
+    } else if (typeof proc.kill === 'number') {
+      try { process.kill(proc.kill); } catch {}
+    }
   }
   terminalProcesses = {};
 });
@@ -206,6 +465,15 @@ ipcMain.handle('file:write', async (event, filePath, content) => {
 ipcMain.handle('file:remove', async (event, targetPath) => {
   try {
     fs.rmSync(targetPath, { recursive: true, force: true });
+    return true;
+  } catch {
+    return false;
+  }
+});
+
+ipcMain.handle('file:rename', async (event, oldPath, newPath) => {
+  try {
+    fs.renameSync(oldPath, newPath);
     return true;
   } catch {
     return false;

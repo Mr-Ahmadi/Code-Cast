@@ -412,7 +412,17 @@ class Typist {
 
   // --- Recording ---
 
-  startRecord(_startTime, firstFileName, firstValue, language, _recordName, _workspaceId = null, _workspacePath = null) {
+  startRecord(
+    _startTime,
+    firstFileName,
+    firstValue,
+    language,
+    _recordName,
+    _workspaceId = null,
+    _workspacePath = null,
+    filesSnapshot = null,
+    activeFileName = null
+  ) {
     if (!this.recording && this.#recordingMode) {
       this.recordName = _recordName;
       this.#workspaceId = _workspaceId;
@@ -432,11 +442,46 @@ class Typist {
         };
         this.#fileTimeline.push({ millis: 0, name: firstFileName });
       } else {
-        const first = Object.keys(this.#files)[0];
-        this.#activeFile = first;
-        if (this.#fileTimeline.length === 0) {
-          this.#fileTimeline.push({ millis: 0, name: first });
+        if (filesSnapshot && typeof filesSnapshot === "object") {
+          const snapshotEntries = Object.entries(filesSnapshot);
+          const snapshotSet = new Set(snapshotEntries.map(([name]) => name));
+
+          for (const [name, content] of snapshotEntries) {
+            if (!this.#files[name]) {
+              this.#files[name] = {
+                language: extLang(name),
+                firstValue: typeof content === "string" ? content : "",
+                changesList: [],
+                breakPoints: [],
+                _flatCache: null,
+              };
+            } else {
+              this.#files[name].firstValue = typeof content === "string" ? content : "";
+            }
+          }
+
+          for (const name of Object.keys(this.#files)) {
+            if (!snapshotSet.has(name)) {
+              delete this.#files[name];
+            }
+          }
+        } else if (firstFileName && this.#files[firstFileName]) {
+          this.#files[firstFileName].firstValue = firstValue || "";
         }
+
+        const first = Object.keys(this.#files)[0] || null;
+        const preferredActive = (activeFileName && this.#files[activeFileName])
+          ? activeFileName
+          : (this.#activeFile && this.#files[this.#activeFile])
+            ? this.#activeFile
+            : first;
+
+        this.#activeFile = preferredActive;
+        this.#fileTimeline = [];
+        if (preferredActive) {
+          this.#fileTimeline.push({ millis: 0, name: preferredActive });
+        }
+
         for (const name of Object.keys(this.#files)) {
           const file = this.#files[name];
           file.changesList = [];

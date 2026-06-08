@@ -24,7 +24,7 @@ import ProgressBar from "./ProgressBar";
 import { executeCode } from "../../functions/requests/execute";
 import signOut from "../../functions/requests/signOut";
 import { useNavigate } from "react-router-dom";
-import { FiTerminal, FiFolder, FiLogOut, FiPlay, FiSquare, FiCircle, FiPause, FiMic, FiMicOff, FiChevronDown, FiHelpCircle, FiZoomIn, FiZoomOut, FiMaximize2, FiMinimize2, FiDownload, FiUpload, FiCode } from "react-icons/fi";
+import { FiTerminal, FiFolder, FiLogOut, FiPlay, FiSquare, FiCircle, FiPause, FiMic, FiMicOff, FiChevronDown, FiHelpCircle, FiZoomIn, FiZoomOut, FiMaximize2, FiMinimize2, FiDownload, FiUpload, FiCode, FiSave, FiCheckCircle } from "react-icons/fi";
 import ModeSwitcher from "./ModeSwitcher";
 import { useMode, MODES } from "../../contexts/ModeContext";
 import PropTypes from 'prop-types';
@@ -38,7 +38,7 @@ const TopBar = memo(({ editorRef }) => {
     recordName, setRecordName, playing, setPlaying, setOutput, setToast, refreshUser,
     audioEnabled, setAudioEnabled, currentWorkspace, currentRecord, setCurrentRecord,
     fontSize, setFontSize, showMinimap, setShowMinimap,
-    activeFile, setActiveFile,
+    activeFile, setActiveFile, autoSave, setAutoSave,
   } = useContext(GlobalContext);
   const [recordsDisplay, setRecordsDisplay] = useState(false);
   window.__openProjectDialog = useCallback(() => setRecordsDisplay(true), []);
@@ -58,6 +58,10 @@ const TopBar = memo(({ editorRef }) => {
   const audioRecording = isAudioRecording();
   const importInputRef = useRef(null);
   const { mode } = useMode();
+
+  const handleSave = useCallback(() => {
+    window.__saveCurrentFile?.();
+  }, []);
 
   const isRecordingActive = recording && !paused;
 
@@ -146,23 +150,56 @@ const TopBar = memo(({ editorRef }) => {
           setToast({ type: "WARNING", message: "Open a project first to start recording." });
           return;
         }
+
+        const modelSnapshot = typeof window.__getAllModelContents === "function"
+          ? (window.__getAllModelContents() || {})
+          : {};
+        const currentSnapshot = {
+          ...getFilesFinalContent(),
+          ...modelSnapshot,
+        };
+
         if (currentRecord) {
-          const finalContent = getFilesFinalContent();
           initRecord();
-          for (const [name, content] of Object.entries(finalContent)) {
+          for (const [name, content] of Object.entries(currentSnapshot)) {
             recordAddFile(name, null, content);
+          }
+          const rebuiltFiles = getFiles();
+          const nextActive = (activeFile && rebuiltFiles.some(f => f.name === activeFile))
+            ? activeFile
+            : rebuiltFiles[0]?.name;
+          if (nextActive) {
+            setActiveFile(nextActive);
           }
           setCurrentRecord(null);
         }
-        const files = getFiles();
+
+        let files = getFiles();
         if (files.length === 0) {
           recordAddFile("index.html", "html", "");
           recordAddFile("style.css", "css", "");
           recordAddFile("script.js", "javascript", "");
           setActiveFile("index.html");
+          files = getFiles();
         }
+
+        const recordSnapshot = {
+          ...getFilesFinalContent(),
+          ...(typeof window.__getAllModelContents === "function" ? (window.__getAllModelContents() || {}) : {}),
+        };
+        const activeAtStart = (activeFile && files.some(f => f.name === activeFile))
+          ? activeFile
+          : files[0]?.name || null;
+
         const ws = currentWorkspace;
-        await startRecord(recordName, audioEnabled, ws?.id || null, ws?.path || null);
+        await startRecord(
+          recordName,
+          audioEnabled,
+          ws?.id || null,
+          ws?.path || null,
+          recordSnapshot,
+          activeAtStart
+        );
         startRecording();
       } else if (recording) {
         let saveError = null;
@@ -180,7 +217,7 @@ const TopBar = memo(({ editorRef }) => {
     } catch (e) {
       setToast({ type: "ERROR", message: e.message || "Failed to start recording" });
     }
-  }, [recording, playing, recordName, audioEnabled, startRecording, stopRecording, refreshUser, setActiveFile, setToast, currentWorkspace, currentRecord, setCurrentRecord]);
+  }, [recording, playing, recordName, audioEnabled, startRecording, stopRecording, refreshUser, setActiveFile, setToast, currentWorkspace, currentRecord, setCurrentRecord, activeFile]);
 
   const handlePauseResume = useCallback(() => {
     if (paused) {
@@ -430,6 +467,14 @@ const TopBar = memo(({ editorRef }) => {
             <FiCode size={13} /> Terminal
           </button>
           <button
+            className="toolbar-btn toolbar-btn-icon"
+            onClick={() => window.__createTerminal?.()}
+            title="New terminal"
+            aria-label="New terminal"
+          >
+            +
+          </button>
+          <button
             className="toolbar-btn"
             onClick={handleSignOut}
             aria-label="Sign out"
@@ -455,6 +500,31 @@ const TopBar = memo(({ editorRef }) => {
           )}
         </span>
         <div className="editor-settings-group">
+          {mode === MODES.LOCAL && currentWorkspace && (
+            <>
+              <button
+                className="editor-toolbar-btn"
+                onClick={handleSave}
+                title="Save current file (Ctrl+S)"
+                aria-label="Save current file"
+                disabled={recording}
+              >
+                <FiSave size={12} />
+              </button>
+              <div className="top-bar-separator" />
+              <button
+                className={"editor-toolbar-btn autosave-btn" + (autoSave ? " active" : "")}
+                onClick={() => setAutoSave(!autoSave)}
+                title={autoSave ? "Disable autosave" : "Enable autosave"}
+                aria-label="Toggle autosave"
+                disabled={recording}
+              >
+                {autoSave ? <FiCheckCircle size={11} /> : <FiCircle size={11} />}
+                <span className="btn-text">Autosave</span>
+              </button>
+              <div className="top-bar-separator" />
+            </>
+          )}
           <button
             className="editor-toolbar-btn"
             onClick={() => setFontSize(Math.max(10, fontSize - 2))}

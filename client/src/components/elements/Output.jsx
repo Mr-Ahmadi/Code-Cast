@@ -22,10 +22,10 @@ const Output = memo(({ value, onClear }) => {
     const isEmpty = !value || value === "Run your code to see output";
 
     return (
-        <div className="output-container" ref={containerRef}>
+        <div className="output-container" ref={containerRef} style={{ backgroundColor: 'var(--bg-primary)' }}>
             <div className="output-content-area">
                 <div className={isEmpty ? "output-empty" : isError ? "output-error" : "output-content"}>
-                    {value || "Run your code to see output"}
+                    {isEmpty ? "Run your code to see output..." : (value || "")}
                 </div>
             </div>
         </div>

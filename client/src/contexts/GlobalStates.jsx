@@ -19,6 +19,7 @@ const initialState = {
     sidebarOpen: true,
     currentWorkspace: null,
     currentRecord: null,
+    autoSave: localStorage.getItem("codecast_autosave") === "true",
 };
 
 export const GlobalContext = createContext(initialState);
@@ -42,6 +43,10 @@ export const GlobalProvider = ({ children }) => {
     const setSidebarOpen = useCallback((value) => dispatch({ type: "SET_SIDEBAR_OPEN", payload: { value } }), []);
     const setCurrentWorkspace = useCallback((value) => dispatch({ type: "SET_CURRENT_WORKSPACE", payload: { value } }), []);
     const setCurrentRecord = useCallback((value) => dispatch({ type: "SET_CURRENT_RECORD", payload: { value } }), []);
+    const setAutoSave = useCallback((value) => {
+        localStorage.setItem("codecast_autosave", value ? "true" : "false");
+        dispatch({ type: "SET_AUTOSAVE", payload: { value } });
+    }, []);
 
     const refreshUser = useCallback(() => {
         const fakeSetAuth = () => {};
@@ -64,6 +69,7 @@ export const GlobalProvider = ({ children }) => {
         sidebarOpen: state.sidebarOpen, setSidebarOpen,
         currentWorkspace: state.currentWorkspace, setCurrentWorkspace,
         currentRecord: state.currentRecord, setCurrentRecord,
+        autoSave: state.autoSave, setAutoSave,
         refreshUser,
     }), [
         state.recording, state.paused, state.user, state.recordName,
@@ -71,10 +77,12 @@ export const GlobalProvider = ({ children }) => {
         state.toast, state.audioEnabled,
         state.fontSize, state.showMinimap,
         state.activeFile, state.files, state.sidebarOpen, state.currentWorkspace, state.currentRecord,
+        state.autoSave,
         startRecording, stopRecording, setPaused, setUser, setRecordName,
         setPlaying, setOutput, setToast,
         setAudioEnabled, setFontSize, setShowMinimap,
         setActiveFile, setFiles, setSidebarOpen, setCurrentWorkspace, setCurrentRecord,
+        setAutoSave,
         refreshUser,
     ]);
 

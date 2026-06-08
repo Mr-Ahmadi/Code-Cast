@@ -1,8 +1,9 @@
-import { useContext, useCallback, useState, memo } from "react";
+import { useContext, useCallback, useMemo, useState, memo } from "react";
 import { GlobalContext } from "../../contexts/GlobalStates";
 import {
-  getFiles, getActiveFile, switchFile as recordSwitchFile,
-  getFileLanguage,
+  getActiveFile, switchFile as recordSwitchFile,
+  getFileLanguage, renameFile as recordRenameFile,
+  getFiles as recordGetFiles,
 } from "../../functions/record";
 import { FiFileText, FiCode, FiImage, FiChevronRight, FiChevronDown, FiFolder } from "react-icons/fi";
 import PropTypes from "prop-types";
@@ -43,12 +44,78 @@ function sortEntries(node) {
   return { dirs, files };
 }
 
-function FileTreeNode({ node, depth, currentActive, onFileClick, playing }) {
+function FileTreeItem({ f, currentActive, depth, onFileClick, onRename, playing }) {
+  const [isRenaming, setIsRenaming] = useState(false);
+  const [newName, setNewName] = useState(f.name.split("/").pop());
+
+  const handleRenameSubmit = () => {
+    const trimmed = newName.trim();
+    if (trimmed && trimmed !== f.name.split("/").pop()) {
+      onRename(f.name, trimmed);
+    }
+    setIsRenaming(false);
+  };
+
+  const handleKeyDown = (e) => {
+    if (e.key === "Enter") handleRenameSubmit();
+    if (e.key === "Escape") {
+      setIsRenaming(false);
+      setNewName(f.name.split("/").pop());
+    }
+  };
+
+  if (isRenaming) {
+    return (
+      <div className="file-tree-item renaming" style={{ paddingLeft: 8 + (depth + 1) * 14 }}>
+        <span className="file-tree-item-icon">{extIcon(f.name)}</span>
+        <input
+          autoFocus
+          className="file-tree-rename-input"
+          value={newName}
+          onChange={(e) => setNewName(e.target.value)}
+          onBlur={handleRenameSubmit}
+          onKeyDown={handleKeyDown}
+          onClick={(e) => e.stopPropagation()}
+        />
+      </div>
+    );
+  }
+
+  return (
+    <div
+      className={"file-tree-item" + (f.name === currentActive ? " active" : "") + (playing ? " no-interact" : "")}
+      style={{ paddingLeft: 8 + (depth + 1) * 14 }}
+      onClick={() => onFileClick(f.name)}
+      onContextMenu={(e) => {
+        if (playing) return;
+        e.preventDefault();
+        setIsRenaming(true);
+      }}
+      title={f.name}
+    >
+      <span className="file-tree-item-icon">{extIcon(f.name)}</span>
+      <span className="file-tree-item-name">{f.name.split("/").pop()}</span>
+      <span className="file-tree-item-lang">{getFileLanguage(f.name)}</span>
+    </div>
+  );
+}
+
+FileTreeItem.propTypes = {
+  f: PropTypes.object.isRequired,
+  currentActive: PropTypes.string,
+  depth: PropTypes.number.isRequired,
+  onFileClick: PropTypes.func.isRequired,
+  onRename: PropTypes.func.isRequired,
+  playing: PropTypes.bool,
+};
+
+function FileTreeNode({ node, depth, currentActive, onFileClick, onRename, playing }) {
   FileTreeNode.propTypes = {
     node: PropTypes.object.isRequired,
     depth: PropTypes.number.isRequired,
     currentActive: PropTypes.string,
     onFileClick: PropTypes.func.isRequired,
+    onRename: PropTypes.func.isRequired,
     playing: PropTypes.bool,
   };
   const [expanded, setExpanded] = useState(true);
@@ -71,20 +138,18 @@ function FileTreeNode({ node, depth, currentActive, onFileClick, playing }) {
         {expanded && (
           <>
             {dirs.map(([, d]) => (
-              <FileTreeNode key={d.name} node={d} depth={depth + 1} currentActive={currentActive} onFileClick={onFileClick} playing={playing} />
+              <FileTreeNode key={d.name} node={d} depth={depth + 1} currentActive={currentActive} onFileClick={onFileClick} onRename={onRename} playing={playing} />
             ))}
             {files.map((f) => (
-              <div
+              <FileTreeItem
                 key={f.name}
-                className={"file-tree-item" + (f.name === currentActive ? " active" : "") + (playing ? " no-interact" : "")}
-                style={{ paddingLeft: 8 + (depth + 1) * 14 }}
-                onClick={() => onFileClick(f.name)}
-                title={f.name}
-              >
-                <span className="file-tree-item-icon">{extIcon(f.name)}</span>
-                <span className="file-tree-item-name">{f.name.split("/").pop()}</span>
-                <span className="file-tree-item-lang">{getFileLanguage(f.name)}</span>
-              </div>
+                f={f}
+                currentActive={currentActive}
+                depth={depth}
+                onFileClick={onFileClick}
+                onRename={onRename}
+                playing={playing}
+              />
             ))}
           </>
         )}
@@ -95,29 +160,27 @@ function FileTreeNode({ node, depth, currentActive, onFileClick, playing }) {
   return (
     <>
       {dirs.map(([, d]) => (
-        <FileTreeNode key={d.name} node={d} depth={1} currentActive={currentActive} onFileClick={onFileClick} playing={playing} />
+        <FileTreeNode key={d.name} node={d} depth={1} currentActive={currentActive} onFileClick={onFileClick} onRename={onRename} playing={playing} />
       ))}
       {files.map((f) => (
-        <div
+        <FileTreeItem
           key={f.name}
-          className={"file-tree-item" + (f.name === currentActive ? " active" : "") + (playing ? " no-interact" : "")}
-          onClick={() => onFileClick(f.name)}
-          title={f.name}
-        >
-          <span className="file-tree-item-icon">{extIcon(f.name)}</span>
-          <span className="file-tree-item-name">{f.name.split("/").pop()}</span>
-          <span className="file-tree-item-lang">{getFileLanguage(f.name)}</span>
-        </div>
+          f={f}
+          currentActive={currentActive}
+          depth={0}
+          onFileClick={onFileClick}
+          onRename={onRename}
+          playing={playing}
+        />
       ))}
     </>
   );
 }
 
 const FileTree = memo(() => {
-  const { activeFile, setActiveFile, playing } = useContext(GlobalContext);
+  const { activeFile, files, setActiveFile, setFiles, playing, currentWorkspace } = useContext(GlobalContext);
 
-  const files = getFiles();
-  const tree = buildTree(files);
+  const tree = useMemo(() => buildTree(files), [files]);
 
   const handleFileClick = useCallback((name) => {
     if (playing) return;
@@ -125,10 +188,44 @@ const FileTree = memo(() => {
     setActiveFile(name);
   }, [playing, setActiveFile]);
 
+  const handleRename = useCallback(async (oldName, newBaseName) => {
+    if (playing) return;
+    const parts = oldName.split("/");
+    parts[parts.length - 1] = newBaseName;
+    const newName = parts.join("/");
+
+    if (files.some(f => f.name === newName)) {
+      alert("A file with this name already exists.");
+      return;
+    }
+
+    // Update internal Typist state
+    const success = recordRenameFile(oldName, newName);
+    if (!success) return;
+
+    // If in local mode, rename on disk
+    if (currentWorkspace?.path && window.electronAPI?.file?.rename) {
+      const path = window.electronAPI.path;
+      const oldAbsPath = path.join(currentWorkspace.path, oldName);
+      const newAbsPath = path.join(currentWorkspace.path, newName);
+      await window.electronAPI.file.rename(oldAbsPath, newAbsPath);
+    }
+
+    // Update global state
+    const nextFiles = recordGetFiles();
+    setFiles(nextFiles);
+    if (activeFile === oldName) {
+      setActiveFile(newName);
+    }
+  }, [playing, files, activeFile, setActiveFile, setFiles, currentWorkspace]);
+
   const currentActive = playing ? activeFile : (getActiveFile() || activeFile);
 
   return (
     <div className="file-tree-items">
+      <div className="file-tree-meta">
+        {files.length} file{files.length === 1 ? "" : "s"}
+      </div>
       {files.length === 0 && (
         <div className="file-tree-empty">No files</div>
       )}
@@ -137,6 +234,7 @@ const FileTree = memo(() => {
         depth={0}
         currentActive={currentActive}
         onFileClick={handleFileClick}
+        onRename={handleRename}
         playing={playing}
       />
     </div>

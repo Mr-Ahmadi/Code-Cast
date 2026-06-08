@@ -32,6 +32,8 @@ const defaultFunc = (state, action) => {
             return { ...state, currentWorkspace: action.payload.value }
         case "SET_CURRENT_RECORD":
             return { ...state, currentRecord: action.payload.value }
+        case "SET_AUTOSAVE":
+            return { ...state, autoSave: action.payload.value }
         default:
             return state
     }

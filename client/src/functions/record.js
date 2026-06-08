@@ -12,7 +12,14 @@ const init = () => {
   typist = new Typist();
 };
 
-const start = async (recordName, audioEnabled = true, workspaceId = null, workspacePath = null) => {
+const start = async (
+  recordName,
+  audioEnabled = true,
+  workspaceId = null,
+  workspacePath = null,
+  filesSnapshot = null,
+  activeFileName = null
+) => {
   if (lecture instanceof Lecture && audioEnabled) {
     try {
       const timeout = new Promise((_, reject) => setTimeout(() => reject(new Error("Audio permission timeout")), 3000));
@@ -34,7 +41,17 @@ const start = async (recordName, audioEnabled = true, workspaceId = null, worksp
       language = "html";
       typist.addFile(firstFileName, language, firstValue);
     }
-    typist.startRecord(Date.now(), firstFileName, firstValue, language, recordName, workspaceId, workspacePath);
+    typist.startRecord(
+      Date.now(),
+      firstFileName,
+      firstValue,
+      language,
+      recordName,
+      workspaceId,
+      workspacePath,
+      filesSnapshot,
+      activeFileName
+    );
   }
 };
 

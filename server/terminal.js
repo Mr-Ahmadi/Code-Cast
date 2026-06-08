@@ -24,6 +24,27 @@ function shellWithLimits(shell, userDir, extraEnv) {
   };
 }
 
+function handleMessage(raw, ptyProcess, childProc) {
+  const str = raw.toString();
+  // Check for JSON control messages
+  if (str.startsWith("{")) {
+    try {
+      const msg = JSON.parse(str);
+      if (msg.type === "resize" && ptyProcess && typeof ptyProcess.resize === "function") {
+        const cols = Math.max(msg.cols || 80, 1);
+        const rows = Math.max(msg.rows || 24, 1);
+        ptyProcess.resize(cols, rows);
+      }
+    } catch {}
+    return;
+  }
+  if (ptyProcess) {
+    ptyProcess.write(str);
+  } else if (childProc && childProc.stdin) {
+    childProc.stdin.write(str);
+  }
+}
+
 function setupTerminalWebSocket(server) {
   const wss = new WebSocketServer({ server, path: "/terminal" });
 
@@ -85,7 +106,7 @@ function setupTerminalWebSocket(server) {
           if (ws.readyState === ws.OPEN) ws.close();
         });
 
-        ws.on("message", (data) => term.write(data.toString()));
+        ws.on("message", (raw) => handleMessage(raw, term, null));
         ws.on("close", () => { try { term.kill(); } catch {} });
         ws.on("error", () => { try { term.kill(); } catch {} });
 
@@ -109,7 +130,7 @@ function setupTerminalWebSocket(server) {
     proc.stderr.on("data", (d) => { if (ws.readyState === ws.OPEN) ws.send(d.toString()); });
     proc.on("exit", () => { if (ws.readyState === ws.OPEN) ws.close(); });
 
-    ws.on("message", (data) => proc.stdin.write(data.toString()));
+    ws.on("message", (raw) => handleMessage(raw, null, proc));
     ws.on("close", () => { try { proc.kill(); } catch {} });
     ws.on("error", () => { try { proc.kill(); } catch {} });
   });

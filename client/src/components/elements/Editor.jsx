@@ -8,7 +8,10 @@ import { FiFolder } from 'react-icons/fi';
 import PropTypes from 'prop-types';
 
 const _Editor = memo(({ editorRef }) => {
-  const { recording, fontSize, showMinimap, files, activeFile, setActiveFile, currentWorkspace } = useContext(GlobalContext);
+  const { 
+    recording, fontSize, showMinimap, files, activeFile, 
+    setActiveFile, currentWorkspace, autoSave, setToast 
+  } = useContext(GlobalContext);
 
   const oldValue = useRef("");
   const monacoRef = useRef(null);
@@ -16,9 +19,50 @@ const _Editor = memo(({ editorRef }) => {
   const editorReady = useRef(false);
   const recordingRef = useRef(recording);
   const activeFileRef = useRef(activeFile);
+  const autoSaveTimerRef = useRef(null);
 
   recordingRef.current = recording;
   activeFileRef.current = activeFile;
+
+  const saveCurrentFile = useCallback(async () => {
+    if (!activeFile || !currentWorkspace?.path || !window.electronAPI) return;
+    
+    const content = editorRef.current?.getValue();
+    if (content === undefined) return;
+
+    const fullPath = window.electronAPI.path.join(currentWorkspace.path, activeFile);
+    const success = await window.electronAPI.file.write(fullPath, content);
+    
+    if (success) {
+      console.log(`[Editor] Saved ${activeFile}`);
+    } else {
+      setToast({ type: 'ERROR', message: `Failed to save ${activeFile}` });
+    }
+  }, [activeFile, currentWorkspace, editorRef, setToast]);
+
+  window.__saveCurrentFile = saveCurrentFile;
+
+  useEffect(() => {
+    if (autoSaveTimerRef.current) {
+      clearTimeout(autoSaveTimerRef.current);
+    }
+  }, [activeFile]);
+
+  const handleEditorChange = useCallback(() => {
+    const currentValue = editorRef.current.getValue();
+    
+    if (recordingRef.current) {
+      push(oldValue.current, currentValue);
+    }
+    oldValue.current = currentValue;
+
+    if (autoSave && !recordingRef.current) {
+      if (autoSaveTimerRef.current) clearTimeout(autoSaveTimerRef.current);
+      autoSaveTimerRef.current = setTimeout(() => {
+        saveCurrentFile();
+      }, 1000);
+    }
+  }, [autoSave, editorRef, saveCurrentFile]);
 
   const langForExt = useCallback((name) => {
     const ext = name.split(".").pop().toLowerCase();
@@ -60,6 +104,31 @@ const _Editor = memo(({ editorRef }) => {
     monacoRef.current = monaco;
     editorReady.current = true;
 
+    // Define custom theme
+    const styles = getComputedStyle(document.documentElement);
+    const bg = styles.getPropertyValue('--bg-primary').trim() || '#1e1e1e';
+    const fg = styles.getPropertyValue('--text-primary').trim() || '#cccccc';
+    const border = styles.getPropertyValue('--border').trim() || '#3c3c3c';
+    const selection = styles.getPropertyValue('--accent-glow').trim() || 'rgba(249, 109, 0, 0.25)';
+
+    monaco.editor.defineTheme('codecast-theme', {
+      base: 'vs-dark',
+      inherit: true,
+      rules: [],
+      colors: {
+        'editor.background': bg,
+        'editor.foreground': fg,
+        'editor.lineHighlightBackground': '#2a2d2e',
+        'editorCursor.foreground': styles.getPropertyValue('--accent').trim() || '#f96d00',
+        'editor.selectionBackground': selection,
+        'editor.inactiveSelectionBackground': selection,
+        'editorLineNumber.foreground': '#858585',
+        'editorLineNumber.activeForeground': '#c6c6c6',
+        'editor.border': border,
+      }
+    });
+    monaco.editor.setTheme('codecast-theme');
+
     const fileList = getFiles();
     for (const f of fileList) {
       if (f.name && !modelsRef.current[f.name]) {
@@ -97,6 +166,15 @@ const _Editor = memo(({ editorRef }) => {
 
   window.__ensureModel = ensureModel;
   window.__switchEditorModel = switchEditorModel;
+  window.__getAllModelContents = () => {
+    const trackedFiles = getFiles();
+    const result = {};
+    for (const file of trackedFiles) {
+      const model = modelsRef.current[file.name];
+      result[file.name] = model ? model.getValue() : (getFileFirstValue(file.name) || "");
+    }
+    return result;
+  };
 
   const resumeFlashRef = useRef(null);
 
@@ -173,13 +251,8 @@ const _Editor = memo(({ editorRef }) => {
           height="100%"
           width="100%"
           onMount={handleEditorDidMount}
-          onChange={() => {
-            if (recordingRef.current) {
-              push(oldValue.current, editorRef.current.getValue())
-            }
-            oldValue.current = editorRef.current.getValue();
-          }}
-          theme='vs-dark'
+          onChange={handleEditorChange}
+          theme='codecast-theme'
           options={options}
         />
       </div>

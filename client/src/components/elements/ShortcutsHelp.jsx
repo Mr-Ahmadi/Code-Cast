@@ -1,8 +1,9 @@
 import { memo, useEffect, useRef } from "react";
 import PropTypes from 'prop-types';
-import { FiX, FiTerminal, FiCircle, FiPlay, FiFolder, FiSkipBack, FiHelpCircle } from "react-icons/fi";
+import { FiX, FiTerminal, FiCircle, FiPlay, FiFolder, FiSkipBack, FiHelpCircle, FiSave } from "react-icons/fi";
 
 const shortcuts = [
+  { keys: "Ctrl+S", desc: "Save current file", icon: FiSave },
   { keys: "Ctrl+Enter", desc: "Execute code", icon: FiTerminal },
   { keys: "Ctrl+R", desc: "Start / Stop recording", icon: FiCircle },
   { keys: "Ctrl+P", desc: "Play / Stop playback", icon: FiPlay },
