@@ -71,13 +71,13 @@
 }
 
 .message-output.error {
-  color: #f48771;
+  color: var(--danger);
   background: var(--danger-bg);
   border: 1px solid transparent;
 }
 
 .message-output.success {
-  color: #6bcf7f;
+  color: var(--success);
   background: var(--success-bg);
   border: 1px solid transparent;
 }

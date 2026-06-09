@@ -24,7 +24,7 @@ import ProgressBar from "./ProgressBar";
 import { executeCode } from "../../functions/requests/execute";
 import signOut from "../../functions/requests/signOut";
 import { useNavigate } from "react-router-dom";
-import { FiTerminal, FiFolder, FiLogOut, FiPlay, FiSquare, FiCircle, FiPause, FiMic, FiMicOff, FiChevronDown, FiHelpCircle, FiZoomIn, FiZoomOut, FiMaximize2, FiMinimize2, FiDownload, FiUpload, FiCode, FiSave, FiCheckCircle } from "react-icons/fi";
+import { FiTerminal, FiFolder, FiLogOut, FiPlay, FiSquare, FiCircle, FiPause, FiMic, FiMicOff, FiChevronDown, FiHelpCircle, FiZoomIn, FiZoomOut, FiMaximize2, FiMinimize2, FiDownload, FiUpload, FiCode, FiSave, FiCheckCircle, FiMoon, FiSun } from "react-icons/fi";
 import ModeSwitcher from "./ModeSwitcher";
 import { useMode, MODES } from "../../contexts/ModeContext";
 import PropTypes from 'prop-types';
@@ -39,6 +39,7 @@ const TopBar = memo(({ editorRef }) => {
     audioEnabled, setAudioEnabled, currentWorkspace, currentRecord, setCurrentRecord,
     fontSize, setFontSize, showMinimap, setShowMinimap,
     activeFile, setActiveFile, autoSave, setAutoSave,
+    theme, setTheme,
   } = useContext(GlobalContext);
   const [recordsDisplay, setRecordsDisplay] = useState(false);
   window.__openProjectDialog = useCallback(() => setRecordsDisplay(true), []);
@@ -457,6 +458,14 @@ const TopBar = memo(({ editorRef }) => {
             aria-label="Keyboard shortcuts"
           >
             <FiHelpCircle size={13} />
+          </button>
+          <button
+            className="toolbar-btn toolbar-btn-icon"
+            onClick={() => setTheme(theme === 'light' ? 'dark' : 'light')}
+            title={theme === 'light' ? "Switch to dark theme" : "Switch to light theme"}
+            aria-label={theme === 'light' ? "Switch to dark theme" : "Switch to light theme"}
+          >
+            {theme === 'light' ? <FiMoon size={13} /> : <FiSun size={13} />}
           </button>
           <button
             className="toolbar-btn"

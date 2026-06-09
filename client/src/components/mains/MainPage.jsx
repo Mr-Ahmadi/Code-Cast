@@ -51,6 +51,8 @@ export default function App() {
         output, recording, currentWorkspace, currentRecord, playing,
         showMinimap, setShowMinimap, setSidebarOpen,
         setActiveFile, setFiles, setOutput, sidebarOpen,
+        fontSize, setFontSize,
+        theme, setTheme,
         autoSave, setAutoSave,
     } = useContext(GlobalContext);
     const [showShortcuts, setShowShortcuts] = useState(false);
@@ -262,7 +264,11 @@ export default function App() {
 
         if (cmd && e.key === 's') {
             e.preventDefault();
-            window.__saveCurrentFile?.();
+            if (e.shiftKey) {
+                window.__saveCurrentFileAs?.();
+            } else {
+                window.__saveCurrentFile?.();
+            }
         }
         if (cmd && e.key === 'Enter') {
             e.preventDefault();
@@ -332,15 +338,75 @@ export default function App() {
         });
     };
 
+    const runEditorCommand = useCallback((id) => {
+        window.__focusEditor?.();
+        window.__runEditorAction?.(id);
+    }, []);
+
     useEffect(() => {
         if (!window.electronAPI?.appMenu?.onAction) {
             return undefined;
         }
 
         const unsubscribe = window.electronAPI.appMenu.onAction((action) => {
+
             switch (action) {
+                case 'new-file':
+                    window.__createNewFile?.();
+                    break;
                 case 'open-project':
                     window.__openProjectDialog?.();
+                    break;
+                case 'save-file':
+                    window.__saveCurrentFile?.();
+                    break;
+                case 'save-file-as':
+                    window.__saveCurrentFileAs?.();
+                    break;
+                case 'save-all-files':
+                    window.__saveAllFiles?.();
+                    break;
+                case 'toggle-auto-save':
+                    setAutoSave((prev) => !prev);
+                    break;
+                case 'toggle-theme':
+                    setTheme(theme === 'light' ? 'dark' : 'light');
+                    break;
+                case 'undo':
+                    runEditorCommand('undo');
+                    break;
+                case 'redo':
+                    runEditorCommand('redo');
+                    break;
+                case 'cut':
+                    runEditorCommand('editor.action.clipboardCutAction');
+                    break;
+                case 'copy':
+                    runEditorCommand('editor.action.clipboardCopyAction');
+                    break;
+                case 'paste':
+                    runEditorCommand('editor.action.clipboardPasteAction');
+                    break;
+                case 'find':
+                    runEditorCommand('actions.find');
+                    break;
+                case 'replace':
+                    runEditorCommand('editor.action.startFindReplaceAction');
+                    break;
+                case 'select-all':
+                    runEditorCommand('editor.action.selectAll');
+                    break;
+                case 'expand-selection':
+                    runEditorCommand('editor.action.smartSelect.expand');
+                    break;
+                case 'shrink-selection':
+                    runEditorCommand('editor.action.smartSelect.shrink');
+                    break;
+                case 'add-cursor-above':
+                    runEditorCommand('editor.action.insertCursorAbove');
+                    break;
+                case 'add-cursor-below':
+                    runEditorCommand('editor.action.insertCursorBelow');
                     break;
                 case 'import-recording':
                     document.querySelector('input[type="file"][accept=".cvid"]')?.click();
@@ -368,6 +434,24 @@ export default function App() {
                 case 'toggle-minimap':
                     window.__toggleMinimap?.();
                     break;
+                case 'increase-font-size':
+                    setFontSize(Math.min(28, fontSize + 2));
+                    break;
+                case 'decrease-font-size':
+                    setFontSize(Math.max(10, fontSize - 2));
+                    break;
+                case 'reset-font-size':
+                    setFontSize(14);
+                    break;
+                case 'go-to-line':
+                    runEditorCommand('editor.action.gotoLine');
+                    break;
+                case 'go-to-symbol':
+                    runEditorCommand('editor.action.quickOutline');
+                    break;
+                case 'go-to-bracket':
+                    runEditorCommand('editor.action.jumpToBracket');
+                    break;
                 case 'new-terminal':
                     handleNewTerminal();
                     break;
@@ -383,7 +467,7 @@ export default function App() {
         });
 
         return unsubscribe;
-    }, [recording, handleToggleTerminal, handleNewTerminal, handleCloseActiveTerminal]);
+    }, [recording, theme, setTheme, setAutoSave, fontSize, setFontSize, runEditorCommand, handleToggleTerminal, handleNewTerminal, handleCloseActiveTerminal]);
 
     return (
         <div className='main-container'>
@@ -402,9 +486,33 @@ export default function App() {
                     showMinimap={showMinimap}
                     autoSave={autoSave}
                     setAutoSave={setAutoSave}
+                    theme={theme}
+                    onToggleTheme={() => setTheme(theme === 'light' ? 'dark' : 'light')}
+                    onNewFile={() => window.__createNewFile?.()}
                     onOpenProject={() => window.__openProjectDialog?.()}
+                    onSave={() => window.__saveCurrentFile?.()}
+                    onSaveAs={() => window.__saveCurrentFileAs?.()}
+                    onSaveAll={() => window.__saveAllFiles?.()}
+                    onUndo={() => runEditorCommand('undo')}
+                    onRedo={() => runEditorCommand('redo')}
+                    onCut={() => runEditorCommand('editor.action.clipboardCutAction')}
+                    onCopy={() => runEditorCommand('editor.action.clipboardCopyAction')}
+                    onPaste={() => runEditorCommand('editor.action.clipboardPasteAction')}
+                    onFind={() => runEditorCommand('actions.find')}
+                    onReplace={() => runEditorCommand('editor.action.startFindReplaceAction')}
+                    onSelectAll={() => runEditorCommand('editor.action.selectAll')}
+                    onExpandSelection={() => runEditorCommand('editor.action.smartSelect.expand')}
+                    onShrinkSelection={() => runEditorCommand('editor.action.smartSelect.shrink')}
+                    onAddCursorAbove={() => runEditorCommand('editor.action.insertCursorAbove')}
+                    onAddCursorBelow={() => runEditorCommand('editor.action.insertCursorBelow')}
                     onImport={() => document.querySelector('input[type="file"][accept=".cvid"]')?.click()}
                     onExport={exportRecord}
+                    onGoToLine={() => runEditorCommand('editor.action.gotoLine')}
+                    onGoToSymbol={() => runEditorCommand('editor.action.quickOutline')}
+                    onGoToBracket={() => runEditorCommand('editor.action.jumpToBracket')}
+                    onIncreaseFontSize={() => setFontSize(Math.min(28, fontSize + 2))}
+                    onDecreaseFontSize={() => setFontSize(Math.max(10, fontSize - 2))}
+                    onResetFontSize={() => setFontSize(14)}
                     onRun={() => document.querySelector('[data-shortcut="execute"]')?.click()}
                     onRecord={() => document.querySelector('[data-shortcut="record"]')?.click()}
                     onPlay={() => document.querySelector('[data-shortcut="play"]')?.click()}

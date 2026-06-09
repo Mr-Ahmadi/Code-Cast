@@ -30,9 +30,34 @@ function buildApplicationMenu() {
       label: 'File',
       submenu: [
         {
+          label: 'New File',
+          accelerator: 'CmdOrCtrl+N',
+          click: () => sendMenuAction('new-file'),
+        },
+        {
           label: 'Open Project…',
           accelerator: 'CmdOrCtrl+O',
           click: () => sendMenuAction('open-project'),
+        },
+        { type: 'separator' },
+        {
+          label: 'Save',
+          accelerator: 'CmdOrCtrl+S',
+          click: () => sendMenuAction('save-file'),
+        },
+        {
+          label: 'Save As…',
+          accelerator: 'CmdOrCtrl+Shift+S',
+          click: () => sendMenuAction('save-file-as'),
+        },
+        {
+          label: 'Save All',
+          accelerator: 'CmdOrCtrl+Alt+S',
+          click: () => sendMenuAction('save-all-files'),
+        },
+        {
+          label: 'Toggle Auto Save',
+          click: () => sendMenuAction('toggle-auto-save'),
         },
         { type: 'separator' },
         {
@@ -50,15 +75,43 @@ function buildApplicationMenu() {
     {
       label: 'Edit',
       submenu: [
-        { role: 'undo' },
-        { role: 'redo' },
+        {
+          label: 'Undo',
+          accelerator: 'CmdOrCtrl+Z',
+          click: () => sendMenuAction('undo'),
+        },
+        {
+          label: 'Redo',
+          accelerator: 'Shift+CmdOrCtrl+Z',
+          click: () => sendMenuAction('redo'),
+        },
         { type: 'separator' },
-        { role: 'cut' },
-        { role: 'copy' },
-        { role: 'paste' },
-        { role: 'pasteAndMatchStyle' },
-        { role: 'delete' },
-        { role: 'selectAll' },
+        {
+          label: 'Cut',
+          accelerator: 'CmdOrCtrl+X',
+          click: () => sendMenuAction('cut'),
+        },
+        {
+          label: 'Copy',
+          accelerator: 'CmdOrCtrl+C',
+          click: () => sendMenuAction('copy'),
+        },
+        {
+          label: 'Paste',
+          accelerator: 'CmdOrCtrl+V',
+          click: () => sendMenuAction('paste'),
+        },
+        { type: 'separator' },
+        {
+          label: 'Find',
+          accelerator: 'CmdOrCtrl+F',
+          click: () => sendMenuAction('find'),
+        },
+        {
+          label: 'Replace',
+          accelerator: 'CmdOrCtrl+Alt+F',
+          click: () => sendMenuAction('replace'),
+        },
         { type: 'separator' },
         {
           label: 'Speech',
@@ -68,13 +121,42 @@ function buildApplicationMenu() {
     },
     {
       label: 'Selection',
-      submenu: [{ role: 'selectAll' }],
+      submenu: [
+        {
+          label: 'Select All',
+          accelerator: 'CmdOrCtrl+A',
+          click: () => sendMenuAction('select-all'),
+        },
+        { type: 'separator' },
+        {
+          label: 'Expand Selection',
+          accelerator: 'Shift+Alt+Right',
+          click: () => sendMenuAction('expand-selection'),
+        },
+        {
+          label: 'Shrink Selection',
+          accelerator: 'Shift+Alt+Left',
+          click: () => sendMenuAction('shrink-selection'),
+        },
+        { type: 'separator' },
+        {
+          label: 'Add Cursor Above',
+          accelerator: 'CmdOrCtrl+Alt+Up',
+          click: () => sendMenuAction('add-cursor-above'),
+        },
+        {
+          label: 'Add Cursor Below',
+          accelerator: 'CmdOrCtrl+Alt+Down',
+          click: () => sendMenuAction('add-cursor-below'),
+        },
+      ],
     },
     {
       label: 'View',
       submenu: [
         {
           label: 'Toggle Explorer',
+          accelerator: 'CmdOrCtrl+B',
           click: () => sendMenuAction('toggle-explorer'),
         },
         {
@@ -87,7 +169,52 @@ function buildApplicationMenu() {
           click: () => sendMenuAction('toggle-minimap'),
         },
         { type: 'separator' },
+        {
+          label: 'Increase Editor Font Size',
+          accelerator: 'CmdOrCtrl+=',
+          click: () => sendMenuAction('increase-font-size'),
+        },
+        {
+          label: 'Decrease Editor Font Size',
+          accelerator: 'CmdOrCtrl+-',
+          click: () => sendMenuAction('decrease-font-size'),
+        },
+        {
+          label: 'Reset Editor Font Size',
+          accelerator: 'CmdOrCtrl+0',
+          click: () => sendMenuAction('reset-font-size'),
+        },
+        {
+          label: 'Toggle Theme',
+          accelerator: 'CmdOrCtrl+Alt+T',
+          click: () => sendMenuAction('toggle-theme'),
+        },
+        { type: 'separator' },
+        { role: 'reload' },
+        { role: 'forceReload' },
+        { role: 'toggleDevTools' },
+        { type: 'separator' },
         { role: 'togglefullscreen' },
+      ],
+    },
+    {
+      label: 'Go',
+      submenu: [
+        {
+          label: 'Go to Line/Column…',
+          accelerator: 'CmdOrCtrl+G',
+          click: () => sendMenuAction('go-to-line'),
+        },
+        {
+          label: 'Go to Symbol…',
+          accelerator: 'CmdOrCtrl+Shift+O',
+          click: () => sendMenuAction('go-to-symbol'),
+        },
+        {
+          label: 'Go to Bracket',
+          accelerator: 'CmdOrCtrl+Shift+\\',
+          click: () => sendMenuAction('go-to-bracket'),
+        },
       ],
     },
     {
@@ -113,6 +240,12 @@ function buildApplicationMenu() {
     {
       label: 'Terminal',
       submenu: [
+        {
+          label: 'Toggle Terminal',
+          accelerator: 'CmdOrCtrl+`',
+          click: () => sendMenuAction('toggle-terminal'),
+        },
+        { type: 'separator' },
         {
           label: 'New Terminal',
           accelerator: 'CmdOrCtrl+Shift+`',
@@ -441,6 +574,17 @@ ipcMain.handle('select-project-directory', async (event, projectName) => {
   });
   if (result.canceled) return null;
   return result.filePaths[0];
+});
+
+ipcMain.handle('select-save-file', async (event, options = {}) => {
+  const result = await dialog.showSaveDialog(mainWindow, {
+    title: options.title || 'Save As',
+    defaultPath: options.defaultPath || undefined,
+    filters: Array.isArray(options.filters) ? options.filters : undefined,
+    properties: ['showOverwriteConfirmation'],
+  });
+  if (result.canceled) return null;
+  return result.filePath;
 });
 
 ipcMain.handle('file:read', async (event, filePath) => {

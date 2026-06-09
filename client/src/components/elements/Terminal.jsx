@@ -1,4 +1,4 @@
-import { useEffect, useRef, useContext, useState } from 'react';
+import { useEffect, useRef, useContext, useState, useCallback } from 'react';
 import { Terminal as XTerm } from '@xterm/xterm';
 import { FitAddon } from '@xterm/addon-fit';
 import '@xterm/xterm/css/xterm.css';
@@ -6,16 +6,66 @@ import { GlobalContext } from '../../contexts/GlobalStates';
 import { useMode, MODES } from '../../contexts/ModeContext';
 import PropTypes from "prop-types";
 
-export default function TerminalPanel({ visible, onClose, terminalId }) {
+export default function TerminalPanel({ visible, terminalId }) {
   const terminalRef = useRef(null);
   const xtermRef = useRef(null);
   const fitAddonRef = useRef(null);
-  const { setToast, currentWorkspace } = useContext(GlobalContext);
+  const { theme, setToast, currentWorkspace } = useContext(GlobalContext);
+  const themeRef = useRef(theme);
   const { mode } = useMode();
   const isLocal = mode === MODES.LOCAL;
 
   // Track if terminal is initialized for this session
   const [isReady, setIsReady] = useState(false);
+  themeRef.current = theme;
+
+  const buildTerminalTheme = useCallback(() => {
+    const nextTheme = themeRef.current === 'light' ? 'light' : 'dark';
+    document.documentElement.setAttribute('data-theme', nextTheme);
+    document.body.setAttribute('data-theme', nextTheme);
+
+    const styles = getComputedStyle(document.documentElement);
+    const bg = styles.getPropertyValue('--bg-primary').trim() || (nextTheme === 'light' ? '#f4f6fb' : '#13161c');
+    const fg = styles.getPropertyValue('--text-primary').trim() || (nextTheme === 'light' ? '#1f2735' : '#e7ebf2');
+    const accent = styles.getPropertyValue('--accent').trim() || '#a94442';
+    const success = styles.getPropertyValue('--success').trim() || (nextTheme === 'light' ? '#2f8d69' : '#46b188');
+    const selection = styles.getPropertyValue('--accent-glow').trim() || 'rgba(169, 68, 66, 0.28)';
+
+    return {
+      background: bg,
+      foreground: fg,
+      cursor: accent,
+      selectionBackground: selection,
+      black: bg,
+      red: '#f44747',
+      green: '#6a9955',
+      yellow: '#d7ba7d',
+      blue: accent,
+      magenta: '#c586c0',
+      cyan: success,
+      white: fg,
+      brightBlack: '#808080',
+      brightRed: '#f44747',
+      brightGreen: '#6a9955',
+      brightYellow: '#d7ba7d',
+      brightBlue: accent,
+      brightMagenta: '#c586c0',
+      brightCyan: success,
+      brightWhite: fg,
+    };
+  }, []);
+
+  const applyTerminalTheme = useCallback(() => {
+    if (xtermRef.current) {
+      xtermRef.current.options.theme = buildTerminalTheme();
+      xtermRef.current.refresh(0, xtermRef.current.rows - 1);
+    }
+  }, [buildTerminalTheme]);
+
+  // Update terminal theme when global theme changes
+  useEffect(() => {
+    applyTerminalTheme();
+  }, [theme, applyTerminalTheme]);
 
   // Focus and fit when terminal becomes visible or ready
   useEffect(() => {
@@ -27,7 +77,9 @@ export default function TerminalPanel({ visible, onClose, terminalId }) {
             // Force a refresh of the dimensions
             xtermRef.current.refresh(0, xtermRef.current.rows - 1);
             fitAddonRef.current?.fit();
-          } catch (e) {}
+          } catch (error) {
+            void error;
+          }
         }
       }, 50);
       return () => clearTimeout(timer);
@@ -43,39 +95,12 @@ export default function TerminalPanel({ visible, onClose, terminalId }) {
     const disposables = [];
 
     try {
-      const styles = getComputedStyle(document.documentElement);
-      const bg = styles.getPropertyValue('--bg-primary').trim() || '#1e1e1e';
-      const fg = styles.getPropertyValue('--text-primary').trim() || '#d4d4d4';
-      const accent = styles.getPropertyValue('--accent').trim() || '#f96d00';
-      const selection = styles.getPropertyValue('--accent-glow').trim() || 'rgba(249, 109, 0, 0.32)';
-
       term = new XTerm({
         cursorBlink: true,
         cursorStyle: 'block',
         fontSize: 13,
         fontFamily: "Consolas, 'Courier New', monospace",
-        theme: {
-          background: bg,
-          foreground: fg,
-          cursor: accent,
-          selectionBackground: selection,
-          black: bg,
-          red: '#f44747',
-          green: '#6a9955',
-          yellow: '#d7ba7d',
-          blue: accent,
-          magenta: '#c586c0',
-          cyan: '#4ec9b0',
-          white: fg,
-          brightBlack: '#808080',
-          brightRed: '#f44747',
-          brightGreen: '#6a9955',
-          brightYellow: '#d7ba7d',
-          brightBlue: accent,
-          brightMagenta: '#c586c0',
-          brightCyan: '#4ec9b0',
-          brightWhite: fg,
-        },
+        theme: buildTerminalTheme(),
         allowTransparency: true,
       });
 
@@ -90,7 +115,7 @@ export default function TerminalPanel({ visible, onClose, terminalId }) {
 
       requestAnimationFrame(() => {
         if (alive) {
-          try { fitAddon.fit(); } catch (e) {}
+          try { fitAddon.fit(); } catch (error) { void error; }
         }
       });
     } catch (e) {
@@ -105,7 +130,7 @@ export default function TerminalPanel({ visible, onClose, terminalId }) {
 
       requestAnimationFrame(() => {
         if (alive) {
-          try { fitAddon.fit(); } catch (e) {}
+          try { fitAddon.fit(); } catch (error) { void error; }
         }
       });
     });
@@ -138,7 +163,7 @@ export default function TerminalPanel({ visible, onClose, terminalId }) {
 
             const removeData = window.electronAPI.terminal.onData((termId, data) => {
               if (termId === id && alive) {
-                try { term.write(data); } catch {}
+                try { term.write(data); } catch (error) { void error; }
               }
             });
 
@@ -203,13 +228,13 @@ export default function TerminalPanel({ visible, onClose, terminalId }) {
       setIsReady(false);
       resizeObserver.disconnect();
       for (const d of disposables) {
-        try { d.dispose(); } catch {}
+        try { d.dispose(); } catch (error) { void error; }
       }
       term.dispose();
       xtermRef.current = null;
       fitAddonRef.current = null;
     };
-  }, [isLocal, setToast, currentWorkspace?.path, terminalId]);
+  }, [isLocal, setToast, currentWorkspace?.path, terminalId, buildTerminalTheme]);
 
   return (
     <div 
@@ -224,6 +249,5 @@ export default function TerminalPanel({ visible, onClose, terminalId }) {
 
 TerminalPanel.propTypes = {
   visible: PropTypes.bool,
-  onClose: PropTypes.func,
   terminalId: PropTypes.string,
 };

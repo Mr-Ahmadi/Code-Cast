@@ -1,4 +1,4 @@
-import { lazy, Suspense, useContext, useEffect, useState } from 'react';
+import { lazy, Suspense, useContext, useEffect, useLayoutEffect, useState } from 'react';
 import { Route, Routes, useLocation } from 'react-router-dom';
 import checkAuth from '../functions/requests/checkAuth';
 import Loading from './mains/Loading';
@@ -14,7 +14,7 @@ const InternalError = lazy(() => import('./mains/InternalError'));
 export default function App() {
   const location = useLocation()
   const [auth, setAuth] = useState(null)
-  const { user, setUser } = useContext(GlobalContext)
+  const { user, setUser, theme } = useContext(GlobalContext)
   const { mode } = useMode()
 
   useEffect(() => {
@@ -29,6 +29,12 @@ export default function App() {
       setUser(null);
     }
   }, [location, setUser, mode])
+
+  useLayoutEffect(() => {
+    const nextTheme = theme === 'light' ? 'light' : 'dark';
+    document.documentElement.setAttribute('data-theme', nextTheme);
+    document.body.setAttribute('data-theme', nextTheme);
+  }, [theme]);
 
   return (
     <Suspense fallback={<Loading />}>

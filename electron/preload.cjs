@@ -44,6 +44,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
   file: {
     selectDirectory: () => ipcRenderer.invoke('select-directory'),
     selectProjectDirectory: (projectName) => ipcRenderer.invoke('select-project-directory', projectName),
+    selectSaveFile: (options) => ipcRenderer.invoke('select-save-file', options),
     read: (filePath) => ipcRenderer.invoke('file:read', filePath),
     write: (filePath, content) => ipcRenderer.invoke('file:write', filePath, content),
     rename: (oldPath, newPath) => ipcRenderer.invoke('file:rename', oldPath, newPath),
