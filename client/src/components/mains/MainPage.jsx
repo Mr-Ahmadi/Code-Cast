@@ -193,22 +193,111 @@ export default function App() {
             } else {
                 window.__saveCurrentFile?.();
             }
+            return;
         }
         if (cmd && e.key === 'Enter') {
             e.preventDefault();
             document.querySelector('[data-shortcut="execute"]')?.click();
+            return;
         }
         if (cmd && e.key === 'r') {
             e.preventDefault();
             document.querySelector('[data-shortcut="record"]')?.click();
+            return;
         }
         if (cmd && e.key === 'p') {
             e.preventDefault();
             document.querySelector('[data-shortcut="play"]')?.click();
+            return;
         }
         if (cmd && e.key === 'o') {
             e.preventDefault();
             document.querySelector('[data-shortcut="open"]')?.click();
+            return;
+        }
+        if (cmd && e.key === 'n') {
+            e.preventDefault();
+            (window.__startNewFile || window.__createNewFile)?.();
+            return;
+        }
+
+        if (cmd && e.key === 'd') {
+            e.preventDefault();
+            window.__focusEditor?.();
+            window.__runEditorAction?.('editor.action.addSelectionToNextFindMatch');
+            return;
+        }
+        if (e.shiftKey && e.altKey && e.key === 'ArrowDown') {
+            e.preventDefault();
+            window.__focusEditor?.();
+            window.__runEditorAction?.('editor.action.copyLinesDownAction');
+            return;
+        }
+        if (e.shiftKey && e.altKey && e.key === 'ArrowUp') {
+            e.preventDefault();
+            window.__focusEditor?.();
+            window.__runEditorAction?.('editor.action.copyLinesUpAction');
+            return;
+        }
+        if (cmd && e.key === 'f') {
+            e.preventDefault();
+            window.__focusEditor?.();
+            window.__runEditorAction?.('actions.find');
+            return;
+        }
+        if (cmd && e.altKey && e.key === 'f') {
+            e.preventDefault();
+            window.__focusEditor?.();
+            window.__runEditorAction?.('editor.action.startFindReplaceAction');
+            return;
+        }
+        if (cmd && e.shiftKey && e.key === 'l') {
+            e.preventDefault();
+            window.__focusEditor?.();
+            window.__runEditorAction?.('editor.action.selectHighlights');
+            return;
+        }
+        if (cmd && e.key === 'g') {
+            e.preventDefault();
+            window.__focusEditor?.();
+            window.__runEditorAction?.('editor.action.gotoLine');
+            return;
+        }
+        if (cmd && e.shiftKey && e.key === 'o') {
+            e.preventDefault();
+            window.__focusEditor?.();
+            window.__runEditorAction?.('editor.action.quickOutline');
+            return;
+        }
+        if (cmd && e.shiftKey && e.key === '\\') {
+            e.preventDefault();
+            window.__focusEditor?.();
+            window.__runEditorAction?.('editor.action.jumpToBracket');
+            return;
+        }
+        if (e.shiftKey && e.altKey && e.key === 'ArrowRight') {
+            e.preventDefault();
+            window.__focusEditor?.();
+            window.__runEditorAction?.('editor.action.smartSelect.expand');
+            return;
+        }
+        if (e.shiftKey && e.altKey && e.key === 'ArrowLeft') {
+            e.preventDefault();
+            window.__focusEditor?.();
+            window.__runEditorAction?.('editor.action.smartSelect.shrink');
+            return;
+        }
+        if (cmd && e.altKey && e.key === 'ArrowUp') {
+            e.preventDefault();
+            window.__focusEditor?.();
+            window.__runEditorAction?.('editor.action.insertCursorAbove');
+            return;
+        }
+        if (cmd && e.altKey && e.key === 'ArrowDown') {
+            e.preventDefault();
+            window.__focusEditor?.();
+            window.__runEditorAction?.('editor.action.insertCursorBelow');
+            return;
         }
     }, []);
 
@@ -276,7 +365,7 @@ export default function App() {
 
             switch (action) {
                 case 'new-file':
-                    window.__createNewFile?.();
+                    (window.__startNewFile || window.__createNewFile)?.();
                     break;
                 case 'open-project':
                     window.__openProjectDialog?.();
@@ -434,7 +523,7 @@ export default function App() {
                     setAutoSave={setAutoSave}
                     theme={theme}
                     onToggleTheme={() => setTheme(theme === 'light' ? 'dark' : 'light')}
-                    onNewFile={() => window.__createNewFile?.()}
+                    onNewFile={() => (window.__startNewFile || window.__createNewFile)?.()}
                     onOpenProject={() => window.__openProjectDialog?.()}
                     onSave={() => window.__saveCurrentFile?.()}
                     onSaveAs={() => window.__saveCurrentFileAs?.()}

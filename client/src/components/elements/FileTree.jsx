@@ -7,7 +7,7 @@ import {
   renameFile as recordRenameFile, removeFile as recordRemoveFile,
   init as initRecord,
 } from "../../functions/record";
-import { FiFileText, FiCode, FiImage, FiChevronRight, FiChevronDown, FiFolder, FiDownload, FiUpload, FiEdit2, FiTrash2, FiX } from "react-icons/fi";
+import { FiFileText, FiCode, FiImage, FiChevronRight, FiChevronDown, FiFolder, FiDownload, FiUpload, FiEdit2, FiTrash2, FiX, FiPlus } from "react-icons/fi";
 
 const TEXT_EXTS = new Set([
   "js", "jsx", "ts", "tsx", "mjs", "cjs",
@@ -77,6 +77,8 @@ const FileTree = memo(() => {
   const [renameValue, setRenameValue] = useState("");
   const [confirmDelete, setConfirmDelete] = useState(null);
   const [missingFiles, setMissingFiles] = useState([]);
+  const [newFileParent, setNewFileParent] = useState(null);
+  const [newFileName, setNewFileName] = useState("");
 
   const expandedRef = useRef(expanded);
   const dirContentsRef = useRef(dirContents);
@@ -205,6 +207,54 @@ const FileTree = memo(() => {
       setToast({ type: "ERROR", message: err.message || "Failed to restore file" });
     }
   }, [playing, workspacePath, f, pathUtil, setToast, setActiveFile, forceRefresh]);
+
+  const startNewFile = useCallback((parentRel) => {
+    setNewFileParent(parentRel);
+    setNewFileName("");
+    setCtxMenu(null);
+    setConfirmDelete(null);
+  }, []);
+
+  useEffect(() => {
+    window.__startNewFile = () => startNewFile("");
+    return () => { window.__startNewFile = undefined; };
+  }, [startNewFile]);
+
+  const submitNewFile = useCallback(async () => {
+    const name = newFileName.trim();
+    if (!name) { setNewFileParent(null); return; }
+    const relPath = newFileParent ? newFileParent + "/" + name : name;
+
+    if (workspacePath && f && pathUtil) {
+      const absPath = pathUtil.join(workspacePath, relPath);
+      try {
+        const exists = await f.exists(absPath);
+        if (exists) {
+          setToast({ type: "WARNING", message: `"${name}" already exists` });
+          return;
+        }
+        if (relPath.includes('/')) {
+          const parentDir = pathUtil.join(workspacePath, newFileParent);
+          await f.mkdir(parentDir);
+        }
+        await f.write(absPath, "");
+      } catch (err) {
+        setToast({ type: "ERROR", message: err.message || "Failed to create file" });
+        setNewFileParent(null);
+        setNewFileName("");
+        return;
+      }
+    }
+
+    addFile(relPath, extLang(relPath), "");
+    window.__ensureModel?.(relPath, "", extLang(relPath));
+    recordSwitchFile(relPath);
+    setActiveFile(relPath);
+    setFiles(getFiles());
+    await forceRefresh();
+    setNewFileParent(null);
+    setNewFileName("");
+  }, [newFileName, newFileParent, workspacePath, f, pathUtil, setToast, setActiveFile, setFiles, forceRefresh]);
 
   const closeRecord = useCallback(() => {
     initRecord();
@@ -523,6 +573,16 @@ const FileTree = memo(() => {
       <div className="file-tree-meta">
         <span>{workspacePath ? currentWorkspace?.name || "Project" : "No project"}</span>
         <span className="file-tree-actions">
+          {!playing && (
+            <button
+              className="file-tree-action-btn"
+              onClick={() => startNewFile("")}
+              title="New file"
+              aria-label="New file"
+            >
+              <FiPlus size={12} />
+            </button>
+          )}
           {currentRecord && (
             <button
               className="file-tree-action-btn"
@@ -554,6 +614,24 @@ const FileTree = memo(() => {
           )}
         </span>
       </div>
+      {newFileParent !== null && (
+        <div className="file-tree-new-input" style={{ paddingLeft: 20 }}>
+          <span className="file-tree-item-icon"><FiFileText size={14} /></span>
+          <input
+            className="file-tree-rename-input"
+            value={newFileName}
+            onChange={e => setNewFileName(e.target.value)}
+            onKeyDown={e => {
+              if (e.key === 'Enter') submitNewFile();
+              if (e.key === 'Escape') { setNewFileParent(null); setNewFileName(""); }
+            }}
+            onBlur={() => submitNewFile()}
+            placeholder="filename.ext"
+            autoFocus
+            onClick={e => e.stopPropagation()}
+          />
+        </div>
+      )}
       <input
         ref={importInputRef}
         type="file"
@@ -587,6 +665,12 @@ const FileTree = memo(() => {
           style={{ left: ctxMenu.x, top: ctxMenu.y, position: 'absolute' }}
           onClick={e => e.stopPropagation()}
         >
+          <button className="menu-item" onClick={() => startNewFile(ctxMenu.relPath)}>
+            <span style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+              <FiPlus size={12} /> New File
+            </span>
+          </button>
+          <div className="menu-separator" />
           <button className="menu-item" onClick={() => startRename(ctxMenu.relPath)}>
             <span style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
               <FiEdit2 size={12} /> Rename

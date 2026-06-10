@@ -1,8 +1,14 @@
 import { memo, useEffect, useRef } from "react";
 import PropTypes from 'prop-types';
-import { FiX, FiTerminal, FiCircle, FiPlay, FiFolder, FiSkipBack, FiHelpCircle, FiSave } from "react-icons/fi";
+import {
+  FiX, FiTerminal, FiCircle, FiPlay, FiFolder, FiSkipBack, FiHelpCircle, FiSave,
+  FiScissors, FiCopy, FiClipboard, FiList, FiCornerUpLeft, FiCornerUpRight,
+  FiSearch, FiArrowUp, FiArrowDown, FiCrosshair, FiCode, FiMove,
+} from "react-icons/fi";
 
 const shortcuts = [
+  // General
+  { group: "General" },
   { keys: "Ctrl+S", desc: "Save current file", icon: FiSave },
   { keys: "Ctrl+Enter", desc: "Execute code", icon: FiTerminal },
   { keys: "Ctrl+R", desc: "Start / Stop recording", icon: FiCircle },
@@ -11,6 +17,34 @@ const shortcuts = [
   { keys: "Ctrl+`", desc: "Toggle terminal", icon: FiTerminal },
   { keys: "← / →", desc: "Skip back / forward 5s", icon: FiSkipBack },
   { keys: "?", desc: "Toggle this help", icon: FiHelpCircle },
+
+  // Edit
+  { group: "Edit" },
+  { keys: "Ctrl+Z", desc: "Undo", icon: FiCornerUpLeft },
+  { keys: "Ctrl+Shift+Z", desc: "Redo", icon: FiCornerUpRight },
+  { keys: "Ctrl+X", desc: "Cut", icon: FiScissors },
+  { keys: "Ctrl+C", desc: "Copy", icon: FiCopy },
+  { keys: "Ctrl+V", desc: "Paste", icon: FiClipboard },
+  { keys: "Ctrl+F", desc: "Find", icon: FiSearch },
+  { keys: "Ctrl+Alt+F", desc: "Replace", icon: FiSearch },
+
+  // Selection
+  { group: "Selection" },
+  { keys: "Ctrl+A", desc: "Select all", icon: FiList },
+  { keys: "Ctrl+D", desc: "Add selection to next find match", icon: FiCrosshair },
+  { keys: "Ctrl+Shift+L", desc: "Select all occurrences", icon: FiCrosshair },
+  { keys: "Shift+Alt+→", desc: "Expand selection", icon: FiMove },
+  { keys: "Shift+Alt+←", desc: "Shrink selection", icon: FiMove },
+  { keys: "Ctrl+Alt+↑", desc: "Add cursor above", icon: FiArrowUp },
+  { keys: "Ctrl+Alt+↓", desc: "Add cursor below", icon: FiArrowDown },
+
+  // Code actions
+  { group: "Code" },
+  { keys: "Ctrl+G", desc: "Go to line", icon: FiCode },
+  { keys: "Ctrl+Shift+O", desc: "Go to symbol", icon: FiCode },
+  { keys: "Ctrl+Shift+\\", desc: "Go to bracket", icon: FiCode },
+  { keys: "Shift+Alt+↓", desc: "Duplicate line down", icon: FiCopy },
+  { keys: "Shift+Alt+↑", desc: "Duplicate line up", icon: FiCopy },
 ];
 
 const ShortcutsHelp = memo(({ display, setDisplay }) => {
@@ -59,12 +93,18 @@ const ShortcutsHelp = memo(({ display, setDisplay }) => {
           </button>
         </div>
         <div className="shortcuts-list">
-          {shortcuts.map(({ keys, desc, icon: Icon }) => (
-            <div key={keys} className="shortcut-row">
-              <kbd className="shortcut-keys">{keys}</kbd>
-              <span className="shortcut-desc"><Icon size={13} /> {desc}</span>
-            </div>
-          ))}
+          {shortcuts.map((item) => {
+            if (item.group) {
+              return <div key={item.group} className="shortcut-group-header">{item.group}</div>;
+            }
+            const { keys, desc, icon: Icon } = item;
+            return (
+              <div key={keys} className="shortcut-row">
+                <kbd className="shortcut-keys">{keys}</kbd>
+                <span className="shortcut-desc"><Icon size={13} /> {desc}</span>
+              </div>
+            );
+          })}
         </div>
       </div>
     </div>

@@ -776,6 +776,16 @@ body.dialog-open .resizer {
   max-width: 80px;
 }
 
+.file-tree-new-input {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 3px 12px;
+  font-size: 13px;
+  line-height: 20px;
+  background: var(--bg-hover);
+}
+
 .file-tree-empty {
   padding: 12px 20px;
   font-size: 12px;
