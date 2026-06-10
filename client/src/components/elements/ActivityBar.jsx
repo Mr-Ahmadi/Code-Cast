@@ -3,11 +3,6 @@ import { GlobalContext } from "../../contexts/GlobalStates";
 import { FiFolder, FiTerminal, FiSettings, FiCodepen } from "react-icons/fi";
 import { useMode, MODES } from "../../contexts/ModeContext";
 
-const views = [
-  { id: "explorer", icon: FiFolder, label: "Explorer" },
-  { id: "terminal", icon: FiTerminal, label: "Terminal" },
-];
-
 const ActivityBar = memo(() => {
   const { sidebarOpen, setSidebarOpen } = useContext(GlobalContext);
   const { mode } = useMode();

@@ -1,7 +1,17 @@
 import { useEffect } from 'react';
+import PropTypes from 'prop-types';
 
 export default function LocalSetupPrompt({ onComplete }) {
   useEffect(() => { onComplete?.(); }, [onComplete]);
+
+  useEffect(() => {
+    document.body.classList.add('dialog-open');
+    window.electronAPI?.window?.setResizable?.(false);
+    return () => {
+      document.body.classList.remove('dialog-open');
+      window.electronAPI?.window?.setResizable?.(true);
+    };
+  }, []);
 
   return (
     <div className="partial-container" style={{ textAlign: 'center' }}>
@@ -23,3 +33,7 @@ export default function LocalSetupPrompt({ onComplete }) {
     </div>
   );
 }
+
+LocalSetupPrompt.propTypes = {
+  onComplete: PropTypes.func.isRequired,
+};

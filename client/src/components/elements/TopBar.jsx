@@ -12,11 +12,11 @@ import {
   getDuration,
   isTypistLoaded,
   isAudioRecording,
-  exportRecord,
   importFromFile,
   getFiles,
   addFile as recordAddFile,
   getFilesFinalContent,
+  ensureAllFilesContent,
 } from "../../functions/record";
 import RecordsList from "./RecordsList";
 import ShortcutsHelp from "./ShortcutsHelp";
@@ -24,7 +24,7 @@ import ProgressBar from "./ProgressBar";
 import { executeCode } from "../../functions/requests/execute";
 import signOut from "../../functions/requests/signOut";
 import { useNavigate } from "react-router-dom";
-import { FiTerminal, FiFolder, FiLogOut, FiPlay, FiSquare, FiCircle, FiPause, FiMic, FiMicOff, FiChevronDown, FiHelpCircle, FiZoomIn, FiZoomOut, FiMaximize2, FiMinimize2, FiDownload, FiUpload, FiCode, FiSave, FiCheckCircle, FiMoon, FiSun } from "react-icons/fi";
+import { FiTerminal, FiLogOut, FiPlay, FiSquare, FiCircle, FiPause, FiMic, FiMicOff, FiChevronDown, FiZoomIn, FiZoomOut, FiMaximize2, FiMinimize2, FiSave, FiCheckCircle, FiMoon, FiSun } from "react-icons/fi";
 import ModeSwitcher from "./ModeSwitcher";
 import { useMode, MODES } from "../../contexts/ModeContext";
 import PropTypes from 'prop-types';
@@ -38,7 +38,7 @@ const TopBar = memo(({ editorRef }) => {
     recordName, setRecordName, playing, setPlaying, setOutput, setToast, refreshUser,
     audioEnabled, setAudioEnabled, currentWorkspace, currentRecord, setCurrentRecord,
     fontSize, setFontSize, showMinimap, setShowMinimap,
-    activeFile, setActiveFile, autoSave, setAutoSave,
+    activeFile, setActiveFile, autoSave, setAutoSave, setFiles,
     theme, setTheme,
   } = useContext(GlobalContext);
   const [recordsDisplay, setRecordsDisplay] = useState(false);
@@ -152,6 +152,11 @@ const TopBar = memo(({ editorRef }) => {
           return;
         }
 
+        const ws = currentWorkspace;
+        if (ws?.path) {
+          await ensureAllFilesContent(ws.path);
+        }
+
         const modelSnapshot = typeof window.__getAllModelContents === "function"
           ? (window.__getAllModelContents() || {})
           : {};
@@ -192,7 +197,6 @@ const TopBar = memo(({ editorRef }) => {
           ? activeFile
           : files[0]?.name || null;
 
-        const ws = currentWorkspace;
         await startRecord(
           recordName,
           audioEnabled,
@@ -296,18 +300,20 @@ const TopBar = memo(({ editorRef }) => {
     try {
       const name = await importFromFile(file);
       setRecordName(name);
-      setToast({ type: "SUCCESS", message: `Imported "${name}"` });
       setPlaying(false);
       stopPlay();
-      const files = getFiles();
-      if (files.length > 0) {
-        setActiveFile(files[0].name);
+      setCurrentRecord(null);
+      const syncedFiles = getFiles();
+      setFiles(syncedFiles);
+      setToast({ type: "SUCCESS", message: `Imported "${name}"` });
+      if (syncedFiles.length > 0) {
+        setActiveFile(syncedFiles[0].name);
       }
     } catch (err) {
       setToast({ type: "ERROR", message: err.message || "Failed to import" });
     }
     e.target.value = "";
-  }, [setRecordName, setToast, setPlaying, setActiveFile]);
+  }, [setFiles, setRecordName, setToast, setPlaying, setCurrentRecord, setActiveFile]);
 
   return (
     <>
@@ -416,72 +422,12 @@ const TopBar = memo(({ editorRef }) => {
             {audioEnabled ? <FiMic size={13} /> : <FiMicOff size={13} />}
           </button>
           <button
-            className="toolbar-btn"
-            onClick={() => setRecordsDisplay(true)}
-            title="Open recordings (Ctrl+O)"
-            aria-label="Open recordings"
-            data-shortcut="open"
-          >
-            <FiFolder size={13} /> Open
-          </button>
-          {isTypistLoaded() && !recording && (
-            <button
-              className="toolbar-btn"
-              onClick={exportRecord}
-              title="Export recording as .cvid"
-              aria-label="Export recording"
-            >
-              <FiDownload size={13} /> Export
-            </button>
-          )}
-          <button
-            className="toolbar-btn"
-            onClick={() => importInputRef.current?.click()}
-            title="Import .cvid file"
-            aria-label="Import recording"
-            disabled={recording}
-          >
-            <FiUpload size={13} /> Import
-          </button>
-          <input
-            ref={importInputRef}
-            type="file"
-            accept=".cvid"
-            style={{ display: "none" }}
-            onChange={handleImport}
-            aria-hidden="true"
-          />
-          <button
-            className="toolbar-btn toolbar-btn-icon"
-            onClick={() => setShowShortcuts(true)}
-            title="Keyboard shortcuts (?)"
-            aria-label="Keyboard shortcuts"
-          >
-            <FiHelpCircle size={13} />
-          </button>
-          <button
             className="toolbar-btn toolbar-btn-icon"
             onClick={() => setTheme(theme === 'light' ? 'dark' : 'light')}
             title={theme === 'light' ? "Switch to dark theme" : "Switch to light theme"}
             aria-label={theme === 'light' ? "Switch to dark theme" : "Switch to light theme"}
           >
             {theme === 'light' ? <FiMoon size={13} /> : <FiSun size={13} />}
-          </button>
-          <button
-            className="toolbar-btn"
-            onClick={() => window.__setTerminalVisible?.(v => !v)}
-            title="Toggle terminal (Ctrl+`)"
-            aria-label="Toggle terminal"
-          >
-            <FiCode size={13} /> Terminal
-          </button>
-          <button
-            className="toolbar-btn toolbar-btn-icon"
-            onClick={() => window.__createTerminal?.()}
-            title="New terminal"
-            aria-label="New terminal"
-          >
-            +
           </button>
           <button
             className="toolbar-btn"
@@ -492,6 +438,14 @@ const TopBar = memo(({ editorRef }) => {
             <FiLogOut size={13} /> {mode === MODES.LOCAL ? 'Desktop' : 'Sign Out'}
           </button>
         </div>
+        <input
+          ref={importInputRef}
+          type="file"
+          accept=".cvid"
+          style={{ display: "none" }}
+          onChange={handleImport}
+          aria-hidden="true"
+        />
       </div>
       <div className="editor-settings-bar">
         <span className="record-name-label" title="Current project and record">

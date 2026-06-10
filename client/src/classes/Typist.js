@@ -112,6 +112,12 @@ class Typist {
     this.#invalidateCaches();
   }
 
+  setFileContent(name, content) {
+    if (!this.#files[name]) return;
+    this.#files[name].firstValue = content;
+    this.#invalidateCaches();
+  }
+
   removeFile(name) {
     if (!this.#files[name]) return;
     const wasActive = this.#activeFile === name;

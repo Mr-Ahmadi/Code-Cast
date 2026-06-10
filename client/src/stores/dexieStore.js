@@ -78,7 +78,7 @@ export async function getLocalRecordings(projectId) {
   return records.map((r) => [r.name, r.id]);
 }
 
-export async function getLocalRecording(id, projectPath) {
+export async function getLocalRecording(id) {
   return db.recordings.get(id);
 }
 
@@ -90,6 +90,6 @@ export async function getAllLocalRecordings() {
   return db.recordings.orderBy('createdAt').reverse().toArray();
 }
 
-export async function getProjectDir(id) {
+export async function getProjectDir() {
   return null;
 }

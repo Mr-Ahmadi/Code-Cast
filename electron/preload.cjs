@@ -6,7 +6,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
 
   terminal: {
     isPtyAvailable: () => ipcRenderer.invoke('terminal:isPtyAvailable'),
-    create: (terminalId, cwd) => ipcRenderer.invoke('terminal:create', terminalId, cwd),
+    create: (terminalId, cwd, dimensions) => ipcRenderer.invoke('terminal:create', terminalId, cwd, dimensions),
     write: (terminalId, data) => ipcRenderer.invoke('terminal:write', terminalId, data),
     resize: (terminalId, cols, rows) => ipcRenderer.invoke('terminal:resize', terminalId, cols, rows),
     kill: (terminalId) => ipcRenderer.invoke('terminal:kill', terminalId),
@@ -39,9 +39,11 @@ contextBridge.exposeInMainWorld('electronAPI', {
     minimize: () => ipcRenderer.send('window:minimize'),
     maximize: () => ipcRenderer.send('window:maximize'),
     close: () => ipcRenderer.send('window:close'),
+    setResizable: (resizable) => ipcRenderer.invoke('window:setResizable', resizable),
   },
 
   file: {
+    selectOpenFile: (options) => ipcRenderer.invoke('file:selectOpenFile', options),
     selectDirectory: () => ipcRenderer.invoke('select-directory'),
     selectProjectDirectory: (projectName) => ipcRenderer.invoke('select-project-directory', projectName),
     selectSaveFile: (options) => ipcRenderer.invoke('select-save-file', options),

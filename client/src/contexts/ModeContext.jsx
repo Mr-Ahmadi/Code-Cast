@@ -1,9 +1,7 @@
 import { createContext, useContext, useState, useCallback, useMemo } from 'react';
-
-export const MODES = {
-  ONLINE: 'online',
-  LOCAL: 'local',
-};
+import PropTypes from 'prop-types';
+import { MODES } from '../constants/modes';
+export { MODES };
 
 const ModeContext = createContext();
 
@@ -25,6 +23,10 @@ export function ModeProvider({ children }) {
 
   return <ModeContext.Provider value={value}>{children}</ModeContext.Provider>;
 }
+
+ModeProvider.propTypes = {
+  children: PropTypes.node.isRequired,
+};
 
 export function useMode() {
   const ctx = useContext(ModeContext);

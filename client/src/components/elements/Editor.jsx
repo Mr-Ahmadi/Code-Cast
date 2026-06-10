@@ -4,13 +4,14 @@ import Editor from '@monaco-editor/react';
 import {
   push, setEditor, getFiles, getActiveFile, getFileFirstValue,
   addFile as recordAddFile, removeFile as recordRemoveFile, switchFile as recordSwitchFile,
+  ensureFileContent, isTypistLoaded,
 } from '../../functions/record';
 import { FiFolder } from 'react-icons/fi';
 import PropTypes from 'prop-types';
 
 const _Editor = memo(({ editorRef }) => {
   const { 
-    recording, fontSize, showMinimap, files, activeFile, 
+    recording, fontSize, showMinimap, activeFile, 
     setActiveFile, setFiles, currentWorkspace, autoSave, setToast, theme
   } = useContext(GlobalContext);
 
@@ -204,19 +205,12 @@ const _Editor = memo(({ editorRef }) => {
     applyEditorTheme(monaco);
 
     const fileList = getFiles();
-    for (const f of fileList) {
-      if (f.name && !modelsRef.current[f.name]) {
-        createModel(monaco, f.name, getFileFirstValue(f.name) || "", f.language);
-      }
-    }
-
     const active = getActiveFile() || (fileList.length > 0 ? fileList[0].name : null);
-    if (active && modelsRef.current[active]) {
-      editor.setModel(modelsRef.current[active]);
-    } else if (fileList.length > 0 && !active) {
-      const first = fileList[0].name;
-      if (modelsRef.current[first]) {
-        editor.setModel(modelsRef.current[first]);
+    if (active) {
+      const content = getFileFirstValue(active) || "";
+      createModel(monaco, active, content, undefined);
+      if (modelsRef.current[active]) {
+        editor.setModel(modelsRef.current[active]);
       }
     }
 
@@ -336,26 +330,21 @@ const _Editor = memo(({ editorRef }) => {
 
   useEffect(() => {
     if (!editorReady.current || !activeFile) return;
-    const content = modelsRef.current[activeFile] ? undefined : (getFileFirstValue(activeFile) || "");
-    ensureModel(activeFile, content, undefined);
-    if (modelsRef.current[activeFile]) {
-      switchEditorModel(activeFile);
-    }
-  }, [activeFile, switchEditorModel, ensureModel]);
-
-  useEffect(() => {
-    const fileList = getFiles();
-    const monaco = monacoRef.current;
-    if (!monaco) return;
-
-    for (const f of fileList) {
-      if (f.name && !modelsRef.current[f.name]) {
-        createModel(monaco, f.name, getFileFirstValue(f.name) || "", f.language);
+    const load = async () => {
+      let content = modelsRef.current[activeFile] ? undefined : (getFileFirstValue(activeFile) || "");
+      if (!content && currentWorkspace?.path) {
+        await ensureFileContent(activeFile, currentWorkspace.path);
+        content = getFileFirstValue(activeFile) || "";
       }
-    }
-  }, [files, createModel]);
+      ensureModel(activeFile, content, undefined);
+      if (modelsRef.current[activeFile]) {
+        switchEditorModel(activeFile);
+      }
+    };
+    load();
+  }, [activeFile, switchEditorModel, ensureModel, currentWorkspace?.path]);
 
-  const noProject = !currentWorkspace;
+  const noProject = !currentWorkspace && !isTypistLoaded();
 
   const options = {
     fontSize,

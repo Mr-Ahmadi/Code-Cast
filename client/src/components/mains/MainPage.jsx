@@ -13,37 +13,9 @@ import LocalSetupPrompt from '../elements/LocalSetupPrompt';
 import ActivityBar from '../elements/ActivityBar';
 import StatusBar from '../elements/StatusBar';
 import { GlobalContext } from '../../contexts/GlobalStates';
-import { addFile as recordAddFile, getFiles } from "../../functions/record";
+import { getFiles, exportRecord, isTypistLoaded, importFromFile, stopPlay } from "../../functions/record";
 import { useMode, MODES } from '../../contexts/ModeContext';
-import { exportRecord, isTypistLoaded } from "../../functions/record";
 
-const TEXT_EXTS = new Set([
-    'js', 'jsx', 'ts', 'tsx', 'mjs', 'cjs',
-    'html', 'htm',
-    'css', 'scss', 'less', 'sass',
-    'py', 'rb', 'go', 'rs', 'java', 'kt', 'swift', 'c', 'cpp', 'h', 'hpp',
-    'json', 'xml', 'yaml', 'yml', 'toml', 'ini', 'cfg',
-    'md', 'txt', 'sh', 'bash', 'zsh', 'fish',
-    'sql', 'graphql', 'r', 'lua', 'php', 'pl', 'pm',
-    'env', 'gitignore', 'dockerfile', 'makefile',
-]);
-
-function extLang(name) {
-    const ext = name.split('.').pop().toLowerCase();
-    const map = {
-        html: 'html', htm: 'html',
-        css: 'css',
-        js: 'javascript', jsx: 'javascript', mjs: 'javascript', cjs: 'javascript',
-        ts: 'typescript', tsx: 'typescript',
-        py: 'python',
-        json: 'json',
-        md: 'markdown',
-        xml: 'xml', svg: 'xml',
-        sql: 'sql',
-        sh: 'shell', bash: 'shell', zsh: 'shell',
-    };
-    return map[ext] || 'plaintext';
-}
 
 export default function App() {
     const editorRef = useRef(null);
@@ -54,6 +26,7 @@ export default function App() {
         fontSize, setFontSize,
         theme, setTheme,
         autoSave, setAutoSave,
+        setRecordName, setPlaying, setCurrentRecord, setToast,
     } = useContext(GlobalContext);
     const [showShortcuts, setShowShortcuts] = useState(false);
     const [terminalVisible, setTerminalVisible] = useState(false);
@@ -179,67 +152,10 @@ export default function App() {
     }, [setFiles, setActiveFile]);
 
     useEffect(() => {
-        if (!isLocal || !window.electronAPI?.isElectron || !currentWorkspace?.path || currentRecord || playing) {
-            return;
-        }
-
-        const f = window.electronAPI?.file;
-        if (!f) return;
-
-        let disposed = false;
-        let syncing = false;
-
-        const syncDirectoryFiles = async () => {
-            if (syncing || disposed) return;
-            syncing = true;
-            try {
-                const absoluteFiles = await f.listRecursive(currentWorkspace.path);
-                if (disposed) return;
-
-                const openFiles = getFiles();
-                const opened = new Set(openFiles.map(file => file.name));
-                let changed = false;
-
-                for (const absolutePath of absoluteFiles) {
-                    const relativePath = absolutePath.startsWith(`${currentWorkspace.path}/`)
-                        ? absolutePath.slice(currentWorkspace.path.length + 1)
-                        : absolutePath;
-                    if (!relativePath) continue;
-
-                    const ext = relativePath.split('.').pop().toLowerCase();
-                    if (!TEXT_EXTS.has(ext)) continue;
-                    if (opened.has(relativePath)) continue;
-
-                    const content = await f.read(absolutePath);
-                    if (disposed) return;
-                    if (content === null || content === undefined) continue;
-
-                    recordAddFile(relativePath, extLang(relativePath), content);
-                    opened.add(relativePath);
-                    changed = true;
-                }
-
-                if (changed) {
-                    const nextFiles = getFiles();
-                    setFiles(nextFiles);
-                    if (!nextFiles.some(file => file.name === window.__activeFile) && nextFiles.length > 0) {
-                        setActiveFile(nextFiles[0].name);
-                    }
-                }
-            } catch {
-                // best-effort sync; ignore transient FS errors
-            } finally {
-                syncing = false;
-            }
-        };
-
-        syncDirectoryFiles();
-        const interval = setInterval(syncDirectoryFiles, 2500);
-        return () => {
-            disposed = true;
-            clearInterval(interval);
-        };
-    }, [isLocal, currentWorkspace?.path, currentRecord, playing, setFiles, setActiveFile]);
+        if (!isLocal || !currentWorkspace?.path || !window.electronAPI?.isElectron) return;
+        const syncedFiles = getFiles();
+        setFiles(syncedFiles);
+    }, [isLocal, currentWorkspace?.path, currentRecord, playing, setFiles]);
 
     const handleKeyDown = useCallback((e) => {
         const cmd = e.ctrlKey || e.metaKey;
@@ -409,7 +325,29 @@ export default function App() {
                     runEditorCommand('editor.action.insertCursorBelow');
                     break;
                 case 'import-recording':
-                    document.querySelector('input[type="file"][accept=".cvid"]')?.click();
+                    if (window.electronAPI?.file?.selectOpenFile) {
+                        (async () => {
+                            try {
+                                const result = await window.electronAPI.file.selectOpenFile();
+                                if (!result) return;
+                                const name = await importFromFile(result.content);
+                                setRecordName(name);
+                                setPlaying(false);
+                                stopPlay();
+                                setCurrentRecord(null);
+                                const syncedFiles = getFiles();
+                                setFiles(syncedFiles);
+                                setToast({ type: "SUCCESS", message: `Imported "${name}"` });
+                                if (syncedFiles.length > 0) {
+                                    setActiveFile(syncedFiles[0].name);
+                                }
+                            } catch (err) {
+                                setToast({ type: "ERROR", message: err.message || "Failed to import" });
+                            }
+                        })();
+                    } else {
+                        document.querySelector('input[type="file"][accept=".cvid"]')?.click();
+                    }
                     break;
                 case 'export-recording':
                     if (isTypistLoaded() && !recording) {
@@ -467,7 +405,7 @@ export default function App() {
         });
 
         return unsubscribe;
-    }, [recording, theme, setTheme, setAutoSave, fontSize, setFontSize, runEditorCommand, handleToggleTerminal, handleNewTerminal, handleCloseActiveTerminal]);
+    }, [recording, theme, setTheme, setAutoSave, fontSize, setFontSize, runEditorCommand, handleToggleTerminal, handleNewTerminal, handleCloseActiveTerminal, setActiveFile, setCurrentRecord, setFiles, setPlaying, setRecordName, setToast]);
 
     return (
         <div className='main-container'>
@@ -618,7 +556,6 @@ export default function App() {
                                                 key={terminal.id}
                                                 visible={activePanel === 'terminal' && terminalVisible && terminal.id === activeTerminalId}
                                                 terminalId={terminal.id}
-                                                onClose={() => setTerminalVisible(false)}
                                             />
                                         ))}
                                     </div>

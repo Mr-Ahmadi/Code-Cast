@@ -41,17 +41,6 @@ const PROJECT_TEMPLATES = {
   },
 };
 
-const TEXT_EXTS = new Set([
-  'js','jsx','ts','tsx','mjs','cjs',
-  'html','htm',
-  'css','scss','less','sass',
-  'py','rb','go','rs','java','kt','swift','c','cpp','h','hpp',
-  'json','xml','yaml','yml','toml','ini','cfg',
-  'md','txt','sh','bash','zsh','fish',
-  'sql','graphql','r','lua','php','pl','pm',
-  'env','gitignore','dockerfile','makefile',
-]);
-
 function extLang(name) {
   const ext = name.split('.').pop().toLowerCase();
   const map = {
@@ -128,6 +117,13 @@ const RecordsList = memo(({ display, setDisplay }) => {
     }
   }, [display, isLocal, refreshLocal]);
 
+  useEffect(() => {
+    document.body.classList.toggle('dialog-open', display);
+    if (window.electronAPI?.window?.setResizable) {
+      window.electronAPI.window.setResizable(!display);
+    }
+  }, [display]);
+
   const filtered = search
     ? projects.map(ws => ({
         ...ws,
@@ -149,20 +145,7 @@ const RecordsList = memo(({ display, setDisplay }) => {
     setLoading(ws.id);
     try {
       if (ws.isFolder && ws.path) {
-        const f = window.electronAPI?.file;
-        if (!f) throw new Error('File system not available');
-        const files = await f.listRecursive(ws.path);
-        const textFiles = files.filter(fp => {
-          const ext = fp.split('.').pop().toLowerCase();
-          return TEXT_EXTS.has(ext);
-        });
         initRecord();
-        for (const fp of textFiles) {
-          const content = await f.read(fp);
-          if (content === null || content === undefined) continue;
-          const fileName = fp.startsWith(ws.path + '/') ? fp.slice(ws.path.length + 1) : fp;
-          recordAddFile(fileName, extLang(fileName), content);
-        }
       } else {
         initRecord();
         for (const [name, fd] of Object.entries(ws.files || {})) {
@@ -216,21 +199,8 @@ const RecordsList = memo(({ display, setDisplay }) => {
     setLoading(dir);
     try {
       const folderName = dir.split('/').pop() || dir.split('\\').pop() || 'Folder';
-      const files = await f.listRecursive(dir);
-
-      const textFiles = files.filter(fp => {
-        const ext = fp.split('.').pop().toLowerCase();
-        return TEXT_EXTS.has(ext);
-      });
 
       initRecord();
-      for (const fp of textFiles) {
-        const content = await f.read(fp);
-        if (content === null || content === undefined) continue;
-        const fileName = fp.startsWith(dir + '/') ? fp.slice(dir.length + 1) : fp;
-        recordAddFile(fileName, extLang(fileName), content);
-      }
-
       setCurrentWorkspace({ id: dir, name: folderName, files: {}, path: dir });
       setCurrentRecord(null);
       setRecordName("Untitled");

@@ -29,6 +29,7 @@ const start = async (
     }
   }
   if (typist instanceof Typist) {
+    await ensureAllFilesContent(workspacePath);
     const files = typist.getFiles();
     let firstFileName, firstValue, language;
     if (files.length > 0) {
@@ -205,7 +206,7 @@ const exportRecord = () => {
 };
 
 const importFromFile = async (file) => {
-  const text = await file.text();
+  const text = typeof file === "string" ? file : await file.text();
   const data = JSON.parse(text);
   if (!data.version) {
     throw new Error("Invalid .cvid file");
@@ -229,6 +230,10 @@ const getActiveFile = () => {
 
 const addFile = (name, language, content) => {
   if (typist instanceof Typist) typist.addFile(name, language, content);
+};
+
+const setFileContent = (name, content) => {
+  if (typist instanceof Typist) typist.setFileContent(name, content);
 };
 
 const removeFile = (name) => {
@@ -264,11 +269,32 @@ const getFilesFinalContent = () => {
   return {};
 };
 
+const ensureFileContent = async (name, workspacePath) => {
+  if (!workspacePath || !window.electronAPI?.file?.read) return;
+  const currentContent = getFileFirstValue(name);
+  if (currentContent) return;
+  const fullPath = window.electronAPI.path.join(workspacePath, name);
+  const content = await window.electronAPI.file.read(fullPath);
+  if (content !== null && content !== undefined) {
+    setFileContent(name, content);
+  }
+};
+
+const ensureAllFilesContent = async (workspacePath) => {
+  if (!workspacePath || !window.electronAPI?.file?.read) return;
+  const files = getFiles();
+  const pending = files.filter(f => !getFileFirstValue(f.name));
+  if (pending.length === 0) return;
+  await Promise.all(pending.map(f => ensureFileContent(f.name, workspacePath)));
+};
+
 export {
   setEditor, init, start, pause, resume, isPaused, push, stop, load,
   play, stopPlay, seek, getDuration, getStateAt,
   isTypistLoaded, getTypist, isAudioRecording,
   exportRecord, importFromFile,
-  getFiles, getActiveFile, addFile, removeFile, renameFile, switchFile,
+  getFiles, getActiveFile, addFile, setFileContent,
+  ensureFileContent, ensureAllFilesContent,
+  removeFile, renameFile, switchFile,
   isFileOpen, getFileLanguage, getFileFirstValue, getFilesFinalContent,
 };

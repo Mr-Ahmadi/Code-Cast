@@ -17,6 +17,13 @@ const ShortcutsHelp = memo(({ display, setDisplay }) => {
   const ref = useRef(null);
 
   useEffect(() => {
+    document.body.classList.toggle('dialog-open', display);
+    if (window.electronAPI?.window?.setResizable) {
+      window.electronAPI.window.setResizable(!display);
+    }
+  }, [display]);
+
+  useEffect(() => {
     if (!display) return;
     const prev = document.activeElement;
     ref.current?.focus();

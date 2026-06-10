@@ -2,10 +2,10 @@ import { useContext, memo } from "react";
 import { GlobalContext } from "../../contexts/GlobalStates";
 import { useMode, MODES } from "../../contexts/ModeContext";
 import { getFiles, getActiveFile } from "../../functions/record";
-import { FiWifi, FiWifiOff, FiMonitor, FiCode } from "react-icons/fi";
+import { FiWifi, FiMonitor, FiCode } from "react-icons/fi";
 
 const StatusBar = memo(() => {
-  const { recording, playing, currentWorkspace, fontSize, audioEnabled } = useContext(GlobalContext);
+  const { recording, playing, currentWorkspace, fontSize } = useContext(GlobalContext);
   const { mode } = useMode();
 
   const files = getFiles();

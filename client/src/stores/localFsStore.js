@@ -86,7 +86,9 @@ export async function getLocalProjects() {
     try {
       const p = JSON.parse(raw);
       projects.push(p);
-    } catch {}
+    } catch {
+      // intentionally empty
+    }
   }
   projects.sort((a, b) => (b.updatedAt || 0) - (a.updatedAt || 0));
   return projects;
@@ -137,7 +139,9 @@ export async function updateLocalProject(id, data) {
     const existing = JSON.parse(raw);
     const updated = { ...existing, ...data, updatedAt: Date.now() };
     await f.write(projectJsonPath(dir), JSON.stringify(updated, null, 2));
-  } catch {}
+  } catch {
+    // intentionally empty
+  }
 }
 
 export async function deleteLocalProject(id) {
@@ -158,7 +162,9 @@ export async function deleteLocalProject(id) {
     if (entries.length === 0) {
       await f.remove(projectRecordsDir(dir));
     }
-  } catch {}
+  } catch {
+    // intentionally empty
+  }
 
   const index = await readIndex();
   delete index[id];
@@ -249,7 +255,9 @@ export async function getLocalRecordings(projectId, projectPath) {
       try {
         const rec = JSON.parse(raw);
         results.push([rec.name, rec.id]);
-      } catch {}
+      } catch {
+      // intentionally empty
+    }
     }
   }
   results.sort((a, b) => a[0].localeCompare(b[0]));
@@ -370,7 +378,9 @@ export async function getAllLocalRecordings() {
         if (!raw) continue;
         try {
           results.push(JSON.parse(raw));
-        } catch {}
+        } catch {
+      // intentionally empty
+    }
       }
     }
   }

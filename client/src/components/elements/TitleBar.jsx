@@ -1,5 +1,4 @@
-import { FiMinimize2, FiMaximize2, FiX, FiMinus, FiSquare } from "react-icons/fi";
-import { useMode } from "../../contexts/ModeContext";
+import { FiX, FiMinus, FiSquare } from "react-icons/fi";
 
 export default function TitleBar() {
     const isElectron = !!window.electronAPI?.isElectron;

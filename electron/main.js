@@ -1,7 +1,7 @@
 import { app, BrowserWindow, ipcMain, dialog, Menu } from 'electron';
 import path from 'path';
 import { fileURLToPath } from 'url';
-import { exec } from 'child_process';
+import { exec, spawn } from 'child_process';
 import os from 'os';
 import fs from 'fs';
 import { createRequire } from 'module';
@@ -321,6 +321,12 @@ ipcMain.on('window:close', () => {
   mainWindow.close();
 });
 
+ipcMain.handle('window:setResizable', async (event, resizable) => {
+  if (mainWindow) {
+    mainWindow.setResizable(resizable);
+  }
+});
+
 function loadDevServer() {
   let retries = 30;
 
@@ -374,20 +380,44 @@ app.on('activate', () => {
 
 function getShell() {
   if (process.platform === 'win32') return 'cmd.exe';
-  
-  const shells = [
-    process.env.SHELL,
-    '/bin/zsh',
-    '/bin/bash',
-    '/usr/bin/zsh',
-    '/usr/bin/bash',
-    '/bin/sh'
-  ];
 
-  for (const s of shells) {
-    if (s && fs.existsSync(s)) return s;
+  let shell = process.env.SHELL;
+
+  // Fallback to /etc/passwd if $SHELL is unset (VS Code approach)
+  if (!shell) {
+    try {
+      shell = os.userInfo().shell;
+    } catch (e) {
+      /* ignore */
+    }
   }
-  
+
+  // Some systems have $SHELL set to /bin/false which breaks the terminal (VS Code approach)
+  if (shell === '/bin/false' || shell === '/usr/bin/false') {
+    shell = null;
+  }
+
+  // Verify the shell exists and is executable
+  if (shell) {
+    try {
+      fs.accessSync(shell, fs.constants.X_OK);
+      return shell;
+    } catch (e) {
+      console.warn(`[Terminal] Shell "${shell}" not accessible, falling back`);
+    }
+  }
+
+  // Try common shells
+  const commonShells = ['/bin/zsh', '/bin/bash', '/usr/bin/zsh', '/usr/bin/bash', '/bin/sh'];
+  for (const s of commonShells) {
+    try {
+      fs.accessSync(s, fs.constants.X_OK);
+      return s;
+    } catch (e) {
+      /* skip */
+    }
+  }
+
   return '/bin/sh';
 }
 
@@ -404,13 +434,22 @@ ipcMain.handle('terminal:isPtyAvailable', () => {
   return { available: !!pty, error: ptyError };
 });
 
-ipcMain.handle('terminal:create', (event, terminalId, cwd) => {
+function normalizeTerminalDimensions(dimensions) {
+  const cols = Number(dimensions?.cols);
+  const rows = Number(dimensions?.rows);
+  return {
+    cols: Number.isFinite(cols) && cols > 0 ? Math.floor(cols) : 80,
+    rows: Number.isFinite(rows) && rows > 0 ? Math.floor(rows) : 24,
+  };
+}
+
+ipcMain.handle('terminal:create', (event, terminalId, cwd, dimensions) => {
   console.log(`[Terminal] Creating terminal "${terminalId}" at "${cwd || 'default'}"`);
-  
+
   const shell = getShell();
-  console.log(`[Terminal] Using shell: ${shell}`);
+  console.log(`[Terminal] Using shell: ${shell} (pty available: ${!!pty})`);
   let defaultCwd = cwd || os.homedir();
-  
+
   // Verify CWD exists, fallback to home if not
   if (!fs.existsSync(defaultCwd)) {
     console.warn(`[Terminal] CWD "${defaultCwd}" does not exist, falling back to home directory`);
@@ -429,42 +468,45 @@ ipcMain.handle('terminal:create', (event, terminalId, cwd) => {
     }
     delete terminalProcesses[terminalId];
   }
-  const cols = 80;
-  const rows = 24;
+  const { cols, rows } = normalizeTerminalDimensions(dimensions);
 
   try {
-    if (pty) {
-      console.log(`[Terminal] Spawning PTY with node-pty`);
-      const term = pty.spawn(shell, [], {
-        name: 'xterm-256color',
-        cols,
-        rows,
-        cwd: defaultCwd,
-        env: { ...process.env, TERM: 'xterm-256color' },
-      });
+    if (!pty) throw new Error('node-pty not available');
 
-      terminalProcesses[terminalId] = term;
+    console.log(`[Terminal] Spawning PTY with node-pty`);
+    const term = pty.spawn(shell, process.platform !== 'win32' ? ['-i'] : [], {
+      name: 'xterm-256color',
+      cols,
+      rows,
+      cwd: defaultCwd,
+      env: { ...process.env, TERM: 'xterm-256color' },
+    });
 
-      term.onData((data) => {
-        if (mainWindow && !mainWindow.isDestroyed()) {
-          mainWindow.webContents.send('terminal:data', terminalId, data);
-        }
-      });
+    terminalProcesses[terminalId] = term;
 
-      term.onExit(() => {
-        console.log(`[Terminal] Process for ID "${terminalId}" exited`);
-        if (terminalProcesses[terminalId] === term) {
-          delete terminalProcesses[terminalId];
-        }
-        if (mainWindow && !mainWindow.isDestroyed()) {
-          mainWindow.webContents.send('terminal:exit', terminalId);
-        }
-      });
-    } else {
-      console.warn(`[Terminal] node-pty not available, falling back to child_process.spawn`);
-      // Fallback: spawn without PTY (basic, no TUI support)
-      const { spawn } = require('child_process');
-      const proc = spawn(shell, [], {
+    term.onData((data) => {
+      if (mainWindow && !mainWindow.isDestroyed()) {
+        mainWindow.webContents.send('terminal:data', terminalId, data);
+      }
+    });
+
+    term.onExit(() => {
+      console.log(`[Terminal] Process for ID "${terminalId}" exited`);
+      if (terminalProcesses[terminalId] === term) {
+        delete terminalProcesses[terminalId];
+      }
+      if (mainWindow && !mainWindow.isDestroyed()) {
+        mainWindow.webContents.send('terminal:exit', terminalId);
+      }
+    });
+  } catch (err) {
+    console.warn(`[Terminal] PTY failed (${err.message}), trying fallback`);
+    try {
+      // Use -i for interactive mode to get a prompt
+      const shellArgs = process.platform !== 'win32' ? ['-i'] : [];
+      console.log(`[Terminal] Spawning fallback: ${shell} ${shellArgs.join(' ')}`);
+      
+      const proc = spawn(shell, shellArgs, {
         cwd: defaultCwd,
         env: { ...process.env, TERM: 'xterm-256color' },
         stdio: ['pipe', 'pipe', 'pipe'],
@@ -484,8 +526,8 @@ ipcMain.handle('terminal:create', (event, terminalId, cwd) => {
         }
       });
 
-      proc.on('exit', () => {
-        console.log(`[Terminal] Fallback process for ID "${terminalId}" exited`);
+      proc.on('exit', (code, signal) => {
+        console.log(`[Terminal] Fallback process for ID "${terminalId}" exited (code: ${code}, signal: ${signal})`);
         if (terminalProcesses[terminalId] === proc) {
           delete terminalProcesses[terminalId];
         }
@@ -493,10 +535,22 @@ ipcMain.handle('terminal:create', (event, terminalId, cwd) => {
           mainWindow.webContents.send('terminal:exit', terminalId);
         }
       });
+
+      proc.on('error', (procErr) => {
+        console.error(`[Terminal] Fallback process error for ID "${terminalId}":`, procErr);
+        if (terminalProcesses[terminalId] === proc) {
+          delete terminalProcesses[terminalId];
+        }
+        if (mainWindow && !mainWindow.isDestroyed()) {
+          mainWindow.webContents.send('terminal:data', terminalId, `\r\n\x1b[31mTerminal error: ${procErr.message}\x1b[0m\r\n`);
+        }
+      });
+
+      console.log(`[Terminal] Fallback process spawned (PID: ${proc.pid})`);
+    } catch (fallbackErr) {
+      console.error(`[Terminal] Fallback also failed:`, fallbackErr);
+      throw new Error(`Failed to create terminal: ${fallbackErr.message}`);
     }
-  } catch (err) {
-    console.error(`[Terminal] Creation failed:`, err);
-    throw new Error(`Failed to create terminal: ${err.message}`);
   }
 
   return true;
@@ -557,6 +611,20 @@ ipcMain.handle('terminal:killAll', () => {
 // --- Code execution IPC ---
 
 // --- File system IPC for local mode ---
+
+ipcMain.handle('file:selectOpenFile', async (event, options = {}) => {
+  const result = await dialog.showOpenDialog(mainWindow, {
+    title: options.title || 'Open File',
+    properties: ['openFile'],
+    filters: Array.isArray(options.filters)
+      ? options.filters
+      : [{ name: 'CodeCast Recording', extensions: ['cvid'] }],
+  });
+  if (result.canceled) return null;
+  const filePath = result.filePaths[0];
+  const content = fs.readFileSync(filePath, 'utf-8');
+  return { content, name: path.basename(filePath), filePath };
+});
 
 ipcMain.handle('select-directory', async () => {
   const result = await dialog.showOpenDialog(mainWindow, {
@@ -650,6 +718,11 @@ ipcMain.handle('file:mkdir', async (event, dirPath) => {
   }
 });
 
+// Skip only dirs that are never user source and can contain 100k+ files
+const IGNORE_DIRS = new Set([
+  'node_modules', '.git', '.svn', '.hg', '__pycache__',
+]);
+
 ipcMain.handle('file:listRecursive', async (event, dirPath) => {
   const results = [];
   function walk(dir) {
@@ -659,6 +732,7 @@ ipcMain.handle('file:listRecursive', async (event, dirPath) => {
     } catch { return; }
     for (const e of entries) {
       if (e.name.startsWith('.')) continue;
+      if (IGNORE_DIRS.has(e.name)) continue;
       const fullPath = path.join(dir, e.name);
       if (e.isDirectory()) {
         walk(fullPath);

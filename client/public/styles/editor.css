@@ -509,6 +509,11 @@
   margin-bottom: -2px;
 }
 
+body.dialog-open .resizer {
+  pointer-events: none;
+  background: transparent !important;
+}
+
 .sidebar.closed {
   width: 0;
   border-right: none;
@@ -592,11 +597,41 @@
 }
 
 .file-tree-meta {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
   padding: 6px 12px 4px;
   font-size: 10px;
   color: var(--text-muted);
   text-transform: uppercase;
   letter-spacing: 0.45px;
+}
+
+.file-tree-actions {
+  display: flex;
+  gap: 2px;
+}
+
+.file-tree-action-btn {
+  background: none;
+  border: none;
+  color: var(--text-muted);
+  cursor: pointer;
+  padding: 2px 4px;
+  border-radius: 3px;
+  display: flex;
+  align-items: center;
+  transition: color 0.15s, background 0.15s;
+}
+
+.file-tree-action-btn:hover {
+  color: var(--text);
+  background: var(--bg-hover);
+}
+
+.file-tree-action-btn:disabled {
+  opacity: 0.35;
+  cursor: default;
 }
 
 .file-tree-item {
@@ -675,6 +710,32 @@
   flex-shrink: 0;
   text-transform: uppercase;
   letter-spacing: 0.3px;
+}
+
+.file-tree-record-files {
+  padding: 0;
+}
+
+.file-tree-record-header {
+  padding: 6px 12px 4px;
+  font-size: 10px;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.45px;
+}
+
+.file-tree-item-path {
+  font-size: 10px;
+  color: var(--text-muted);
+  opacity: 0.35;
+  flex-shrink: 0;
+  padding-left: 4px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  direction: rtl;
+  text-align: left;
+  max-width: 80px;
 }
 
 .file-tree-empty {
