@@ -308,9 +308,21 @@ export async function getLocalRecording(id, projectPath) {
   return null;
 }
 
-export async function deleteLocalRecording(id) {
+export async function deleteLocalRecording(id, projectPath) {
   const f = api();
   if (!f) return;
+
+  // If projectPath is known, check there first (for opened folders not in the index)
+  if (projectPath) {
+    for (const recDir of [`${projectPath}/.record`, projectRecordsDir(projectPath)]) {
+      const p = `${recDir}/${id}.json`;
+      const exists = await f.exists(p);
+      if (exists) {
+        await f.remove(p);
+        return;
+      }
+    }
+  }
 
   const searchDirs = [];
   const index = await readIndex();

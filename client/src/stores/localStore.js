@@ -69,8 +69,8 @@ export async function getLocalRecording(id, projectPath) {
   return d.getLocalRecording(id);
 }
 
-export async function deleteLocalRecording(id) {
-  if (fsStore.isConfigured()) return fsStore.deleteLocalRecording(id);
+export async function deleteLocalRecording(id, projectPath) {
+  if (fsStore.isConfigured()) return fsStore.deleteLocalRecording(id, projectPath);
   const d = await getDexie();
   return d.deleteLocalRecording(id);
 }

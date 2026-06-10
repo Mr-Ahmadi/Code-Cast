@@ -562,6 +562,24 @@ body.dialog-open .resizer {
   white-space: nowrap;
 }
 
+.sidebar-close-record-btn {
+  background: none;
+  border: none;
+  color: var(--text-muted);
+  cursor: pointer;
+  padding: 2px 4px;
+  border-radius: 3px;
+  display: flex;
+  align-items: center;
+  transition: color 0.15s, background 0.15s;
+  margin-left: auto;
+}
+
+.sidebar-close-record-btn:hover {
+  color: var(--text);
+  background: var(--bg-hover);
+}
+
 .sidebar-mode-badge {
   font-size: 9px;
   font-weight: 700;
@@ -777,6 +795,14 @@ body.dialog-open .resizer {
 .file-tree-folder-icon {
   color: var(--accent);
   flex-shrink: 0;
+}
+
+.file-tree-virtual {
+  opacity: 0.6;
+}
+
+.file-tree-virtual:hover {
+  opacity: 0.85;
 }
 
 /* ============================================================

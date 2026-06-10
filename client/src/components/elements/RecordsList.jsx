@@ -144,7 +144,7 @@ const RecordsList = memo(({ display, setDisplay }) => {
   const handleOpenProject = useCallback(async (ws) => {
     setLoading(ws.id);
     try {
-      if (ws.isFolder && ws.path) {
+      if (ws.path) {
         initRecord();
       } else {
         initRecord();
@@ -299,11 +299,11 @@ const RecordsList = memo(({ display, setDisplay }) => {
     }
   }, [newProjectName, newProjectTemplate, setToast, setCurrentWorkspace, setCurrentRecord, setRecordName, closeModal, openedFolders]);
 
-  const handleDeleteRecord = useCallback(async (id, name) => {
+  const handleDeleteRecord = useCallback(async (id, name, projectPath) => {
     if (confirmDelete === id) {
       try {
         if (isLocal) {
-          await localStore.deleteLocalRecording(id);
+          await localStore.deleteLocalRecording(id, projectPath);
           await refreshLocal();
         } else {
           await axios.request({
@@ -514,7 +514,7 @@ const RecordsList = memo(({ display, setDisplay }) => {
                         </span>
                         <button
                           className={"btn-delete" + (confirmDelete === record[1] ? " confirming" : "")}
-                          onClick={(e) => { e.stopPropagation(); handleDeleteRecord(record[1], record[0]); }}
+                          onClick={(e) => { e.stopPropagation(); handleDeleteRecord(record[1], record[0], ws.path); }}
                           title={confirmDelete === record[1] ? "Click again to confirm" : "Delete"}
                           aria-label={`Delete ${record[0]}`}
                         >

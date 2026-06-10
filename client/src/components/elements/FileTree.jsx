@@ -90,6 +90,32 @@ const FileTree = memo(() => {
     return pathUtil.join(workspacePath, relativePath);
   }, [workspacePath, pathUtil]);
 
+  const getMissingFilesInDir = useCallback((parentRel) => {
+    return missingFiles.filter(name => {
+      const idx = name.lastIndexOf("/");
+      const dir = idx === -1 ? "" : name.substring(0, idx);
+      return dir === parentRel;
+    }).sort();
+  }, [missingFiles]);
+
+  const getVirtualDirs = useCallback((existingDirNames, parentRel) => {
+    const existingPaths = new Set(
+      existingDirNames.map(n => parentRel ? parentRel + "/" + n : n)
+    );
+    const result = new Set();
+    const prefix = parentRel ? parentRel + "/" : "";
+    for (const name of missingFiles) {
+      if (!name.startsWith(prefix) || name.length <= prefix.length) continue;
+      const rest = name.substring(prefix.length);
+      const slash = rest.indexOf("/");
+      if (slash === -1) continue;
+      const sub = rest.substring(0, slash);
+      const full = prefix + sub;
+      if (!existingPaths.has(full)) result.add(sub);
+    }
+    return Array.from(result).sort();
+  }, [missingFiles]);
+
   const loadDir = useCallback(async (absPath, loadKey) => {
     if (!f) return;
     if (dirContentsRef.current[loadKey]) return;
@@ -159,6 +185,7 @@ const FileTree = memo(() => {
   }, [workspacePath, f, loadDir]);
 
   const restoreMissingFile = useCallback(async (name) => {
+    if (playing) return;
     if (!workspacePath || !f || !pathUtil) {
       recordSwitchFile(name);
       setActiveFile(name);
@@ -172,11 +199,12 @@ const FileTree = memo(() => {
       await f.write(absPath, content);
       recordSwitchFile(name);
       setActiveFile(name);
+      setMissingFiles(prev => prev.filter(n => n !== name));
       await forceRefresh();
     } catch (err) {
       setToast({ type: "ERROR", message: err.message || "Failed to restore file" });
     }
-  }, [workspacePath, f, pathUtil, setToast, setActiveFile, forceRefresh]);
+  }, [playing, workspacePath, f, pathUtil, setToast, setActiveFile, forceRefresh]);
 
   const closeRecord = useCallback(() => {
     initRecord();
@@ -287,6 +315,13 @@ const FileTree = memo(() => {
     }
   }, [loadDir]);
 
+  const toggleVirtualDir = useCallback((relPath) => {
+    setExpanded(prev => ({
+      ...prev,
+      [relPath]: !prev[relPath]
+    }));
+  }, []);
+
   const handleFileClick = useCallback(async (relativePath) => {
     if (playing || !f || !workspacePath) return;
     if (!isTextFile(relativePath)) {
@@ -345,18 +380,21 @@ const FileTree = memo(() => {
   const currentActive = playing ? activeFile : (getActiveFile() || activeFile);
 
   function renderChildren(children, parentRel, depth) {
-    if (!children) return null;
-    const { dirs, files } = sortFsEntries(children);
+    const { dirs, files } = children ? sortFsEntries(children) : { dirs: [], files: [] };
+    const directMissing = getMissingFilesInDir(parentRel);
+    const virtDirs = getVirtualDirs(dirs.map(d => d.name), parentRel);
     return (
       <>
         {dirs.map(d => {
           const relPath = parentRel ? parentRel + "/" + d.name : d.name;
           return renderDir(d, relPath, depth + 1);
         })}
+        {virtDirs.map(vd => renderVirtualDir(vd, parentRel, depth + 1))}
         {files.map(fEntry => {
           const relPath = parentRel ? parentRel + "/" + fEntry.name : fEntry.name;
           return renderFile(fEntry, relPath, depth + 1);
         })}
+        {directMissing.map(name => renderMissingFile(name, depth + 1))}
       </>
     );
   }
@@ -431,6 +469,52 @@ const FileTree = memo(() => {
     );
   }
 
+  function renderMissingFile(name, depth) {
+    const displayName = name.split('/').pop();
+    const dirPath = name.includes('/') ? name.split('/').slice(0, -1).join('/') : '';
+    return (
+      <div
+        key={`miss-${name}`}
+        className={"file-tree-item file-tree-missing" + (playing ? " no-interact" : "")}
+        style={{ paddingLeft: 8 + (depth + 1) * 14 }}
+        onClick={() => { if (!playing) restoreMissingFile(name); }}
+        title={`"${name}" doesn't exist on disk — click to restore`}
+      >
+        <span className="file-tree-item-icon">{extIcon(name)}</span>
+        <span className="file-tree-item-name">{displayName}</span>
+        {dirPath && <span className="file-tree-item-path">{dirPath}</span>}
+      </div>
+    );
+  }
+
+  function renderVirtualDir(dirName, parentRel, depth) {
+    const relPath = parentRel ? parentRel + "/" + dirName : dirName;
+    const isOpen = !!expanded[relPath];
+    const directMissing = getMissingFilesInDir(relPath);
+    const nestedVirt = getVirtualDirs([], relPath);
+    return (
+      <div key={`virt-${relPath}`}>
+        <div
+          className="file-tree-item file-tree-folder file-tree-virtual"
+          style={{ paddingLeft: 8 + depth * 14 }}
+          onClick={() => toggleVirtualDir(relPath)}
+        >
+          <span className="file-tree-item-icon">
+            {isOpen ? <FiChevronDown size={12} /> : <FiChevronRight size={12} />}
+          </span>
+          <FiFolder size={14} className="file-tree-folder-icon" />
+          <span className="file-tree-item-name">{dirName}</span>
+        </div>
+        {isOpen && (
+          <div>
+            {nestedVirt.map(vd => renderVirtualDir(vd, relPath, depth + 1))}
+            {directMissing.map(name => renderMissingFile(name, depth + 1))}
+          </div>
+        )}
+      </div>
+    );
+  }
+
   const rootContents = dirContents[workspacePath];
   const rootLoading = loading[workspacePath];
 
@@ -480,70 +564,20 @@ const FileTree = memo(() => {
       />
       {!workspacePath ? (
         isTypistLoaded() ? (
-          <div className="file-tree-record-files">
-            <div className="file-tree-record-header">Record Files</div>
-            {getFiles().map(f => {
-              const isRenaming = renaming === f.name;
-              return (
-                <div
-                  key={f.name}
-                  className={"file-tree-item" + (f.name === currentActive ? " active" : "") + (playing ? " no-interact" : "") + (isRenaming ? " renaming" : "")}
-                  style={{ paddingLeft: 24 }}
-                  onClick={() => { if (!isRenaming) handleRecordFileClick(f.name); }}
-                  onContextMenu={(e) => { if (!playing) handleContextMenu(e, f.name, false); }}
-                  title={f.name}
-                >
-                  <span className="file-tree-item-icon">{extIcon(f.name)}</span>
-                  {isRenaming ? (
-                    <input
-                      className="file-tree-rename-input"
-                      value={renameValue}
-                      onChange={e => setRenameValue(e.target.value)}
-                      onKeyDown={e => {
-                        if (e.key === 'Enter') submitRename(f.name);
-                        if (e.key === 'Escape') setRenaming(null);
-                      }}
-                      onBlur={() => submitRename(f.name)}
-                      autoFocus
-                      onClick={e => e.stopPropagation()}
-                    />
-                  ) : (
-                    <>
-                      <span className="file-tree-item-name">
-                        {f.name.split('/').pop()}
-                      </span>
-                      <span className="file-tree-item-path">{f.name.split('/').slice(0, -1).join('/')}</span>
-                    </>
-                  )}
-                </div>
-              );
-            })}
+          <div>
+            {renderChildren(null, "", -1)}
           </div>
         ) : (
           <div className="file-tree-empty">No project open</div>
         )
-      ) : !rootContents ? (
-        <div className="file-tree-empty">{rootLoading ? "Loading..." : "Empty project"}</div>
       ) : (
         <div>
-          {renderChildren(rootContents, "", -1)}
-          {missingFiles.length > 0 && (
-            <>
-              <div className="file-tree-record-header" style={{ paddingTop: 12 }}>Missing Record Files</div>
-              {missingFiles.map(name => (
-                <div
-                  key={name}
-                  className="file-tree-item file-tree-missing"
-                  style={{ paddingLeft: 24 }}
-                  onClick={() => restoreMissingFile(name)}
-                  title={`Click to restore "${name}"`}
-                >
-                  <span className="file-tree-item-icon">{extIcon(name)}</span>
-                  <span className="file-tree-item-name">{name.split('/').pop()}</span>
-                  <span className="file-tree-item-path">{name.split('/').slice(0, -1).join('/') || '/'}</span>
-                </div>
-              ))}
-            </>
+          {rootContents ? renderChildren(rootContents, "", -1) : missingFiles.length > 0 ? renderChildren(null, "", -1) : null}
+          {!rootContents && rootLoading && (
+            <div className="file-tree-empty">Loading...</div>
+          )}
+          {!rootContents && !rootLoading && missingFiles.length === 0 && (
+            <div className="file-tree-empty">Empty project</div>
           )}
         </div>
       )}
