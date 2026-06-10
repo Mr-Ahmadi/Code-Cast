@@ -594,6 +594,16 @@ body.dialog-open .resizer {
 
 .file-tree-items {
   padding: 0;
+  position: relative;
+}
+
+.file-tree-items .menu-dropdown {
+  position: absolute;
+}
+
+.file-tree-items .menu-item.confirming {
+  background: rgba(231, 76, 60, 0.15);
+  color: #e74c3c;
 }
 
 .file-tree-meta {
@@ -657,6 +667,16 @@ body.dialog-open .resizer {
 .file-tree-item.active {
   background: var(--bg-active);
   color: var(--text-primary);
+}
+
+.file-tree-missing {
+  opacity: 0.45;
+  font-style: italic;
+}
+
+.file-tree-missing:hover {
+  opacity: 0.85;
+  background: var(--bg-hover);
 }
 
 .file-tree-item.no-interact {
@@ -957,6 +977,7 @@ body.dialog-open .resizer {
 .editor-monaco-wrapper {
   flex: 1;
   min-height: 0;
+  position: relative;
 }
 
 .editor-no-project {

@@ -1,4 +1,4 @@
-import { useRef, useContext, useEffect, useCallback, memo } from 'react';
+import { useRef, useContext, useEffect, useCallback, useState, memo } from 'react';
 import { GlobalContext } from '../../contexts/GlobalStates';
 import Editor from '@monaco-editor/react';
 import {
@@ -6,7 +6,7 @@ import {
   addFile as recordAddFile, removeFile as recordRemoveFile, switchFile as recordSwitchFile,
   ensureFileContent, isTypistLoaded,
 } from '../../functions/record';
-import { FiFolder } from 'react-icons/fi';
+import { FiFolder, FiScissors, FiCopy, FiClipboard, FiList } from 'react-icons/fi';
 import PropTypes from 'prop-types';
 
 const _Editor = memo(({ editorRef }) => {
@@ -101,6 +101,62 @@ const _Editor = memo(({ editorRef }) => {
     }
     return false;
   }, [editorRef]);
+
+  const [ctxMenu, setCtxMenu] = useState(null);
+
+  const editorCtxActions = useCallback((actionId) => {
+    triggerEditorAction(actionId);
+    setCtxMenu(null);
+  }, [triggerEditorAction]);
+
+  const handleEditorContextMenu = useCallback((e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    const editorEl = e.currentTarget;
+    const rect = editorEl?.getBoundingClientRect();
+    setCtxMenu({
+      x: e.clientX - (rect?.left || 0),
+      y: e.clientY - (rect?.top || 0),
+    });
+  }, []);
+
+  useEffect(() => {
+    if (!ctxMenu) return;
+    const close = () => setCtxMenu(null);
+    window.addEventListener('click', close);
+    window.addEventListener('contextmenu', close);
+    return () => {
+      window.removeEventListener('click', close);
+      window.removeEventListener('contextmenu', close);
+    };
+  }, [ctxMenu]);
+
+  const renameModel = useCallback((oldName, newName) => {
+    const monaco = monacoRef.current;
+    const editor = editorRef.current;
+    if (!monaco || !editor) return;
+    const model = modelsRef.current[oldName];
+    if (!model) return;
+    const content = model.getValue();
+    const lang = model.getLanguageId();
+    model.dispose();
+    delete modelsRef.current[oldName];
+    const uri = monaco.Uri.parse(`file:///${newName}`);
+    const newModel = monaco.editor.createModel(content, lang, uri);
+    modelsRef.current[newName] = newModel;
+    if (activeFileRef.current === oldName) {
+      editor.setModel(newModel);
+      oldValue.current = content;
+    }
+  }, [editorRef]);
+
+  const removeModel = useCallback((name) => {
+    const model = modelsRef.current[name];
+    if (model) {
+      model.dispose();
+      delete modelsRef.current[name];
+    }
+  }, []);
 
   useEffect(() => {
     if (autoSaveTimerRef.current) {
@@ -300,6 +356,8 @@ const _Editor = memo(({ editorRef }) => {
 
   window.__ensureModel = ensureModel;
   window.__switchEditorModel = switchEditorModel;
+  window.__renameModel = renameModel;
+  window.__removeModel = removeModel;
   window.__getAllModelContents = () => {
     const trackedFiles = getFiles();
     const result = {};
@@ -359,6 +417,7 @@ const _Editor = memo(({ editorRef }) => {
     padding: { top: 12 },
     readOnly: noProject,
     domReadOnly: noProject,
+    contextmenu: false,
   };
 
   return (
@@ -375,7 +434,7 @@ const _Editor = memo(({ editorRef }) => {
             </div>
           </div>
       )}
-      <div className="editor-monaco-wrapper">
+      <div className="editor-monaco-wrapper" onContextMenu={handleEditorContextMenu}>
         <Editor
           height="100%"
           width="100%"
@@ -384,6 +443,30 @@ const _Editor = memo(({ editorRef }) => {
           theme='codecast-theme'
           options={options}
         />
+        {ctxMenu && (
+          <div
+            className="menu-dropdown editor-ctx-menu"
+            style={{ left: ctxMenu.x, top: ctxMenu.y, position: 'absolute' }}
+          >
+            <button className="menu-item" onClick={() => editorCtxActions('editor.action.clipboardCutAction')}>
+              <span style={{ display: 'flex', alignItems: 'center', gap: 8 }}><FiScissors size={12} /> Cut</span>
+              <span className="menu-item-shortcut">Ctrl+X</span>
+            </button>
+            <button className="menu-item" onClick={() => editorCtxActions('editor.action.clipboardCopyAction')}>
+              <span style={{ display: 'flex', alignItems: 'center', gap: 8 }}><FiCopy size={12} /> Copy</span>
+              <span className="menu-item-shortcut">Ctrl+C</span>
+            </button>
+            <button className="menu-item" onClick={() => editorCtxActions('editor.action.clipboardPasteAction')}>
+              <span style={{ display: 'flex', alignItems: 'center', gap: 8 }}><FiClipboard size={12} /> Paste</span>
+              <span className="menu-item-shortcut">Ctrl+V</span>
+            </button>
+            <div className="menu-separator" />
+            <button className="menu-item" onClick={() => editorCtxActions('editor.action.selectAll')}>
+              <span style={{ display: 'flex', alignItems: 'center', gap: 8 }}><FiList size={12} /> Select All</span>
+              <span className="menu-item-shortcut">Ctrl+A</span>
+            </button>
+          </div>
+        )}
       </div>
     </div>
   )

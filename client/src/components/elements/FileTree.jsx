@@ -4,8 +4,10 @@ import {
   getActiveFile, switchFile as recordSwitchFile,
   getFiles, exportRecord, importFromFile, isTypistLoaded, stopPlay,
   addFile, getFileFirstValue,
+  renameFile as recordRenameFile, removeFile as recordRemoveFile,
+  init as initRecord,
 } from "../../functions/record";
-import { FiFileText, FiCode, FiImage, FiChevronRight, FiChevronDown, FiFolder, FiDownload, FiUpload } from "react-icons/fi";
+import { FiFileText, FiCode, FiImage, FiChevronRight, FiChevronDown, FiFolder, FiDownload, FiUpload, FiEdit2, FiTrash2, FiX } from "react-icons/fi";
 
 const TEXT_EXTS = new Set([
   "js", "jsx", "ts", "tsx", "mjs", "cjs",
@@ -61,7 +63,7 @@ function sortFsEntries(entries) {
 }
 
 const FileTree = memo(() => {
-  const { activeFile, setActiveFile, setFiles, playing, currentWorkspace, setToast, setRecordName, setCurrentRecord, setPlaying, recording } = useContext(GlobalContext);
+  const { activeFile, setActiveFile, setFiles, playing, currentWorkspace, setToast, setRecordName, currentRecord, setCurrentRecord, setPlaying, recording } = useContext(GlobalContext);
   const importInputRef = useRef(null);
   const f = window.electronAPI?.file;
   const pathUtil = window.electronAPI?.path;
@@ -70,6 +72,11 @@ const FileTree = memo(() => {
   const [expanded, setExpanded] = useState({});
   const [dirContents, setDirContents] = useState({});
   const [loading, setLoading] = useState({});
+  const [ctxMenu, setCtxMenu] = useState(null);
+  const [renaming, setRenaming] = useState(null);
+  const [renameValue, setRenameValue] = useState("");
+  const [confirmDelete, setConfirmDelete] = useState(null);
+  const [missingFiles, setMissingFiles] = useState([]);
 
   const expandedRef = useRef(expanded);
   const dirContentsRef = useRef(dirContents);
@@ -104,6 +111,166 @@ const FileTree = memo(() => {
     setDirContents({});
     loadDir(workspacePath, workspacePath);
   }, [workspacePath, f, loadDir]);
+
+  useEffect(() => {
+    if (!ctxMenu) return;
+    const close = () => { setCtxMenu(null); setConfirmDelete(null); };
+    window.addEventListener('click', close);
+    window.addEventListener('contextmenu', close);
+    return () => {
+      window.removeEventListener('click', close);
+      window.removeEventListener('contextmenu', close);
+    };
+  }, [ctxMenu]);
+
+  useEffect(() => {
+    if (!isTypistLoaded() || !getFiles().length) {
+      setMissingFiles([]);
+      return;
+    }
+    const recordFiles = getFiles();
+    if (!workspacePath || !f) {
+      setMissingFiles(recordFiles.map(x => x.name));
+      return;
+    }
+    const check = async () => {
+      const results = [];
+      for (const rf of recordFiles) {
+        const absPath = pathUtil.join(workspacePath, rf.name);
+        try {
+          const exists = await f.exists(absPath);
+          if (!exists) results.push(rf.name);
+        } catch {
+          results.push(rf.name);
+        }
+      }
+      setMissingFiles(results);
+    };
+    check();
+  }, [workspacePath, currentRecord, f, pathUtil]);
+
+  const forceRefresh = useCallback(async () => {
+    if (!workspacePath || !f) return;
+    dirContentsRef.current = {};
+    loadingRef.current = {};
+    setDirContents({});
+    setExpanded({});
+    await loadDir(workspacePath, workspacePath);
+  }, [workspacePath, f, loadDir]);
+
+  const restoreMissingFile = useCallback(async (name) => {
+    if (!workspacePath || !f || !pathUtil) {
+      recordSwitchFile(name);
+      setActiveFile(name);
+      return;
+    }
+    const content = getFileFirstValue(name) || "";
+    const absPath = pathUtil.join(workspacePath, name);
+    const parentDir = name.includes('/') ? pathUtil.join(workspacePath, name.split('/').slice(0, -1).join('/')) : workspacePath;
+    try {
+      if (name.includes('/')) await f.mkdir(parentDir);
+      await f.write(absPath, content);
+      recordSwitchFile(name);
+      setActiveFile(name);
+      await forceRefresh();
+    } catch (err) {
+      setToast({ type: "ERROR", message: err.message || "Failed to restore file" });
+    }
+  }, [workspacePath, f, pathUtil, setToast, setActiveFile, forceRefresh]);
+
+  const closeRecord = useCallback(() => {
+    initRecord();
+    setCurrentRecord(null);
+    setRecordName("Untitled");
+    setFiles([]);
+    setActiveFile(null);
+  }, [setCurrentRecord, setRecordName, setFiles, setActiveFile]);
+
+  const handleContextMenu = useCallback((e, relPath, isDir) => {
+    if (playing) return;
+    e.preventDefault();
+    e.stopPropagation();
+    const container = e.currentTarget.closest('.file-tree-items');
+    const rect = container?.getBoundingClientRect();
+    const menuWidth = 220;
+    let x = e.clientX - (rect?.left || 0);
+    let y = e.clientY - (rect?.top || 0);
+    if (rect && x + menuWidth > rect.width) {
+      x = Math.max(0, rect.width - menuWidth);
+    }
+    const menuHeight = 100;
+    if (rect && y + menuHeight > rect.height) {
+      y = Math.max(0, rect.height - menuHeight);
+    }
+    setCtxMenu({ x, y, relPath, isDir });
+    setRenaming(null);
+  }, [playing]);
+
+  const startRename = useCallback((relPath) => {
+    const name = relPath.split('/').pop();
+    setRenaming(relPath);
+    setRenameValue(name);
+    setCtxMenu(null);
+    setConfirmDelete(null);
+  }, []);
+
+  const submitRename = useCallback(async (oldRelPath) => {
+    const newName = renameValue.trim();
+    if (!newName) {
+      setRenaming(null);
+      return;
+    }
+    const parts = oldRelPath.split('/');
+    parts[parts.length - 1] = newName;
+    const newRelPath = parts.join('/');
+    if (newRelPath === oldRelPath) { setRenaming(null); return; }
+    if (workspacePath && f && pathUtil) {
+      const oldAbs = pathUtil.join(workspacePath, oldRelPath);
+      const newAbs = pathUtil.join(workspacePath, newRelPath);
+      try {
+        const exists = await f.exists(newAbs);
+        if (exists) {
+          setToast({ type: "WARNING", message: `"${newName}" already exists` });
+          return;
+        }
+        await f.rename(oldAbs, newAbs);
+      } catch (err) {
+        setToast({ type: "ERROR", message: err.message || "Failed to rename" });
+        setRenaming(null);
+        return;
+      }
+    }
+    recordRenameFile(oldRelPath, newRelPath);
+    window.__renameModel?.(oldRelPath, newRelPath);
+    setFiles(getFiles());
+    if (workspacePath) await forceRefresh();
+    setRenaming(null);
+  }, [renameValue, workspacePath, f, pathUtil, setToast, setFiles, forceRefresh]);
+
+  const handleDelete = useCallback(async (relPath, isDir) => {
+    if (confirmDelete === relPath) {
+      if (workspacePath && f && pathUtil) {
+        const absPath = pathUtil.join(workspacePath, relPath);
+        try {
+          await f.remove(absPath);
+        } catch (err) {
+          setToast({ type: "ERROR", message: err.message || "Failed to delete" });
+          setConfirmDelete(null);
+          setCtxMenu(null);
+          return;
+        }
+      }
+      recordRemoveFile(relPath);
+      window.__removeModel?.(relPath);
+      setFiles(getFiles());
+      if (workspacePath) await forceRefresh();
+      setToast({ type: "SUCCESS", message: `Deleted "${relPath}"` });
+      setConfirmDelete(null);
+      setCtxMenu(null);
+    } else {
+      setConfirmDelete(relPath);
+    }
+  }, [workspacePath, f, pathUtil, setToast, setFiles, forceRefresh, confirmDelete]);
 
   const toggleDir = useCallback((absPath, relativeKey, currentlyOpen) => {
     if (currentlyOpen) {
@@ -207,6 +374,7 @@ const FileTree = memo(() => {
           className="file-tree-item file-tree-folder"
           style={{ paddingLeft: 8 + depth * 14 }}
           onClick={() => toggleDir(absPath, relPath, isOpen)}
+          onContextMenu={(e) => handleContextMenu(e, relPath, true)}
         >
           <span className="file-tree-item-icon">
             {isLoading ? <span style={{ fontSize: 10 }}>...</span>
@@ -229,17 +397,36 @@ const FileTree = memo(() => {
   }
 
   function renderFile(entry, relPath, depth) {
+    const isRenaming = renaming === relPath;
     return (
       <div
         key={relPath}
-        className={"file-tree-item" + (relPath === currentActive ? " active" : "") + (playing ? " no-interact" : "")}
+        className={"file-tree-item" + (relPath === currentActive ? " active" : "") + (playing ? " no-interact" : "") + (isRenaming ? " renaming" : "")}
         style={{ paddingLeft: 8 + (depth + 1) * 14 }}
-        onClick={() => handleFileClick(relPath)}
+        onClick={() => { if (!isRenaming) handleFileClick(relPath); }}
+        onContextMenu={(e) => handleContextMenu(e, relPath, false)}
         title={relPath}
       >
         <span className="file-tree-item-icon">{extIcon(relPath)}</span>
-        <span className="file-tree-item-name">{entry.name}</span>
-        <span className="file-tree-item-lang">{extLang(relPath)}</span>
+        {isRenaming ? (
+          <input
+            className="file-tree-rename-input"
+            value={renameValue}
+            onChange={e => setRenameValue(e.target.value)}
+            onKeyDown={e => {
+              if (e.key === 'Enter') submitRename(relPath);
+              if (e.key === 'Escape') setRenaming(null);
+            }}
+            onBlur={() => submitRename(relPath)}
+            autoFocus
+            onClick={e => e.stopPropagation()}
+          />
+        ) : (
+          <>
+            <span className="file-tree-item-name">{entry.name}</span>
+            <span className="file-tree-item-lang">{extLang(relPath)}</span>
+          </>
+        )}
       </div>
     );
   }
@@ -252,6 +439,16 @@ const FileTree = memo(() => {
       <div className="file-tree-meta">
         <span>{workspacePath ? currentWorkspace?.name || "Project" : "No project"}</span>
         <span className="file-tree-actions">
+          {currentRecord && (
+            <button
+              className="file-tree-action-btn"
+              onClick={closeRecord}
+              title="Close record"
+              aria-label="Close record"
+            >
+              <FiX size={12} />
+            </button>
+          )}
           <button
             className="file-tree-action-btn"
             onClick={() => importInputRef.current?.click()}
@@ -285,21 +482,42 @@ const FileTree = memo(() => {
         isTypistLoaded() ? (
           <div className="file-tree-record-files">
             <div className="file-tree-record-header">Record Files</div>
-            {getFiles().map(f => (
-              <div
-                key={f.name}
-                className={"file-tree-item" + (f.name === currentActive ? " active" : "") + (playing ? " no-interact" : "")}
-                style={{ paddingLeft: 24 }}
-                onClick={() => handleRecordFileClick(f.name)}
-                title={f.name}
-              >
-                <span className="file-tree-item-icon">{extIcon(f.name)}</span>
-                <span className="file-tree-item-name">
-                  {f.name.split('/').pop()}
-                </span>
-                <span className="file-tree-item-path">{f.name.split('/').slice(0, -1).join('/')}</span>
-              </div>
-            ))}
+            {getFiles().map(f => {
+              const isRenaming = renaming === f.name;
+              return (
+                <div
+                  key={f.name}
+                  className={"file-tree-item" + (f.name === currentActive ? " active" : "") + (playing ? " no-interact" : "") + (isRenaming ? " renaming" : "")}
+                  style={{ paddingLeft: 24 }}
+                  onClick={() => { if (!isRenaming) handleRecordFileClick(f.name); }}
+                  onContextMenu={(e) => { if (!playing) handleContextMenu(e, f.name, false); }}
+                  title={f.name}
+                >
+                  <span className="file-tree-item-icon">{extIcon(f.name)}</span>
+                  {isRenaming ? (
+                    <input
+                      className="file-tree-rename-input"
+                      value={renameValue}
+                      onChange={e => setRenameValue(e.target.value)}
+                      onKeyDown={e => {
+                        if (e.key === 'Enter') submitRename(f.name);
+                        if (e.key === 'Escape') setRenaming(null);
+                      }}
+                      onBlur={() => submitRename(f.name)}
+                      autoFocus
+                      onClick={e => e.stopPropagation()}
+                    />
+                  ) : (
+                    <>
+                      <span className="file-tree-item-name">
+                        {f.name.split('/').pop()}
+                      </span>
+                      <span className="file-tree-item-path">{f.name.split('/').slice(0, -1).join('/')}</span>
+                    </>
+                  )}
+                </div>
+              );
+            })}
           </div>
         ) : (
           <div className="file-tree-empty">No project open</div>
@@ -309,6 +527,46 @@ const FileTree = memo(() => {
       ) : (
         <div>
           {renderChildren(rootContents, "", -1)}
+          {missingFiles.length > 0 && (
+            <>
+              <div className="file-tree-record-header" style={{ paddingTop: 12 }}>Missing Record Files</div>
+              {missingFiles.map(name => (
+                <div
+                  key={name}
+                  className="file-tree-item file-tree-missing"
+                  style={{ paddingLeft: 24 }}
+                  onClick={() => restoreMissingFile(name)}
+                  title={`Click to restore "${name}"`}
+                >
+                  <span className="file-tree-item-icon">{extIcon(name)}</span>
+                  <span className="file-tree-item-name">{name.split('/').pop()}</span>
+                  <span className="file-tree-item-path">{name.split('/').slice(0, -1).join('/') || '/'}</span>
+                </div>
+              ))}
+            </>
+          )}
+        </div>
+      )}
+      {ctxMenu && (
+        <div
+          className="menu-dropdown"
+          style={{ left: ctxMenu.x, top: ctxMenu.y, position: 'absolute' }}
+          onClick={e => e.stopPropagation()}
+        >
+          <button className="menu-item" onClick={() => startRename(ctxMenu.relPath)}>
+            <span style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+              <FiEdit2 size={12} /> Rename
+            </span>
+          </button>
+          <div className="menu-separator" />
+          <button
+            className={"menu-item" + (confirmDelete === ctxMenu.relPath ? " confirming" : "")}
+            onClick={() => handleDelete(ctxMenu.relPath, ctxMenu.isDir)}
+          >
+            <span style={{ display: 'flex', alignItems: 'center', gap: 8, color: confirmDelete === ctxMenu.relPath ? '#e74c3c' : undefined }}>
+              <FiTrash2 size={12} /> {confirmDelete === ctxMenu.relPath ? 'Confirm Delete' : 'Delete'}
+            </span>
+          </button>
         </div>
       )}
     </div>
