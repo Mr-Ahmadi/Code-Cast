@@ -880,6 +880,15 @@ body.dialog-open .resizer {
   border-bottom-color: transparent;
 }
 
+.file-tab.preview {
+  opacity: 0.6;
+  font-style: italic;
+}
+
+.file-tab.preview.active {
+  opacity: 0.85;
+}
+
 .file-tab.no-interact {
   cursor: default;
   opacity: 0.8;
@@ -1049,6 +1058,14 @@ body.dialog-open .resizer {
   font-size: 13px;
   line-height: 1.5;
   font-family: var(--font-ui);
+}
+
+.editor-monaco-wrapper.hidden {
+  display: none;
+}
+
+.binary-view {
+  z-index: 15;
 }
 
 /* ============================================================

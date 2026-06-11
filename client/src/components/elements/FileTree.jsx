@@ -5,54 +5,16 @@ import {
   getFiles, exportRecord, importFromFile, isTypistLoaded, stopPlay,
   addFile, getFileFirstValue,
   renameFile as recordRenameFile, removeFile as recordRemoveFile,
-  init as initRecord,
 } from "../../functions/record";
-import { FiFileText, FiCode, FiImage, FiChevronRight, FiChevronDown, FiFolder, FiDownload, FiUpload, FiEdit2, FiTrash2, FiX, FiPlus } from "react-icons/fi";
-
-const TEXT_EXTS = new Set([
-  "js", "jsx", "ts", "tsx", "mjs", "cjs",
-  "html", "htm", "css", "scss", "less", "sass",
-  "py", "rb", "go", "rs", "java", "kt", "swift", "c", "cpp", "h", "hpp",
-  "json", "xml", "yaml", "yml", "toml", "ini", "cfg",
-  "md", "txt", "sh", "bash", "zsh", "fish",
-  "sql", "graphql", "r", "lua", "php", "pl", "pm",
-  "env", "gitignore", "dockerfile", "makefile",
-  "conf", "log", "lock",
-]);
-
-function isTextFile(name) {
-  const ext = name.split(".").pop().toLowerCase();
-  return TEXT_EXTS.has(ext);
-}
-
-function extLang(name) {
-  const ext = name.split(".").pop().toLowerCase();
-  const map = {
-    html: "html", htm: "html",
-    css: "css",
-    js: "javascript", jsx: "javascript", mjs: "javascript", cjs: "javascript",
-    ts: "typescript", tsx: "typescript",
-    py: "python",
-    json: "json",
-    md: "markdown",
-    xml: "xml", svg: "xml",
-    sql: "sql",
-    sh: "shell", bash: "shell", zsh: "shell",
-  };
-  return map[ext] || "plaintext";
-}
+import { isBinaryFile, extLang, getIconType } from "../../functions/fileTypes";
+import { FiFileText, FiCode, FiImage, FiChevronRight, FiChevronDown, FiFolder, FiDownload, FiUpload, FiEdit2, FiTrash2, FiPlus, FiAlertTriangle } from "react-icons/fi";
 
 function extIcon(name) {
-  const ext = name.split(".").pop().toLowerCase();
-  switch (ext) {
-    case "js": case "jsx": case "ts": case "tsx": case "mjs": case "cjs":
-    case "html": case "htm":
-    case "css": case "scss": case "less":
-      return <FiCode size={14} />;
-    case "png": case "jpg": case "jpeg": case "gif": case "svg": case "ico":
-      return <FiImage size={14} />;
-    default:
-      return <FiFileText size={14} />;
+  const type = getIconType(name);
+  switch (type) {
+    case "code": return <FiCode size={14} />;
+    case "image": return <FiImage size={14} />;
+    default: return <FiFileText size={14} />;
   }
 }
 
@@ -63,7 +25,7 @@ function sortFsEntries(entries) {
 }
 
 const FileTree = memo(() => {
-  const { activeFile, setActiveFile, setFiles, playing, currentWorkspace, setToast, setRecordName, currentRecord, setCurrentRecord, setPlaying, recording } = useContext(GlobalContext);
+  const { activeFile, setActiveFile, setFiles, playing, paused, currentWorkspace, setToast, setRecordName, currentRecord, setCurrentRecord, setPlaying, recording, previewFile, setPreviewFile } = useContext(GlobalContext);
   const importInputRef = useRef(null);
   const f = window.electronAPI?.file;
   const pathUtil = window.electronAPI?.path;
@@ -187,7 +149,7 @@ const FileTree = memo(() => {
   }, [workspacePath, f, loadDir]);
 
   const restoreMissingFile = useCallback(async (name) => {
-    if (playing) return;
+    if (playing && !paused) return;
     if (!workspacePath || !f || !pathUtil) {
       recordSwitchFile(name);
       setActiveFile(name);
@@ -203,10 +165,11 @@ const FileTree = memo(() => {
       setActiveFile(name);
       setMissingFiles(prev => prev.filter(n => n !== name));
       await forceRefresh();
+      setToast({ type: "SUCCESS", message: `Restored ${name} to project.` });
     } catch (err) {
       setToast({ type: "ERROR", message: err.message || "Failed to restore file" });
     }
-  }, [playing, workspacePath, f, pathUtil, setToast, setActiveFile, forceRefresh]);
+  }, [playing, paused, workspacePath, f, pathUtil, setToast, setActiveFile, forceRefresh]);
 
   const startNewFile = useCallback((parentRel) => {
     setNewFileParent(parentRel);
@@ -255,14 +218,6 @@ const FileTree = memo(() => {
     setNewFileParent(null);
     setNewFileName("");
   }, [newFileName, newFileParent, workspacePath, f, pathUtil, setToast, setActiveFile, setFiles, forceRefresh]);
-
-  const closeRecord = useCallback(() => {
-    initRecord();
-    setCurrentRecord(null);
-    setRecordName("Untitled");
-    setFiles([]);
-    setActiveFile(null);
-  }, [setCurrentRecord, setRecordName, setFiles, setActiveFile]);
 
   const handleContextMenu = useCallback((e, relPath, isDir) => {
     if (playing) return;
@@ -374,13 +329,23 @@ const FileTree = memo(() => {
 
   const handleFileClick = useCallback(async (relativePath) => {
     if (playing || !f || !workspacePath) return;
-    if (!isTextFile(relativePath)) {
-      setToast({ type: "WARNING", message: `${relativePath} is not a text file.` });
-      return;
+    
+    if (isBinaryFile(relativePath)) {
+      setToast({ type: "WARNING", message: `${relativePath} is a binary file. It may not display correctly.` });
     }
+
     const registeredFiles = getFiles();
     const alreadyRegistered = registeredFiles.some(x => x.name === relativePath);
-    if (!alreadyRegistered) {
+    
+    if (alreadyRegistered) {
+      setPreviewFile(null);
+      recordSwitchFile(relativePath);
+      setActiveFile(relativePath);
+      return;
+    }
+
+    if (previewFile === relativePath) {
+      // Second click: promote to project
       const fullPath = getAbsPath(relativePath);
       if (!fullPath) return;
       try {
@@ -391,14 +356,18 @@ const FileTree = memo(() => {
         }
         addFile(relativePath, extLang(relativePath), content);
         setFiles(getFiles());
+        setPreviewFile(null);
+        recordSwitchFile(relativePath);
+        setActiveFile(relativePath);
       } catch (err) {
         setToast({ type: "ERROR", message: err.message || "Failed to read file" });
-        return;
       }
+    } else {
+      // First click: set as preview
+      setPreviewFile(relativePath);
+      setActiveFile(relativePath);
     }
-    recordSwitchFile(relativePath);
-    setActiveFile(relativePath);
-  }, [playing, f, workspacePath, getAbsPath, setActiveFile, setFiles, setToast]);
+  }, [playing, f, workspacePath, getAbsPath, setActiveFile, setFiles, setToast, previewFile, setPreviewFile]);
 
   const handleRecordFileClick = useCallback((name) => {
     if (playing) return;
@@ -490,11 +459,12 @@ const FileTree = memo(() => {
       <div
         key={relPath}
         className={"file-tree-item" + (relPath === currentActive ? " active" : "") + (playing ? " no-interact" : "") + (isRenaming ? " renaming" : "")}
-        style={{ paddingLeft: 8 + (depth + 1) * 14 }}
+        style={{ paddingLeft: 8 + depth * 14 }}
         onClick={() => { if (!isRenaming) handleFileClick(relPath); }}
         onContextMenu={(e) => handleContextMenu(e, relPath, false)}
         title={relPath}
       >
+        <span className="file-tree-item-icon" />
         <span className="file-tree-item-icon">{extIcon(relPath)}</span>
         {isRenaming ? (
           <input
@@ -522,14 +492,16 @@ const FileTree = memo(() => {
   function renderMissingFile(name, depth) {
     const displayName = name.split('/').pop();
     const dirPath = name.includes('/') ? name.split('/').slice(0, -1).join('/') : '';
+    const canRestore = !playing || paused;
     return (
       <div
         key={`miss-${name}`}
-        className={"file-tree-item file-tree-missing" + (playing ? " no-interact" : "")}
-        style={{ paddingLeft: 8 + (depth + 1) * 14 }}
-        onClick={() => { if (!playing) restoreMissingFile(name); }}
-        title={`"${name}" doesn't exist on disk — click to restore`}
+        className={"file-tree-item file-tree-missing" + (!canRestore ? " no-interact" : "")}
+        style={{ paddingLeft: 8 + depth * 14 }}
+        onClick={() => { if (canRestore) restoreMissingFile(name); }}
+        title={canRestore ? `"${name}" doesn't exist on disk — click to restore` : `"${name}" doesn't exist on disk`}
       >
+        <span className="file-tree-item-icon" />
         <span className="file-tree-item-icon">{extIcon(name)}</span>
         <span className="file-tree-item-name">{displayName}</span>
         {dirPath && <span className="file-tree-item-path">{dirPath}</span>}
@@ -581,16 +553,6 @@ const FileTree = memo(() => {
               aria-label="New file"
             >
               <FiPlus size={12} />
-            </button>
-          )}
-          {currentRecord && (
-            <button
-              className="file-tree-action-btn"
-              onClick={closeRecord}
-              title="Close record"
-              aria-label="Close record"
-            >
-              <FiX size={12} />
             </button>
           )}
           <button

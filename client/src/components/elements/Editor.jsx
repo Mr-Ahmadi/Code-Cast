@@ -6,12 +6,13 @@ import {
   addFile as recordAddFile, removeFile as recordRemoveFile, switchFile as recordSwitchFile,
   ensureFileContent, isTypistLoaded,
 } from '../../functions/record';
-import { FiFolder, FiScissors, FiCopy, FiClipboard, FiList } from 'react-icons/fi';
+import { isBinaryFile, extLang } from '../../functions/fileTypes';
+import { FiFolder, FiScissors, FiCopy, FiClipboard, FiList, FiAlertTriangle, FiFileText } from 'react-icons/fi';
 import PropTypes from 'prop-types';
 
 const _Editor = memo(({ editorRef }) => {
   const { 
-    recording, fontSize, showMinimap, activeFile, 
+    recording, fontSize, showMinimap, activeFile, previewFile,
     setActiveFile, setFiles, currentWorkspace, autoSave, setToast, theme
   } = useContext(GlobalContext);
 
@@ -57,11 +58,11 @@ const _Editor = memo(({ editorRef }) => {
   }, []);
 
   const saveCurrentFile = useCallback(async () => {
-    if (!activeFile) return false;
+    if (!activeFile || activeFile === previewFile) return false;
     const content = editorRef.current?.getValue();
     if (content === undefined) return false;
     return saveRelativeFile(activeFile, content);
-  }, [activeFile, editorRef, saveRelativeFile]);
+  }, [activeFile, previewFile, editorRef, saveRelativeFile]);
 
   const saveAllFiles = useCallback(async () => {
     if (!currentWorkspace?.path) return false;
@@ -104,8 +105,22 @@ const _Editor = memo(({ editorRef }) => {
 
   const [ctxMenu, setCtxMenu] = useState(null);
 
+  const modKey = window.electronAPI?.platform === 'darwin' ? 'Cmd' : 'Ctrl';
+
   const editorCtxActions = useCallback((actionId) => {
-    triggerEditorAction(actionId);
+    const editor = editorRef.current;
+    if (!editor) return;
+    editor.focus();
+
+    if (actionId === 'editor.action.clipboardCopyAction') {
+      document.execCommand('copy');
+    } else if (actionId === 'editor.action.clipboardCutAction') {
+      document.execCommand('cut');
+    } else if (actionId === 'editor.action.clipboardPasteAction') {
+      document.execCommand('paste');
+    } else {
+      triggerEditorAction(actionId);
+    }
     setCtxMenu(null);
   }, [triggerEditorAction]);
 
@@ -165,6 +180,7 @@ const _Editor = memo(({ editorRef }) => {
   }, [activeFile]);
 
   const handleEditorChange = useCallback(() => {
+    if (!editorRef.current) return;
     const currentValue = editorRef.current.getValue();
     
     if (recordingRef.current) {
@@ -172,40 +188,22 @@ const _Editor = memo(({ editorRef }) => {
     }
     oldValue.current = currentValue;
 
-    if (autoSave && !recordingRef.current) {
+    if (autoSave && !recordingRef.current && activeFileRef.current !== previewFile) {
       if (autoSaveTimerRef.current) clearTimeout(autoSaveTimerRef.current);
       autoSaveTimerRef.current = setTimeout(() => {
         saveCurrentFile();
       }, 1000);
     }
-  }, [autoSave, editorRef, saveCurrentFile]);
-
-  const langForExt = useCallback((name) => {
-    const ext = name.split(".").pop().toLowerCase();
-    const map = {
-      html: "html", htm: "html",
-      css: "css",
-      js: "javascript", jsx: "javascript", mjs: "javascript", cjs: "javascript",
-      ts: "typescript", tsx: "typescript",
-      py: "python",
-      json: "json",
-      md: "markdown",
-      xml: "xml", svg: "xml",
-      sql: "sql",
-      sh: "shell", bash: "shell",
-      txt: "plaintext",
-    };
-    return map[ext] || "plaintext";
-  }, []);
+  }, [autoSave, editorRef, saveCurrentFile, previewFile]);
 
   const createModel = useCallback((monaco, name, content, language) => {
     if (modelsRef.current[name]) return modelsRef.current[name];
     const uri = monaco.Uri.parse(`file:///${name}`);
-    const lang = language || langForExt(name);
+    const lang = language || extLang(name);
     const model = monaco.editor.createModel(content || "", lang, uri);
     modelsRef.current[name] = model;
     return model;
-  }, [langForExt]);
+  }, []);
 
   const switchEditorModel = useCallback((name) => {
     const ed = editorRef.current;
@@ -319,8 +317,8 @@ const _Editor = memo(({ editorRef }) => {
       if (getFiles().some((f) => f.name === relativePath)) {
         recordRemoveFile(relativePath);
       }
-      recordAddFile(relativePath, langForExt(relativePath), content);
-      ensureModel(relativePath, content, langForExt(relativePath));
+      recordAddFile(relativePath, extLang(relativePath), content);
+      ensureModel(relativePath, content, extLang(relativePath));
       recordSwitchFile(relativePath);
       setActiveFile(relativePath);
       setFiles(getFiles());
@@ -328,7 +326,7 @@ const _Editor = memo(({ editorRef }) => {
 
     setToast({ type: "SUCCESS", message: `Saved as ${relativePath}` });
     return true;
-  }, [activeFile, currentWorkspace?.path, editorRef, ensureModel, getRelativePathFromWorkspace, langForExt, setActiveFile, setFiles, setToast]);
+  }, [activeFile, currentWorkspace?.path, editorRef, ensureModel, getRelativePathFromWorkspace, setActiveFile, setFiles, setToast]);
 
   useEffect(() => {
     // Small delay to ensure the data-theme attribute is applied to the DOM
@@ -391,8 +389,13 @@ const _Editor = memo(({ editorRef }) => {
     const load = async () => {
       let content = modelsRef.current[activeFile] ? undefined : (getFileFirstValue(activeFile) || "");
       if (!content && currentWorkspace?.path) {
-        await ensureFileContent(activeFile, currentWorkspace.path);
-        content = getFileFirstValue(activeFile) || "";
+        if (activeFile === previewFile) {
+          const fullPath = window.electronAPI.path.join(currentWorkspace.path, activeFile);
+          content = await window.electronAPI.file.read(fullPath);
+        } else {
+          await ensureFileContent(activeFile, currentWorkspace.path);
+          content = getFileFirstValue(activeFile) || "";
+        }
       }
       ensureModel(activeFile, content, undefined);
       if (modelsRef.current[activeFile]) {
@@ -400,9 +403,10 @@ const _Editor = memo(({ editorRef }) => {
       }
     };
     load();
-  }, [activeFile, switchEditorModel, ensureModel, currentWorkspace?.path]);
+  }, [activeFile, switchEditorModel, ensureModel, currentWorkspace?.path, previewFile]);
 
   const noProject = !currentWorkspace && !isTypistLoaded();
+  const noTabsOpen = !noProject && !activeFile;
 
   const options = {
     fontSize,
@@ -420,6 +424,8 @@ const _Editor = memo(({ editorRef }) => {
     contextmenu: false,
   };
 
+  const isBinary = activeFile && isBinaryFile(activeFile);
+
   return (
     <div className='editor-container' ref={resumeFlashRef} role="region" aria-label="Code editor">
       {noProject && (
@@ -434,7 +440,26 @@ const _Editor = memo(({ editorRef }) => {
             </div>
           </div>
       )}
-      <div className="editor-monaco-wrapper" onContextMenu={handleEditorContextMenu}>
+      {!noProject && isBinary && (
+          <div className="editor-no-project binary-view">
+            <div className="editor-no-project-content">
+              <FiFileText size={48} />
+              <h3>Binary File</h3>
+              <p>The file is not displayed in the editor because it is either binary or uses an unsupported text encoding.</p>
+              <p style={{fontSize: '0.85em', opacity: 0.7}}>File: {activeFile}</p>
+            </div>
+          </div>
+      )}
+      {noTabsOpen && (
+        <div className="editor-no-project">
+          <div className="editor-no-project-content">
+            <FiFileText size={48} style={{ opacity: 0.3 }} />
+            <h3>No File Open</h3>
+            <p>Open a file from the explorer or create a new one to start editing.</p>
+          </div>
+        </div>
+      )}
+      <div className={`editor-monaco-wrapper ${(noProject || isBinary || noTabsOpen) ? 'hidden' : ''}`} onContextMenu={handleEditorContextMenu}>
         <Editor
           height="100%"
           width="100%"
@@ -450,20 +475,20 @@ const _Editor = memo(({ editorRef }) => {
           >
             <button className="menu-item" onClick={() => editorCtxActions('editor.action.clipboardCutAction')}>
               <span style={{ display: 'flex', alignItems: 'center', gap: 8 }}><FiScissors size={12} /> Cut</span>
-              <span className="menu-item-shortcut">Ctrl+X</span>
+              <span className="menu-item-shortcut">{modKey}+X</span>
             </button>
             <button className="menu-item" onClick={() => editorCtxActions('editor.action.clipboardCopyAction')}>
               <span style={{ display: 'flex', alignItems: 'center', gap: 8 }}><FiCopy size={12} /> Copy</span>
-              <span className="menu-item-shortcut">Ctrl+C</span>
+              <span className="menu-item-shortcut">{modKey}+C</span>
             </button>
             <button className="menu-item" onClick={() => editorCtxActions('editor.action.clipboardPasteAction')}>
               <span style={{ display: 'flex', alignItems: 'center', gap: 8 }}><FiClipboard size={12} /> Paste</span>
-              <span className="menu-item-shortcut">Ctrl+V</span>
+              <span className="menu-item-shortcut">{modKey}+V</span>
             </button>
             <div className="menu-separator" />
             <button className="menu-item" onClick={() => editorCtxActions('editor.action.selectAll')}>
               <span style={{ display: 'flex', alignItems: 'center', gap: 8 }}><FiList size={12} /> Select All</span>
-              <span className="menu-item-shortcut">Ctrl+A</span>
+              <span className="menu-item-shortcut">{modKey}+A</span>
             </button>
           </div>
         )}

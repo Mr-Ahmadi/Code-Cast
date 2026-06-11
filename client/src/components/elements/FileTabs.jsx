@@ -4,19 +4,15 @@ import {
   getFiles, getActiveFile, addFile as recordAddFile,
   switchFile as recordSwitchFile,
 } from "../../functions/record";
+import { getIconType } from "../../functions/fileTypes";
 import { FiPlus, FiX, FiFileText, FiCode, FiImage } from "react-icons/fi";
 
 const tabIcon = (name) => {
-  const ext = name.split(".").pop().toLowerCase();
-  switch (ext) {
-    case "js": case "jsx": case "ts": case "tsx":
-    case "html": case "htm":
-    case "css": case "scss": case "less":
-      return <FiCode size={12} />;
-    case "png": case "jpg": case "jpeg": case "gif": case "svg":
-      return <FiImage size={12} />;
-    default:
-      return <FiFileText size={12} />;
+  const type = getIconType(name);
+  switch (type) {
+    case "code": return <FiCode size={12} />;
+    case "image": return <FiImage size={12} />;
+    default: return <FiFileText size={12} />;
   }
 };
 
@@ -25,36 +21,40 @@ const sameArray = (a = [], b = []) => (
 );
 
 const FileTabs = memo(() => {
-  const { recording, playing, activeFile, files, setActiveFile, currentWorkspace } = useContext(GlobalContext);
+  const { recording, playing, paused, activeFile, previewFile, setPreviewFile, files, setFiles, setActiveFile, currentWorkspace } = useContext(GlobalContext);
   const [showNewFile, setShowNewFile] = useState(false);
   const [newFileName, setNewFileName] = useState("");
   const [openTabs, setOpenTabs] = useState(() => files.map((f) => f.name));
 
-  const currentActive = playing ? activeFile : (getActiveFile() || activeFile);
+  const currentActive = (playing || recording) ? activeFile : (getActiveFile() || activeFile);
   const visibleTabs = openTabs
-    .map((name) => files.find((f) => f.name === name))
+    .map((name) => {
+      const f = files.find((f) => f.name === name);
+      if (f) return { ...f, isPreview: false };
+      return null;
+    })
     .filter(Boolean);
+
+  if (previewFile && !visibleTabs.some(t => t.name === previewFile)) {
+    visibleTabs.push({ name: previewFile, isPreview: true });
+  }
 
   useEffect(() => {
     const existingNames = new Set(files.map((f) => f.name));
     setOpenTabs((prev) => {
       let next = prev.filter((name) => existingNames.has(name));
-      if (currentActive && existingNames.has(currentActive) && !next.includes(currentActive)) {
+      if (activeFile && currentActive && existingNames.has(currentActive) && !next.includes(currentActive)) {
         next = [...next, currentActive];
-      }
-      if (next.length === 0 && files.length > 0) {
-        const fallback = (currentActive && existingNames.has(currentActive)) ? currentActive : files[0].name;
-        next = [fallback];
       }
       return sameArray(prev, next) ? prev : next;
     });
-  }, [files, currentActive]);
+  }, [files, currentActive, activeFile]);
 
   useEffect(() => {
-    if (currentActive) {
+    if (activeFile && currentActive && !previewFile) {
       setOpenTabs((prev) => (prev.includes(currentActive) ? prev : [...prev, currentActive]));
     }
-  }, [currentActive]);
+  }, [currentActive, previewFile, activeFile]);
 
   const createWorkspaceFile = useCallback(async (name, content = "") => {
     const f = window.electronAPI?.file;
@@ -76,15 +76,38 @@ const FileTabs = memo(() => {
     }
   }, [currentWorkspace?.path]);
 
+  const promotePreview = useCallback(async (name) => {
+    if (name !== previewFile) return;
+    const f = window.electronAPI?.file;
+    if (!f || !currentWorkspace?.path) return;
+    
+    try {
+      const fullPath = window.electronAPI.path.join(currentWorkspace.path, name);
+      const content = await f.read(fullPath);
+      recordAddFile(name, extLang(name), content);
+      setFiles(getFiles());
+      setPreviewFile(null);
+      setOpenTabs(prev => prev.includes(name) ? prev : [...prev, name]);
+    } catch (err) {
+      console.error("Failed to promote preview", err);
+    }
+  }, [previewFile, currentWorkspace, setFiles, setPreviewFile]);
+
   const handleTabClick = useCallback((name) => {
-    if (playing || !currentWorkspace) return;
+    if (playing && !paused) return;
+    
+    if (name === previewFile && name === currentActive) {
+      promotePreview(name);
+      return;
+    }
+
     setOpenTabs((prev) => (prev.includes(name) ? prev : [...prev, name]));
     recordSwitchFile(name);
     setActiveFile(name);
-  }, [playing, currentWorkspace, setActiveFile]);
+  }, [playing, paused, setActiveFile, previewFile, currentActive, promotePreview]);
 
   const handleAddTab = useCallback(async () => {
-    if (playing || !currentWorkspace) return;
+    if ((playing && !paused) || (!currentWorkspace && !recording)) return;
     const existing = getFiles();
     const unnamedIdx = existing.filter(f => f.name.startsWith("untitled")).length;
     const name = `untitled${unnamedIdx > 0 ? unnamedIdx : ""}.txt`;
@@ -100,7 +123,7 @@ const FileTabs = memo(() => {
     if (recording) {
       recordSwitchFile(name);
     }
-  }, [recording, playing, currentWorkspace, setActiveFile, createWorkspaceFile]);
+  }, [recording, playing, paused, currentWorkspace, setActiveFile, createWorkspaceFile]);
 
   const handleNewFileSubmit = useCallback(async () => {
     let name = newFileName.trim();
@@ -136,29 +159,29 @@ const FileTabs = memo(() => {
 
   const handleCloseTab = useCallback((e, name) => {
     e.stopPropagation();
-    if (playing || !currentWorkspace) return;
-    setOpenTabs((prev) => {
-      if (!prev.includes(name)) return prev;
-      let next = prev.filter((tabName) => tabName !== name);
-
+    if (playing && !paused) return;
+    
+    if (name === previewFile) {
+      setPreviewFile(null);
       if (name === currentActive) {
-        let nextActive = next[0] || null;
-        if (!nextActive) {
-          const fallback = files.map((f) => f.name).find((fileName) => fileName !== name) || null;
-          if (fallback) {
-            next = [fallback];
-            nextActive = fallback;
-          }
-        }
-        if (nextActive) {
-          recordSwitchFile(nextActive);
-          setActiveFile(nextActive);
-        }
+        const nextActive = openTabs[0] || null;
+        recordSwitchFile(nextActive);
+        setActiveFile(nextActive);
       }
+      return;
+    }
 
-      return next;
-    });
-  }, [playing, currentWorkspace, currentActive, files, setActiveFile]);
+    if (!openTabs.includes(name)) return;
+    const next = openTabs.filter((tabName) => tabName !== name);
+
+    if (name === currentActive) {
+      const nextActive = next[0] || null;
+      recordSwitchFile(nextActive);
+      setActiveFile(nextActive);
+    }
+
+    setOpenTabs(next);
+  }, [playing, paused, currentActive, setActiveFile, previewFile, setPreviewFile, openTabs]);
 
   return (
     <div className={"file-tabs" + (visibleTabs.length === 0 ? " file-tabs-empty" : "")}>
@@ -166,7 +189,7 @@ const FileTabs = memo(() => {
         {visibleTabs.map((f) => (
           <div
             key={f.name}
-            className={"file-tab" + (f.name === currentActive ? " active" : "") + (playing ? " no-interact" : "")}
+            className={"file-tab" + (f.name === currentActive ? " active" : "") + (f.isPreview ? " preview" : "") + (playing && !paused ? " no-interact" : "")}
             onClick={() => handleTabClick(f.name)}
             title={f.name}
           >
@@ -177,7 +200,7 @@ const FileTabs = memo(() => {
                 <span className="file-tab-path">{f.name.slice(0, f.name.lastIndexOf("/"))}</span>
               )}
             </span>
-            {!playing && (visibleTabs.length > 1 || files.length > 1) && (
+            {(!playing || paused) && (
               <button
                 className="file-tab-close"
                 onClick={(e) => handleCloseTab(e, f.name)}
@@ -189,7 +212,7 @@ const FileTabs = memo(() => {
             )}
           </div>
         ))}
-        {!playing && (
+        {(!playing || paused) && (currentWorkspace || recording) && (
           <button className="file-tab-add" onClick={handleAddTab} title="Add file" aria-label="Add file">
             <FiPlus size={12} />
           </button>

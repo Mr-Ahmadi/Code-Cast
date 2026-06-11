@@ -15,6 +15,7 @@ const initialState = {
     fontSize: 14,
     showMinimap: true,
     activeFile: null,
+    previewFile: null,
     files: [],
     sidebarOpen: true,
     currentWorkspace: null,
@@ -40,6 +41,7 @@ export const GlobalProvider = ({ children }) => {
     const setFontSize = useCallback((value) => dispatch({ type: "SET_FONT_SIZE", payload: { value } }), []);
     const setShowMinimap = useCallback((value) => dispatch({ type: "SET_SHOW_MINIMAP", payload: { value } }), []);
     const setActiveFile = useCallback((value) => dispatch({ type: "SET_ACTIVE_FILE", payload: { value } }), []);
+    const setPreviewFile = useCallback((value) => dispatch({ type: "SET_PREVIEW_FILE", payload: { value } }), []);
     const setFiles = useCallback((value) => dispatch({ type: "SET_FILES", payload: { value } }), []);
     const setSidebarOpen = useCallback((value) => dispatch({ type: "SET_SIDEBAR_OPEN", payload: { value } }), []);
     const setCurrentWorkspace = useCallback((value) => dispatch({ type: "SET_CURRENT_WORKSPACE", payload: { value } }), []);
@@ -71,6 +73,7 @@ export const GlobalProvider = ({ children }) => {
         fontSize: state.fontSize, setFontSize,
         showMinimap: state.showMinimap, setShowMinimap,
         activeFile: state.activeFile, setActiveFile,
+        previewFile: state.previewFile, setPreviewFile,
         files: state.files, setFiles,
         sidebarOpen: state.sidebarOpen, setSidebarOpen,
         currentWorkspace: state.currentWorkspace, setCurrentWorkspace,

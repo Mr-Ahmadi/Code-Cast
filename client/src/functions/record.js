@@ -1,5 +1,6 @@
 import Lecture from "../classes/Lecture";
 import Typist from "../classes/Typist";
+import { extLang } from "./fileTypes";
 
 let typist, editor, lecture;
 
@@ -32,16 +33,26 @@ const start = async (
     await ensureAllFilesContent(workspacePath);
     const files = typist.getFiles();
     let firstFileName, firstValue, language;
+    
     if (files.length > 0) {
-      firstFileName = files[0].name;
+      firstFileName = (activeFileName && files.some(f => f.name === activeFileName))
+        ? activeFileName
+        : files[0].name;
+      const file = files.find(f => f.name === firstFileName) || files[0];
+      firstValue = getFileFirstValue(firstFileName) || editor?.current?.getValue() || "";
+      language = file.language;
+    } else if (activeFileName) {
+      firstFileName = activeFileName;
       firstValue = editor?.current?.getValue() || "";
-      language = files[0].language;
+      language = extLang(firstFileName);
+      typist.addFile(firstFileName, language, firstValue);
     } else {
-      firstFileName = "index.html";
+      firstFileName = "untitled.txt";
       firstValue = editor?.current?.getValue() || "";
-      language = "html";
+      language = "plaintext";
       typist.addFile(firstFileName, language, firstValue);
     }
+
     typist.startRecord(
       Date.now(),
       firstFileName,

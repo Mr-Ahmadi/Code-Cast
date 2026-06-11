@@ -24,6 +24,8 @@ const defaultFunc = (state, action) => {
             return { ...state, showMinimap: action.payload.value }
         case "SET_ACTIVE_FILE":
             return { ...state, activeFile: action.payload.value }
+        case "SET_PREVIEW_FILE":
+            return { ...state, previewFile: action.payload.value }
         case "SET_FILES":
             return { ...state, files: action.payload.value }
         case "SET_SIDEBAR_OPEN":

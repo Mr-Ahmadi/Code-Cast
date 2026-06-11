@@ -13,7 +13,7 @@ import LocalSetupPrompt from '../elements/LocalSetupPrompt';
 import ActivityBar from '../elements/ActivityBar';
 import StatusBar from '../elements/StatusBar';
 import { GlobalContext } from '../../contexts/GlobalStates';
-import { getFiles, exportRecord, isTypistLoaded, importFromFile, stopPlay, init as initRecord } from "../../functions/record";
+import { getFiles, exportRecord, isTypistLoaded, importFromFile, stopPlay } from "../../functions/record";
 import { useMode, MODES } from '../../contexts/ModeContext';
 
 
@@ -99,14 +99,6 @@ export default function App() {
     const handleSetupComplete = () => {
         setShowSetup(false);
     };
-
-    const handleCloseRecord = useCallback(() => {
-        initRecord();
-        setCurrentRecord(null);
-        setRecordName("Untitled");
-        setFiles([]);
-        setActiveFile(null);
-    }, [setCurrentRecord, setRecordName, setFiles, setActiveFile]);
 
     window.__setTerminalVisible = (updater) => {
         if (typeof updater === "function") {
@@ -570,18 +562,6 @@ export default function App() {
                         <div className="sidebar-title-row">
                             <span className="sidebar-title">Explorer</span>
                             <span className="sidebar-mode-badge">{explorerMode}</span>
-                            {currentRecord && (
-                                <button
-                                    className="sidebar-close-record-btn"
-                                    onClick={handleCloseRecord}
-                                    title="Close record"
-                                    aria-label="Close record"
-                                >
-                                    <svg width="12" height="12" viewBox="0 0 12 12" fill="none" stroke="currentColor" strokeWidth="2">
-                                        <path d="M2 2l8 8M10 2l-8 8" />
-                                    </svg>
-                                </button>
-                            )}
                         </div>
                         <span className="sidebar-context" title={explorerContext}>{explorerContext}</span>
                     </div>

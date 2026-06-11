@@ -1,25 +1,8 @@
 import { diffChars } from "diff";
 import axios from "axios";
+import { extLang } from "../functions/fileTypes";
 
 const BREAKPOINT_INTERVAL = 100;
-const FILE_EXT_LANG = {
-  html: "html", htm: "html",
-  css: "css",
-  js: "javascript", jsx: "javascript", mjs: "javascript", cjs: "javascript",
-  ts: "typescript", tsx: "typescript",
-  py: "python",
-  json: "json",
-  md: "markdown",
-  xml: "xml", svg: "xml",
-  sql: "sql",
-  sh: "shell", bash: "shell",
-  txt: "plaintext",
-};
-
-function extLang(name) {
-  const ext = name.split(".").pop().toLowerCase();
-  return FILE_EXT_LANG[ext] || "plaintext";
-}
 
 class Typist {
   #files = {};
@@ -652,15 +635,23 @@ class Typist {
       }
       if (this.#audioEl) {
         this.#audioEl.playbackRate = speed;
-        this.#audioEl.currentTime = startFromMillis / 1000;
-        this.#audioEl.play().catch((err) => {
-          console.warn("Audio play failed:", err);
-        });
+        const startTime = startFromMillis / 1000;
+        const playAudio = () => {
+          if (!this.#audioEl) return;
+          this.#audioEl.currentTime = startTime;
+          this.#audioEl.play().catch((err) => {
+            console.warn("Audio play failed:", err);
+          });
+        };
+        if (this.#audioEl.readyState >= 1) {
+          playAudio();
+        } else {
+          this.#audioEl.addEventListener('loadedmetadata', playAudio, { once: true });
+        }
       }
     }
 
     const startIndex = seekIdx + 1;
-    const totalEvents = events.length;
 
     for (let i = startIndex; i < events.length; i++) {
       const event = events[i];
@@ -684,7 +675,8 @@ class Typist {
         }
 
         if (onProgress) {
-          onProgress(Math.min((i - startIndex + 1) / totalEvents, 1));
+          const totalDuration = this.getDuration();
+          onProgress(Math.min(event.millis / (totalDuration || 1), 1));
         }
         if (i === events.length - 1) {
           this.#playbackRunning = false;

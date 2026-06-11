@@ -24,7 +24,7 @@ import ProgressBar from "./ProgressBar";
 import { executeCode } from "../../functions/requests/execute";
 import signOut from "../../functions/requests/signOut";
 import { useNavigate } from "react-router-dom";
-import { FiTerminal, FiLogOut, FiPlay, FiSquare, FiCircle, FiPause, FiMic, FiMicOff, FiChevronDown, FiZoomIn, FiZoomOut, FiMaximize2, FiMinimize2, FiSave, FiCheckCircle, FiMoon, FiSun } from "react-icons/fi";
+import { FiTerminal, FiLogOut, FiPlay, FiSquare, FiCircle, FiPause, FiMic, FiMicOff, FiChevronDown, FiZoomIn, FiZoomOut, FiMaximize2, FiMinimize2, FiSave, FiCheckCircle, FiMoon, FiSun, FiX } from "react-icons/fi";
 import ModeSwitcher from "./ModeSwitcher";
 import { useMode, MODES } from "../../contexts/ModeContext";
 import PropTypes from 'prop-types';
@@ -55,6 +55,7 @@ const TopBar = memo(({ editorRef }) => {
   const speedRef = useRef(null);
   const progressPollRef = useRef(null);
   const pausedRef = useRef(paused);
+  const lastCallbackRef = useRef({ progress: 0, time: 0 });
   const navigate = useNavigate();
   const audioRecording = isAudioRecording();
   const importInputRef = useRef(null);
@@ -90,10 +91,14 @@ const TopBar = memo(({ editorRef }) => {
     if (playing) {
       const dur = getDuration();
       setPlayDuration(dur);
-      if (progressPollRef.current) clearInterval(progressPollRef.current);
+      lastCallbackRef.current = { progress: 0, time: Date.now() };
+
       progressPollRef.current = setInterval(() => {
         if (!seekGuard.current) {
-          setPlayProgress(p => Math.min(p + 50 / dur, 1));
+          const { progress: lastP, time: lastT } = lastCallbackRef.current;
+          const elapsedSinceEvent = (Date.now() - lastT) / 1000;
+          const addFromSpeed = dur > 0 ? (elapsedSinceEvent * speed * 1000) / dur : 0;
+          setPlayProgress(Math.min(lastP + addFromSpeed, 0.999));
         }
       }, 50);
     } else {
@@ -106,7 +111,7 @@ const TopBar = memo(({ editorRef }) => {
     return () => {
       if (progressPollRef.current) clearInterval(progressPollRef.current);
     };
-  }, [playing]);
+  }, [playing, speed]);
 
   useEffect(() => {
     const handleClickOutside = (e) => {
@@ -181,11 +186,9 @@ const TopBar = memo(({ editorRef }) => {
         }
 
         let files = getFiles();
-        if (files.length === 0) {
-          recordAddFile("index.html", "html", "");
-          recordAddFile("style.css", "css", "");
-          recordAddFile("script.js", "javascript", "");
-          setActiveFile("index.html");
+        if (files.length === 0 && activeFile) {
+          // If no files are tracked but one is active in editor, track it
+          recordAddFile(activeFile, null, editorRef.current?.getValue() || "");
           files = getFiles();
         }
 
@@ -241,7 +244,9 @@ const TopBar = memo(({ editorRef }) => {
     } else if (isTypistLoaded()) {
       setPlayProgress(0);
       setPlaying(true);
+      lastCallbackRef.current = { progress: 0, time: Date.now() };
       runRecord((progress) => {
+        lastCallbackRef.current = { progress, time: Date.now() };
         setPlayProgress(progress);
         if (progress >= 1) setPlaying(false);
       }, speed);
@@ -252,8 +257,10 @@ const TopBar = memo(({ editorRef }) => {
 
   const handleSeek = useCallback((progress) => {
     seekGuard.current = true;
+    lastCallbackRef.current = { progress, time: Date.now() };
     setPlayProgress(progress);
     seekTo(progress, (p) => {
+      lastCallbackRef.current = { progress: p, time: Date.now() };
       setPlayProgress(p);
       if (p >= 1) setPlaying(false);
     }, speed);
@@ -453,7 +460,26 @@ const TopBar = memo(({ editorRef }) => {
             <span className="project-name">{currentWorkspace.name}</span>
           )}
           {currentRecord && (
-            <span className="record-name"> — {recordName}</span>
+            <span className="record-name">
+              <span style={{ margin: '0 4px' }}>—</span>
+              {recordName}
+              <button
+                className="editor-toolbar-btn close-record-btn-nav"
+                onClick={() => {
+                  stopPlay();
+                  initRecord();
+                  setCurrentRecord(null);
+                  setRecordName("Untitled");
+                  setFiles([]);
+                  setActiveFile(null);
+                }}
+                title="Close record"
+                aria-label="Close record"
+                style={{ marginLeft: 6 }}
+              >
+                <FiX size={11} />
+              </button>
+            </span>
           )}
           {!currentRecord && recording && (
             <span className="record-name"> — {recordName} (recording)</span>

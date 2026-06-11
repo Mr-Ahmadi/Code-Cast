@@ -75,32 +75,15 @@ function buildApplicationMenu() {
     {
       label: 'Edit',
       submenu: [
-        {
-          label: 'Undo',
-          accelerator: 'CmdOrCtrl+Z',
-          click: () => sendMenuAction('undo'),
-        },
-        {
-          label: 'Redo',
-          accelerator: 'Shift+CmdOrCtrl+Z',
-          click: () => sendMenuAction('redo'),
-        },
+        { role: 'undo' },
+        { role: 'redo' },
         { type: 'separator' },
-        {
-          label: 'Cut',
-          accelerator: 'CmdOrCtrl+X',
-          click: () => sendMenuAction('cut'),
-        },
-        {
-          label: 'Copy',
-          accelerator: 'CmdOrCtrl+C',
-          click: () => sendMenuAction('copy'),
-        },
-        {
-          label: 'Paste',
-          accelerator: 'CmdOrCtrl+V',
-          click: () => sendMenuAction('paste'),
-        },
+        { role: 'cut' },
+        { role: 'copy' },
+        { role: 'paste' },
+        { role: 'pasteAndMatchStyle' },
+        { role: 'delete' },
+        { role: 'selectAll' },
         { type: 'separator' },
         {
           label: 'Find',
@@ -122,11 +105,7 @@ function buildApplicationMenu() {
     {
       label: 'Selection',
       submenu: [
-        {
-          label: 'Select All',
-          accelerator: 'CmdOrCtrl+A',
-          click: () => sendMenuAction('select-all'),
-        },
+        { role: 'selectAll' },
         { type: 'separator' },
         {
           label: 'Expand Selection',
