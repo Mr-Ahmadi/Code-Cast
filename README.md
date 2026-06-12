@@ -1,5 +1,7 @@
 # Code Cast
 
+![Code Cast screenshot](Screenshot.png)
+
 Record and replay code typing sessions with synchronized audio. Capture keystrokes in a Monaco editor along with voice narration, then play back the entire session as a seamless video-like experience. Runs as a web app (online) or a desktop app via Electron (local).
 
 ## Features
@@ -97,7 +99,7 @@ npm run electron:build  # produces DMG (macOS), NSIS (Windows), AppImage (Linux)
 | `Ctrl+Enter`   | Execute code         |
 | `Ctrl+R`       | Start / Stop record  |
 | `Ctrl+P`       | Play / Stop playback |
-| `Ctrl+O`       | Open recordings      |
+| `Ctrl+O`       | Open projects / recordings |
 | `` Ctrl+` ``   | Toggle terminal      |
 | `←` / `→`      | Skip back / forward 5s |
 | `?`            | Toggle shortcuts help |
