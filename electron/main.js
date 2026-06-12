@@ -358,6 +358,10 @@ app.on('window-all-closed', () => {
     terminalProcesses[key].kill();
   }
   terminalProcesses = {};
+  for (const watcher of dirWatchers.values()) watcher.close();
+  for (const watcher of fileWatchers.values()) watcher.close();
+  dirWatchers.clear();
+  fileWatchers.clear();
   if (process.platform !== 'darwin') app.quit();
 });
 
@@ -712,6 +716,63 @@ ipcMain.handle('file:mkdir', async (event, dirPath) => {
 const IGNORE_DIRS = new Set([
   'node_modules', '.git', '.svn', '.hg', '__pycache__',
 ]);
+
+// --- File watching ---
+const dirWatchers = new Map();
+const fileWatchers = new Map();
+
+ipcMain.handle('file:watchDir', async (event, dirPath) => {
+  if (dirWatchers.has(dirPath)) return;
+  try {
+    if (!fs.existsSync(dirPath)) return;
+    const watcher = fs.watch(dirPath, { recursive: true }, (eventType, filename) => {
+      if (mainWindow && !mainWindow.isDestroyed()) {
+        mainWindow.webContents.send('file:dir-changed', dirPath, eventType, filename);
+      }
+    });
+    dirWatchers.set(dirPath, watcher);
+  } catch (err) {
+    console.warn('Failed to watch directory:', dirPath, err.message);
+  }
+});
+
+ipcMain.handle('file:unwatchDir', (event, dirPath) => {
+  const watcher = dirWatchers.get(dirPath);
+  if (watcher) {
+    watcher.close();
+    dirWatchers.delete(dirPath);
+  }
+});
+
+ipcMain.handle('file:watchFile', async (event, filePath) => {
+  if (fileWatchers.has(filePath)) return;
+  try {
+    if (!fs.existsSync(filePath)) return;
+    const watcher = fs.watch(filePath, (eventType) => {
+      if (mainWindow && !mainWindow.isDestroyed()) {
+        mainWindow.webContents.send('file:file-changed', filePath);
+      }
+    });
+    fileWatchers.set(filePath, watcher);
+  } catch (err) {
+    console.warn('Failed to watch file:', filePath, err.message);
+  }
+});
+
+ipcMain.handle('file:unwatchFile', (event, filePath) => {
+  const watcher = fileWatchers.get(filePath);
+  if (watcher) {
+    watcher.close();
+    fileWatchers.delete(filePath);
+  }
+});
+
+ipcMain.handle('file:unwatchAll', () => {
+  for (const watcher of dirWatchers.values()) watcher.close();
+  for (const watcher of fileWatchers.values()) watcher.close();
+  dirWatchers.clear();
+  fileWatchers.clear();
+});
 
 ipcMain.handle('file:listRecursive', async (event, dirPath) => {
   const results = [];

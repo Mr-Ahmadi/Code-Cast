@@ -532,6 +532,28 @@ const FileTree = memo(() => {
     );
   }
 
+  const debounceTimer = useRef(null);
+
+  useEffect(() => {
+    if (!workspacePath || !window.electronAPI?.file?.onDirChanged) return;
+
+    const api = window.electronAPI.file;
+    api.watchDir(workspacePath);
+
+    const unsub = api.onDirChanged(() => {
+      if (debounceTimer.current) clearTimeout(debounceTimer.current);
+      debounceTimer.current = setTimeout(() => {
+        forceRefresh();
+      }, 300);
+    });
+
+    return () => {
+      if (debounceTimer.current) clearTimeout(debounceTimer.current);
+      unsub();
+      api.unwatchDir(workspacePath);
+    };
+  }, [workspacePath, forceRefresh]);
+
   const rootContents = dirContents[workspacePath];
   const rootLoading = loading[workspacePath];
 

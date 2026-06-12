@@ -61,6 +61,21 @@ contextBridge.exposeInMainWorld('electronAPI', {
     exists: (filePath) => ipcRenderer.invoke('file:exists', filePath),
     mkdir: (dirPath) => ipcRenderer.invoke('file:mkdir', dirPath),
     listRecursive: (dirPath, filter) => ipcRenderer.invoke('file:listRecursive', dirPath, filter),
+    watchDir: (dirPath) => ipcRenderer.invoke('file:watchDir', dirPath),
+    unwatchDir: (dirPath) => ipcRenderer.invoke('file:unwatchDir', dirPath),
+    watchFile: (filePath) => ipcRenderer.invoke('file:watchFile', filePath),
+    unwatchFile: (filePath) => ipcRenderer.invoke('file:unwatchFile', filePath),
+    unwatchAll: () => ipcRenderer.invoke('file:unwatchAll'),
+    onDirChanged: (callback) => {
+      const handler = (_event, dirPath) => callback(dirPath);
+      ipcRenderer.on('file:dir-changed', handler);
+      return () => ipcRenderer.removeListener('file:dir-changed', handler);
+    },
+    onFileChanged: (callback) => {
+      const handler = (_event, filePath) => callback(filePath);
+      ipcRenderer.on('file:file-changed', handler);
+      return () => ipcRenderer.removeListener('file:file-changed', handler);
+    },
   },
 
   path: {

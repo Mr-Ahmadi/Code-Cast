@@ -31,6 +31,8 @@ const _Editor = memo(({ editorRef }) => {
   recordingRef.current = recording;
   activeFileRef.current = activeFile;
 
+  const watchedFilesRef = useRef(new Set());
+
   const normalizeSlashes = useCallback((value = "") => value.replace(/\\/g, "/"), []);
 
   const getRelativePathFromWorkspace = useCallback((absolutePath) => {
@@ -185,7 +187,15 @@ const _Editor = memo(({ editorRef }) => {
       editor.setModel(newModel);
       oldValue.current = content;
     }
-  }, [editorRef]);
+    if (currentWorkspace?.path && window.electronAPI?.file) {
+      const oldFullPath = window.electronAPI.path.join(currentWorkspace.path, oldName);
+      const newFullPath = window.electronAPI.path.join(currentWorkspace.path, newName);
+      window.electronAPI.file.unwatchFile(oldFullPath);
+      window.electronAPI.file.watchFile(newFullPath);
+      watchedFilesRef.current.delete(oldName);
+      watchedFilesRef.current.add(newName);
+    }
+  }, [editorRef, currentWorkspace?.path]);
 
   const removeModel = useCallback((name) => {
     const model = modelsRef.current[name];
@@ -193,7 +203,12 @@ const _Editor = memo(({ editorRef }) => {
       model.dispose();
       delete modelsRef.current[name];
     }
-  }, []);
+    if (currentWorkspace?.path && window.electronAPI?.file?.unwatchFile && watchedFilesRef.current.has(name)) {
+      const fullPath = window.electronAPI.path.join(currentWorkspace.path, name);
+      window.electronAPI.file.unwatchFile(fullPath);
+      watchedFilesRef.current.delete(name);
+    }
+  }, [currentWorkspace?.path]);
 
   useEffect(() => {
     if (autoSaveTimerRef.current) {
@@ -324,7 +339,7 @@ const _Editor = memo(({ editorRef }) => {
 
   const ensureModel = useCallback((name, content, language) => {
     const monaco = monacoRef.current;
-    if (!monaco) return;
+    if (!monaco) return null;
     if (modelsRef.current[name]) {
       const model = modelsRef.current[name];
       if (content !== undefined && model.getValue() !== content) {
@@ -336,8 +351,13 @@ const _Editor = memo(({ editorRef }) => {
     if (content !== undefined && content !== null) {
       savedContentRef.current[name] = content;
     }
+    if (currentWorkspace?.path && window.electronAPI?.file?.watchFile && !watchedFilesRef.current.has(name)) {
+      const fullPath = window.electronAPI.path.join(currentWorkspace.path, name);
+      window.electronAPI.file.watchFile(fullPath);
+      watchedFilesRef.current.add(name);
+    }
     return createModel(monaco, name, content, language);
-  }, [createModel]);
+  }, [createModel, currentWorkspace?.path]);
 
   const saveCurrentFileAs = useCallback(async () => {
     if (!activeFile || !currentWorkspace?.path || !window.electronAPI?.file?.selectSaveFile) {
@@ -452,6 +472,32 @@ const _Editor = memo(({ editorRef }) => {
       }, 1500);
     }
   }, [ensureModel, switchEditorModel, setActiveFile]);
+
+  useEffect(() => {
+    if (!currentWorkspace?.path || !window.electronAPI?.file?.onFileChanged) return;
+    const unsub = window.electronAPI.file.onFileChanged(async (filePath) => {
+      const relPath = getRelativePathFromWorkspace(filePath);
+      if (!relPath) return;
+      if (!modelsRef.current[relPath]) return;
+      if (dirtyRef.current.has(relPath)) return;
+      const newContent = await window.electronAPI.file.read(filePath);
+      if (newContent === null || newContent === undefined) return;
+      const model = modelsRef.current[relPath];
+      if (model && model.getValue() !== newContent) {
+        savedContentRef.current[relPath] = newContent;
+        model.setValue(newContent);
+      }
+    });
+    return unsub;
+  }, [currentWorkspace?.path, getRelativePathFromWorkspace]);
+
+  useEffect(() => {
+    return () => {
+      if (window.electronAPI?.file?.unwatchAll) {
+        window.electronAPI.file.unwatchAll();
+      }
+    };
+  }, []);
 
   useEffect(() => {
     if (!editorReady.current || !activeFile) return;
