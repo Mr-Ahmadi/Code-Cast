@@ -344,30 +344,25 @@ const FileTree = memo(() => {
       return;
     }
 
-    if (previewFile === relativePath) {
-      // Second click: promote to project
-      const fullPath = getAbsPath(relativePath);
-      if (!fullPath) return;
-      try {
-        const content = await f.read(fullPath);
-        if (content === null || content === undefined) {
-          setToast({ type: "ERROR", message: `Failed to read ${relativePath}` });
-          return;
-        }
-        addFile(relativePath, extLang(relativePath), content);
-        setFiles(getFiles());
-        setPreviewFile(null);
-        recordSwitchFile(relativePath);
-        setActiveFile(relativePath);
-      } catch (err) {
-        setToast({ type: "ERROR", message: err.message || "Failed to read file" });
+    // File not registered — open directly (no preview/promote)
+    const fullPath = getAbsPath(relativePath);
+    if (!fullPath) return;
+    
+    try {
+      const content = await f.read(fullPath);
+      if (content === null || content === undefined) {
+        setToast({ type: "ERROR", message: `Failed to read ${relativePath}` });
+        return;
       }
-    } else {
-      // First click: set as preview
-      setPreviewFile(relativePath);
+      setPreviewFile(null);
+      addFile(relativePath, extLang(relativePath), content);
+      setFiles(getFiles());
+      recordSwitchFile(relativePath);
       setActiveFile(relativePath);
+    } catch (err) {
+      setToast({ type: "ERROR", message: err.message || "Failed to read file" });
     }
-  }, [playing, f, workspacePath, getAbsPath, setActiveFile, setFiles, setToast, previewFile, setPreviewFile]);
+  }, [playing, f, workspacePath, getAbsPath, setActiveFile, setFiles, setToast, setPreviewFile]);
 
   const handleRecordFileClick = useCallback((name) => {
     if (playing) return;

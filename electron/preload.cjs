@@ -33,6 +33,12 @@ contextBridge.exposeInMainWorld('electronAPI', {
       ipcRenderer.on('app-menu:action', handler);
       return () => ipcRenderer.removeListener('app-menu:action', handler);
     },
+    onBeforeClose: (callback) => {
+      const handler = () => callback();
+      ipcRenderer.on('app:before-close', handler);
+      return () => ipcRenderer.removeListener('app:before-close', handler);
+    },
+    closeWindow: () => ipcRenderer.send('app:close-window'),
   },
 
   window: {

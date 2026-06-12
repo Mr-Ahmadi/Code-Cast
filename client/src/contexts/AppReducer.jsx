@@ -38,6 +38,8 @@ const defaultFunc = (state, action) => {
             return { ...state, autoSave: action.payload.value }
         case "SET_THEME":
             return { ...state, theme: action.payload.value }
+        case "SET_DIRTY_FILES":
+            return { ...state, dirtyFiles: action.payload.value }
         default:
             return state
     }

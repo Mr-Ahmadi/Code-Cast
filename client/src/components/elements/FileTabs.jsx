@@ -1,10 +1,10 @@
-import { useContext, useCallback, useState, useEffect, memo } from "react";
+import { useContext, useCallback, useState, useEffect, useRef, memo } from "react";
 import { GlobalContext } from "../../contexts/GlobalStates";
 import {
   getFiles, getActiveFile, addFile as recordAddFile,
   switchFile as recordSwitchFile,
 } from "../../functions/record";
-import { getIconType } from "../../functions/fileTypes";
+import { getIconType, extLang } from "../../functions/fileTypes";
 import { FiPlus, FiX, FiFileText, FiCode, FiImage } from "react-icons/fi";
 
 const tabIcon = (name) => {
@@ -21,10 +21,14 @@ const sameArray = (a = [], b = []) => (
 );
 
 const FileTabs = memo(() => {
-  const { recording, playing, paused, activeFile, previewFile, setPreviewFile, files, setFiles, setActiveFile, currentWorkspace } = useContext(GlobalContext);
+  const { recording, playing, paused, activeFile, previewFile, setPreviewFile, files, setFiles, setActiveFile, currentWorkspace, dirtyFiles } = useContext(GlobalContext);
   const [showNewFile, setShowNewFile] = useState(false);
   const [newFileName, setNewFileName] = useState("");
-  const [openTabs, setOpenTabs] = useState(() => files.map((f) => f.name));
+  const [openTabs, setOpenTabs] = useState(() => []);
+  const [confirmCloseTabName, setConfirmCloseTabName] = useState(null);
+  const pendingCloseRef = useRef(null);
+  const prevActiveRef = useRef(activeFile);
+  const touchedRef = useRef(new Set());
 
   const currentActive = (playing || recording) ? activeFile : (getActiveFile() || activeFile);
   const visibleTabs = openTabs
@@ -42,19 +46,49 @@ const FileTabs = memo(() => {
   useEffect(() => {
     const existingNames = new Set(files.map((f) => f.name));
     setOpenTabs((prev) => {
-      let next = prev.filter((name) => existingNames.has(name));
-      if (activeFile && currentActive && existingNames.has(currentActive) && !next.includes(currentActive)) {
-        next = [...next, currentActive];
-      }
+      const next = prev.filter((name) => existingNames.has(name));
       return sameArray(prev, next) ? prev : next;
     });
-  }, [files, currentActive, activeFile]);
+  }, [files]);
 
+  // Keyboard handler for close confirmation dialog
   useEffect(() => {
-    if (activeFile && currentActive && !previewFile) {
-      setOpenTabs((prev) => (prev.includes(currentActive) ? prev : [...prev, currentActive]));
+    if (!confirmCloseTabName) return;
+    const handler = (e) => {
+      if (e.key === 'Escape') {
+        const r = pendingCloseRef.current;
+        setConfirmCloseTabName(null);
+        r?.('cancel');
+      }
+    };
+    window.addEventListener('keydown', handler);
+    return () => window.removeEventListener('keydown', handler);
+  }, [confirmCloseTabName]);
+
+  // Track files that have ever been modified (touched)
+  useEffect(() => {
+    if (dirtyFiles && dirtyFiles.size > 0) {
+      dirtyFiles.forEach((name) => touchedRef.current.add(name));
     }
-  }, [currentActive, previewFile, activeFile]);
+  }, [dirtyFiles]);
+
+  // Tab replacement logic + last-opened tracking
+  useEffect(() => {
+    if (!activeFile || !currentActive || previewFile) return;
+
+    const prevActive = prevActiveRef.current;
+
+    setOpenTabs((prev) => {
+      if (prev.includes(currentActive)) return prev;
+      const isPrevActiveTouched = prevActive && touchedRef.current.has(prevActive);
+      if (prevActive && prev.includes(prevActive) && !isPrevActiveTouched) {
+        return prev.map((t) => t === prevActive ? currentActive : t);
+      }
+      return [...prev, currentActive];
+    });
+
+    prevActiveRef.current = currentActive;
+  }, [currentActive, previewFile, activeFile, dirtyFiles]);
 
   const createWorkspaceFile = useCallback(async (name, content = "") => {
     const f = window.electronAPI?.file;
@@ -87,7 +121,7 @@ const FileTabs = memo(() => {
       recordAddFile(name, extLang(name), content);
       setFiles(getFiles());
       setPreviewFile(null);
-      setOpenTabs(prev => prev.includes(name) ? prev : [...prev, name]);
+      recordSwitchFile(name);
     } catch (err) {
       console.error("Failed to promote preview", err);
     }
@@ -102,6 +136,7 @@ const FileTabs = memo(() => {
     }
 
     setOpenTabs((prev) => (prev.includes(name) ? prev : [...prev, name]));
+    prevActiveRef.current = name;
     recordSwitchFile(name);
     setActiveFile(name);
   }, [playing, paused, setActiveFile, previewFile, currentActive, promotePreview]);
@@ -157,15 +192,28 @@ const FileTabs = memo(() => {
     };
   }, [handleAddTab]);
 
-  const handleCloseTab = useCallback((e, name) => {
+  const handleCloseTab = useCallback(async (e, name) => {
     e.stopPropagation();
     if (playing && !paused) return;
+    if (openTabs.length <= 1) return;
     
+    // Unsaved changes prompt with custom dialog
+    if (dirtyFiles?.has(name) && name !== previewFile) {
+      const action = await new Promise((resolve) => {
+        pendingCloseRef.current = resolve;
+        setConfirmCloseTabName(name);
+      });
+      if (action === 'cancel') return;
+      if (action === 'save') {
+        await window.__saveFileByName?.(name);
+      }
+    }
+
     if (name === previewFile) {
       setPreviewFile(null);
       if (name === currentActive) {
         const nextActive = openTabs[0] || null;
-        recordSwitchFile(nextActive);
+        if (nextActive) recordSwitchFile(nextActive);
         setActiveFile(nextActive);
       }
       return;
@@ -174,14 +222,16 @@ const FileTabs = memo(() => {
     if (!openTabs.includes(name)) return;
     const next = openTabs.filter((tabName) => tabName !== name);
 
+    touchedRef.current.delete(name);
+
     if (name === currentActive) {
       const nextActive = next[0] || null;
-      recordSwitchFile(nextActive);
+      if (nextActive) recordSwitchFile(nextActive);
       setActiveFile(nextActive);
     }
 
     setOpenTabs(next);
-  }, [playing, paused, currentActive, setActiveFile, previewFile, setPreviewFile, openTabs]);
+  }, [playing, paused, currentActive, setActiveFile, previewFile, setPreviewFile, openTabs, dirtyFiles]);
 
   return (
     <div className={"file-tabs" + (visibleTabs.length === 0 ? " file-tabs-empty" : "")}>
@@ -189,18 +239,19 @@ const FileTabs = memo(() => {
         {visibleTabs.map((f) => (
           <div
             key={f.name}
-            className={"file-tab" + (f.name === currentActive ? " active" : "") + (f.isPreview ? " preview" : "") + (playing && !paused ? " no-interact" : "")}
+            className={"file-tab" + (f.name === currentActive ? " active" : "") + (f.isPreview ? " preview" : "") + (playing && !paused ? " no-interact" : "") + (dirtyFiles?.has(f.name) ? " dirty" : "")}
             onClick={() => handleTabClick(f.name)}
             title={f.name}
           >
             <span className="file-tab-icon">{tabIcon(f.name)}</span>
+            {dirtyFiles?.has(f.name) && <span className="file-tab-dirty-dot" />}
             <span className="file-tab-label">
               <span className="file-tab-name">{f.name.split("/").pop()}</span>
               {f.name.includes("/") && (
                 <span className="file-tab-path">{f.name.slice(0, f.name.lastIndexOf("/"))}</span>
               )}
             </span>
-            {(!playing || paused) && (
+            {(!playing || paused) && visibleTabs.length > 1 && (
               <button
                 className="file-tab-close"
                 onClick={(e) => handleCloseTab(e, f.name)}
@@ -234,6 +285,33 @@ const FileTabs = memo(() => {
             onBlur={() => setTimeout(() => setShowNewFile(false), 200)}
           />
           <button className="btn btn-sm btn-primary" onClick={handleNewFileSubmit}>Add</button>
+        </div>
+      )}
+
+      {confirmCloseTabName && (
+        <div className="modal-container">
+          <div className="modal-box unsaved-dialog">
+            <div className="modal-header">
+              <h3 className="modal-title">Unsaved Changes</h3>
+            </div>
+            <p style={{ margin: '8px 0 16px', color: 'var(--text-secondary)', fontSize: 13 }}>
+              Save changes to <strong>{confirmCloseTabName}</strong> before closing?
+            </p>
+            <div className="modal-footer" style={{ borderTop: 'none', marginTop: 0, paddingTop: 0 }}>
+              <div />
+              <div>
+                <button className="btn btn-primary" onClick={() => { const r = pendingCloseRef.current; setConfirmCloseTabName(null); r?.('save'); }}>
+                  Save
+                </button>
+                <button className="btn" onClick={() => { const r = pendingCloseRef.current; setConfirmCloseTabName(null); r?.('discard'); }}>
+                  Discard
+                </button>
+                <button className="btn" onClick={() => { const r = pendingCloseRef.current; setConfirmCloseTabName(null); r?.('cancel'); }}>
+                  Cancel
+                </button>
+              </div>
+            </div>
+          </div>
         </div>
       )}
     </div>

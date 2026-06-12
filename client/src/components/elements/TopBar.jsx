@@ -466,6 +466,7 @@ const TopBar = memo(({ editorRef }) => {
               <button
                 className="editor-toolbar-btn close-record-btn-nav"
                 onClick={() => {
+                  setPlaying(false);
                   stopPlay();
                   initRecord();
                   setCurrentRecord(null);

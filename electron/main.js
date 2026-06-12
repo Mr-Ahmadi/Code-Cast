@@ -282,6 +282,11 @@ function createWindow() {
     mainWindow.loadFile(path.join(__dirname, '..', 'client', 'dist', 'index.html'));
     mainWindow.once('ready-to-show', () => mainWindow.show());
   }
+
+  mainWindow.on('close', (e) => {
+    e.preventDefault();
+    mainWindow.webContents.send('app:before-close');
+  });
 }
 
 ipcMain.on('window:minimize', () => {
@@ -298,6 +303,12 @@ ipcMain.on('window:maximize', () => {
 
 ipcMain.on('window:close', () => {
   mainWindow.close();
+});
+
+ipcMain.on('app:close-window', () => {
+  if (mainWindow && !mainWindow.isDestroyed()) {
+    mainWindow.destroy();
+  }
 });
 
 ipcMain.handle('window:setResizable', async (event, resizable) => {

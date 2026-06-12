@@ -9,6 +9,7 @@ const setEditor = (_editor) => {
 };
 
 const init = () => {
+  if (typist instanceof Typist) typist.stopPlayback();
   lecture = new Lecture();
   typist = new Typist();
 };
@@ -139,6 +140,7 @@ async function stopLocal(typistInstance, audioDataUrl = null) {
 }
 
 const load = async (id, projectPath) => {
+  if (typist instanceof Typist) typist.stopPlayback();
   const mode = localStorage.getItem('codecast_mode') || 'online';
   if (mode === 'local') {
     const localStore = await import("../stores/localStore");

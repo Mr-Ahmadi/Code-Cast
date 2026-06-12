@@ -22,6 +22,7 @@ const initialState = {
     currentRecord: null,
     autoSave: localStorage.getItem("codecast_autosave") === "true",
     theme: localStorage.getItem("codecast_theme") || "dark",
+    dirtyFiles: new Set(),
 };
 
 export const GlobalContext = createContext(initialState);
@@ -50,6 +51,8 @@ export const GlobalProvider = ({ children }) => {
         localStorage.setItem("codecast_autosave", value ? "true" : "false");
         dispatch({ type: "SET_AUTOSAVE", payload: { value } });
     }, []);
+    const setDirtyFiles = useCallback((value) => dispatch({ type: "SET_DIRTY_FILES", payload: { value } }), []);
+
     const setTheme = useCallback((value) => {
         const next = value === "light" ? "light" : "dark";
         localStorage.setItem("codecast_theme", next);
@@ -80,6 +83,7 @@ export const GlobalProvider = ({ children }) => {
         currentRecord: state.currentRecord, setCurrentRecord,
         autoSave: state.autoSave, setAutoSave,
         theme: state.theme, setTheme,
+        dirtyFiles: state.dirtyFiles, setDirtyFiles,
         refreshUser,
     }), [
         state.recording, state.paused, state.user, state.recordName,
@@ -89,12 +93,14 @@ export const GlobalProvider = ({ children }) => {
         state.activeFile, state.files, state.sidebarOpen, state.currentWorkspace, state.currentRecord,
         state.autoSave,
         state.theme,
+        state.dirtyFiles,
         startRecording, stopRecording, setPaused, setUser, setRecordName,
         setPlaying, setOutput, setToast,
         setAudioEnabled, setFontSize, setShowMinimap,
         setActiveFile, setFiles, setSidebarOpen, setCurrentWorkspace, setCurrentRecord,
         setAutoSave,
         setTheme,
+        setDirtyFiles,
         refreshUser,
     ]);
 

@@ -27,10 +27,12 @@ export default function App() {
         theme, setTheme,
         autoSave, setAutoSave,
         setRecordName, setPlaying, setCurrentRecord, setToast,
+        dirtyFiles,
     } = useContext(GlobalContext);
     const [showShortcuts, setShowShortcuts] = useState(false);
     const [terminalVisible, setTerminalVisible] = useState(false);
     const [showSetup, setShowSetup] = useState(false);
+    const [showAppCloseDialog, setShowAppCloseDialog] = useState(false);
     const isMacElectron = !!window.electronAPI?.isElectron && window.electronAPI?.platform === 'darwin';
     const [activePanel, setActivePanel] = useState('output');
     const [terminals, setTerminals] = useState([{ id: "terminal-1", name: "Terminal 1" }]);
@@ -126,30 +128,46 @@ export default function App() {
     }, [setOutput]);
 
     useEffect(() => {
-        if (recording) {
-            const handler = (e) => {
+        if (!showAppCloseDialog) return;
+        const handler = (e) => {
+            if (e.key === 'Escape') setShowAppCloseDialog(false);
+        };
+        window.addEventListener('keydown', handler);
+        return () => window.removeEventListener('keydown', handler);
+    }, [showAppCloseDialog]);
+
+    useEffect(() => {
+        const handler = (e) => {
+            if (recording || (dirtyFiles && dirtyFiles.size > 0)) {
                 e.preventDefault();
                 e.returnValue = '';
-            };
-            window.addEventListener('beforeunload', handler);
-            return () => window.removeEventListener('beforeunload', handler);
-        }
-    }, [recording]);
+            }
+        };
+        window.addEventListener('beforeunload', handler);
+        return () => window.removeEventListener('beforeunload', handler);
+    }, [recording, dirtyFiles]);
+
+    useEffect(() => {
+        if (!window.electronAPI?.appMenu?.onBeforeClose) return;
+        const unsub = window.electronAPI.appMenu.onBeforeClose(() => {
+            if (dirtyFiles && dirtyFiles.size > 0) {
+                setShowAppCloseDialog(true);
+            } else {
+                window.electronAPI.appMenu.closeWindow();
+            }
+        });
+        return () => unsub();
+    }, [dirtyFiles]);
 
     useEffect(() => {
         const syncFiles = () => {
             const files = getFiles();
             setFiles(files);
-            if (!files.length) return;
-            const preferred = window.__activeFile;
-            if (!preferred || !files.some(f => f.name === preferred)) {
-                setActiveFile(files[0].name);
-            }
         };
         syncFiles();
         const interval = setInterval(syncFiles, 500);
         return () => clearInterval(interval);
-    }, [setFiles, setActiveFile]);
+    }, [setFiles]);
 
     useEffect(() => {
         if (!isLocal || !currentWorkspace?.path || !window.electronAPI?.isElectron) return;
@@ -657,6 +675,50 @@ export default function App() {
             <StatusBar />
             <Toast />
             <ShortcutsHelp display={showShortcuts} setDisplay={setShowShortcuts} />
+
+            {showAppCloseDialog && (
+                <div
+                    className="modal-container"
+                    onKeyDown={(e) => { if (e.key === 'Escape') setShowAppCloseDialog(false); }}
+                >
+                    <div className="modal-box unsaved-dialog">
+                        <div className="modal-header">
+                            <h3 className="modal-title">Unsaved Changes</h3>
+                        </div>
+                        <p style={{ margin: '8px 0 16px', color: 'var(--text-secondary)', fontSize: 13 }}>
+                            You have unsaved changes. Do you want to save them before closing?
+                        </p>
+                        <div className="modal-footer" style={{ borderTop: 'none', marginTop: 0, paddingTop: 0 }}>
+                            <div />
+                            <div>
+                                <button
+                                    className="btn btn-primary"
+                                    onClick={async () => {
+                                        await window.__saveAllFiles?.();
+                                        window.electronAPI?.appMenu?.closeWindow();
+                                    }}
+                                >
+                                    Save All
+                                </button>
+                                <button
+                                    className="btn"
+                                    onClick={() => {
+                                        window.electronAPI?.appMenu?.closeWindow();
+                                    }}
+                                >
+                                    Discard All
+                                </button>
+                                <button
+                                    className="btn"
+                                    onClick={() => setShowAppCloseDialog(false)}
+                                >
+                                    Cancel
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            )}
         </div>
     );
 }

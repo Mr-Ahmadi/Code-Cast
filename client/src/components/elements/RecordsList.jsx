@@ -2,7 +2,7 @@ import { useContext, useState, useEffect, useRef, useCallback, useMemo, memo } f
 import { GlobalContext } from '../../contexts/GlobalStates';
 import { useMode, MODES } from '../../contexts/ModeContext';
 import PropTypes from 'prop-types';
-import { init as initRecord, load as loadRecord, addFile as recordAddFile } from "../../functions/record";
+import { init as initRecord, load as loadRecord, addFile as recordAddFile, stopPlay } from "../../functions/record";
 import * as localStore from "../../stores/localStore";
 import axios from "axios";
 import { FiFileText, FiPlus, FiX, FiTrash2, FiSearch, FiChevronRight, FiChevronDown, FiFolder, FiFolderPlus } from "react-icons/fi";
@@ -61,7 +61,7 @@ function extLang(name) {
 const OPENED_FOLDERS_KEY = 'codecast_opened_folders';
 
 const RecordsList = memo(({ display, setDisplay }) => {
-  const { user, setRecordName, setToast, refreshUser, setCurrentWorkspace, setCurrentRecord } = useContext(GlobalContext);
+  const { user, setRecordName, setToast, refreshUser, setCurrentWorkspace, setCurrentRecord, setPlaying } = useContext(GlobalContext);
   const { mode } = useMode();
   const isLocal = mode === MODES.LOCAL;
   const [selected, setSelected] = useState(null)
@@ -142,6 +142,8 @@ const RecordsList = memo(({ display, setDisplay }) => {
   }, [setDisplay]);
 
   const handleOpenProject = useCallback(async (ws) => {
+    stopPlay();
+    setPlaying(false);
     setLoading(ws.id);
     try {
       if (ws.path) {
@@ -165,6 +167,8 @@ const RecordsList = memo(({ display, setDisplay }) => {
   }, [closeModal, setToast, setCurrentWorkspace, setCurrentRecord, setRecordName]);
 
   const handleOpenRecord = useCallback(async (recordId, name, ws) => {
+    stopPlay();
+    setPlaying(false);
     setLoading(recordId);
     try {
       if (isLocal) {
@@ -188,6 +192,8 @@ const RecordsList = memo(({ display, setDisplay }) => {
   }, [closeModal, setToast, setRecordName, setCurrentWorkspace, setCurrentRecord, isLocal]);
 
   const handleOpenFolder = useCallback(async () => {
+    stopPlay();
+    setPlaying(false);
     const f = window.electronAPI?.file;
     if (!f) {
       setToast({ type: "ERROR", message: "File system not available. Use the desktop app." });
@@ -220,6 +226,8 @@ const RecordsList = memo(({ display, setDisplay }) => {
   }, [setToast, setCurrentWorkspace, setCurrentRecord, setRecordName, closeModal, openedFolders]);
 
   const handleCreateWorkspace = useCallback(async () => {
+    stopPlay();
+    setPlaying(false);
     if (isLocal) {
       setShowCreateForm(true);
       return;
@@ -252,6 +260,8 @@ const RecordsList = memo(({ display, setDisplay }) => {
   }, [isLocal, setToast, refreshUser, setCurrentWorkspace, setCurrentRecord, setRecordName, closeModal]);
 
   const doCreateProject = useCallback(async () => {
+    stopPlay();
+    setPlaying(false);
     const name = newProjectName.trim() || "My Project";
     const templateKey = newProjectTemplate;
     const template = PROJECT_TEMPLATES[templateKey];

@@ -13,7 +13,8 @@ import PropTypes from 'prop-types';
 const _Editor = memo(({ editorRef }) => {
   const { 
     recording, fontSize, showMinimap, activeFile, previewFile,
-    setActiveFile, setFiles, currentWorkspace, autoSave, setToast, theme
+    setActiveFile, setFiles, currentWorkspace, autoSave, setToast, theme,
+    setDirtyFiles,
   } = useContext(GlobalContext);
 
   const oldValue = useRef("");
@@ -23,6 +24,9 @@ const _Editor = memo(({ editorRef }) => {
   const recordingRef = useRef(recording);
   const activeFileRef = useRef(activeFile);
   const autoSaveTimerRef = useRef(null);
+  const savedContentRef = useRef({});
+  const dirtyRef = useRef(new Set());
+  const viewStateCache = useRef({});
 
   recordingRef.current = recording;
   activeFileRef.current = activeFile;
@@ -57,12 +61,22 @@ const _Editor = memo(({ editorRef }) => {
     return getFileFirstValue(name) || "";
   }, []);
 
+  const markClean = useCallback((name) => {
+    dirtyRef.current.delete(name);
+    setDirtyFiles(new Set(dirtyRef.current));
+  }, [setDirtyFiles]);
+
   const saveCurrentFile = useCallback(async () => {
     if (!activeFile || activeFile === previewFile) return false;
     const content = editorRef.current?.getValue();
     if (content === undefined) return false;
-    return saveRelativeFile(activeFile, content);
-  }, [activeFile, previewFile, editorRef, saveRelativeFile]);
+    const ok = await saveRelativeFile(activeFile, content);
+    if (ok) {
+      savedContentRef.current[activeFile] = content;
+      markClean(activeFile);
+    }
+    return ok;
+  }, [activeFile, previewFile, editorRef, saveRelativeFile, markClean]);
 
   const saveAllFiles = useCallback(async () => {
     if (!currentWorkspace?.path) return false;
@@ -72,8 +86,16 @@ const _Editor = memo(({ editorRef }) => {
     let failed = 0;
     for (const f of trackedFiles) {
       const ok = await saveRelativeFile(f.name, getModelContent(f.name), { silent: true });
-      if (!ok) failed += 1;
+      if (ok) {
+        const content = getModelContent(f.name);
+        savedContentRef.current[f.name] = content;
+        dirtyRef.current.delete(f.name);
+      } else {
+        failed += 1;
+      }
     }
+
+    setDirtyFiles(new Set(dirtyRef.current));
 
     if (failed === 0) {
       setToast({ type: "SUCCESS", message: `Saved ${trackedFiles.length} file${trackedFiles.length === 1 ? "" : "s"}` });
@@ -85,7 +107,7 @@ const _Editor = memo(({ editorRef }) => {
       message: `Saved ${trackedFiles.length - failed}/${trackedFiles.length} files`,
     });
     return false;
-  }, [currentWorkspace?.path, getModelContent, saveRelativeFile, setToast]);
+  }, [currentWorkspace?.path, getModelContent, saveRelativeFile, setToast, setDirtyFiles]);
 
   const triggerEditorAction = useCallback((actionId) => {
     const editor = editorRef.current;
@@ -188,13 +210,28 @@ const _Editor = memo(({ editorRef }) => {
     }
     oldValue.current = currentValue;
 
+    const name = activeFileRef.current;
+    if (name && savedContentRef.current[name] !== undefined) {
+      const saved = savedContentRef.current[name];
+      const isDirty = currentValue !== saved;
+      const wasDirty = dirtyRef.current.has(name);
+      if (isDirty !== wasDirty) {
+        if (isDirty) {
+          dirtyRef.current.add(name);
+        } else {
+          dirtyRef.current.delete(name);
+        }
+        setDirtyFiles(new Set(dirtyRef.current));
+      }
+    }
+
     if (autoSave && !recordingRef.current && activeFileRef.current !== previewFile) {
       if (autoSaveTimerRef.current) clearTimeout(autoSaveTimerRef.current);
       autoSaveTimerRef.current = setTimeout(() => {
         saveCurrentFile();
       }, 1000);
     }
-  }, [autoSave, editorRef, saveCurrentFile, previewFile]);
+  }, [autoSave, editorRef, saveCurrentFile, previewFile, setDirtyFiles]);
 
   const createModel = useCallback((monaco, name, content, language) => {
     if (modelsRef.current[name]) return modelsRef.current[name];
@@ -208,8 +245,24 @@ const _Editor = memo(({ editorRef }) => {
   const switchEditorModel = useCallback((name) => {
     const ed = editorRef.current;
     if (!ed || !modelsRef.current[name]) return;
+    // Save current view state before switching away
+    const currentModel = ed.getModel();
+    if (currentModel) {
+      const currentUri = currentModel.uri.toString();
+      const state = ed.saveViewState();
+      if (state) viewStateCache.current[currentUri] = state;
+    }
     ed.setModel(modelsRef.current[name]);
+    // Restore view state for the model being switched to
+    const newUri = modelsRef.current[name].uri.toString();
+    const cached = viewStateCache.current[newUri];
+    if (cached) {
+      ed.restoreViewState(cached);
+    }
     oldValue.current = ed.getValue();
+    if (savedContentRef.current[name] === undefined) {
+      savedContentRef.current[name] = oldValue.current;
+    }
   }, [editorRef]);
 
   const applyEditorTheme = useCallback((monacoInstance = monacoRef.current) => {
@@ -258,18 +311,14 @@ const _Editor = memo(({ editorRef }) => {
     editorReady.current = true;
     applyEditorTheme(monaco);
 
-    const fileList = getFiles();
-    const active = getActiveFile() || (fileList.length > 0 ? fileList[0].name : null);
+    const active = getActiveFile();
     if (active) {
       const content = getFileFirstValue(active) || "";
+      savedContentRef.current[active] = content;
       createModel(monaco, active, content, undefined);
       if (modelsRef.current[active]) {
         editor.setModel(modelsRef.current[active]);
       }
-    }
-
-    if (!getActiveFile() && fileList.length > 0) {
-      setActiveFile(fileList[0].name);
     }
   }
 
@@ -279,9 +328,13 @@ const _Editor = memo(({ editorRef }) => {
     if (modelsRef.current[name]) {
       const model = modelsRef.current[name];
       if (content !== undefined && model.getValue() !== content) {
+        savedContentRef.current[name] = content;
         model.setValue(content);
       }
       return model;
+    }
+    if (content !== undefined && content !== null) {
+      savedContentRef.current[name] = content;
     }
     return createModel(monaco, name, content, language);
   }, [createModel]);
@@ -337,20 +390,36 @@ const _Editor = memo(({ editorRef }) => {
     return () => clearTimeout(timer);
   }, [theme, applyEditorTheme]);
 
+  const saveFileByName = useCallback(async (name) => {
+    if (!name || !currentWorkspace?.path) return false;
+    const model = modelsRef.current[name];
+    if (!model) return false;
+    const content = model.getValue();
+    const ok = await saveRelativeFile(name, content);
+    if (ok) {
+      savedContentRef.current[name] = content;
+      dirtyRef.current.delete(name);
+      setDirtyFiles(new Set(dirtyRef.current));
+    }
+    return ok;
+  }, [currentWorkspace?.path, saveRelativeFile, setDirtyFiles]);
+
   useEffect(() => {
     window.__saveCurrentFile = saveCurrentFile;
     window.__saveCurrentFileAs = saveCurrentFileAs;
     window.__saveAllFiles = saveAllFiles;
     window.__runEditorAction = triggerEditorAction;
     window.__focusEditor = () => editorRef.current?.focus();
+    window.__saveFileByName = saveFileByName;
     return () => {
       window.__saveCurrentFile = undefined;
       window.__saveCurrentFileAs = undefined;
       window.__saveAllFiles = undefined;
       window.__runEditorAction = undefined;
       window.__focusEditor = undefined;
+      window.__saveFileByName = undefined;
     };
-  }, [editorRef, saveCurrentFile, saveCurrentFileAs, saveAllFiles, triggerEditorAction]);
+  }, [editorRef, saveCurrentFile, saveCurrentFileAs, saveAllFiles, triggerEditorAction, saveFileByName]);
 
   window.__ensureModel = ensureModel;
   window.__switchEditorModel = switchEditorModel;
@@ -386,20 +455,33 @@ const _Editor = memo(({ editorRef }) => {
 
   useEffect(() => {
     if (!editorReady.current || !activeFile) return;
+    const targetFile = activeFile;
     const load = async () => {
-      let content = modelsRef.current[activeFile] ? undefined : (getFileFirstValue(activeFile) || "");
+      if (modelsRef.current[targetFile]) {
+        // Guard: only switch if this file is still the current one
+        if (activeFileRef.current === targetFile) {
+          switchEditorModel(targetFile);
+        }
+        return;
+      }
+      let content = getFileFirstValue(targetFile) || "";
       if (!content && currentWorkspace?.path) {
-        if (activeFile === previewFile) {
-          const fullPath = window.electronAPI.path.join(currentWorkspace.path, activeFile);
+        if (targetFile === previewFile) {
+          const fullPath = window.electronAPI.path.join(currentWorkspace.path, targetFile);
           content = await window.electronAPI.file.read(fullPath);
         } else {
-          await ensureFileContent(activeFile, currentWorkspace.path);
-          content = getFileFirstValue(activeFile) || "";
+          await ensureFileContent(targetFile, currentWorkspace.path);
+          content = getFileFirstValue(targetFile) || "";
         }
       }
-      ensureModel(activeFile, content, undefined);
-      if (modelsRef.current[activeFile]) {
-        switchEditorModel(activeFile);
+      // Guard against stale async resolve
+      if (activeFileRef.current !== targetFile) return;
+      if (savedContentRef.current[targetFile] === undefined) {
+        savedContentRef.current[targetFile] = content || "";
+      }
+      ensureModel(targetFile, content, undefined);
+      if (modelsRef.current[targetFile] && activeFileRef.current === targetFile) {
+        switchEditorModel(targetFile);
       }
     };
     load();
