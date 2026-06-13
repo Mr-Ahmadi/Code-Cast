@@ -373,7 +373,7 @@ const RecordsList = memo(({ display, setDisplay }) => {
   }, []);
 
   const toggleExpand = useCallback((id) => {
-    setExpanded(prev => ({ ...prev, [id]: !prev[id] }));
+    setExpanded(prev => ({ [id]: !prev[id] }));
   }, []);
 
   const selectedRef = useRef(selected);
