@@ -7,7 +7,7 @@ import {
   renameFile as recordRenameFile, removeFile as recordRemoveFile,
 } from "../../functions/record";
 import { isBinaryFile, extLang, getIconType } from "../../functions/fileTypes";
-import { FiFileText, FiCode, FiImage, FiChevronRight, FiChevronDown, FiFolder, FiDownload, FiUpload, FiEdit2, FiTrash2, FiPlus, FiAlertTriangle } from "react-icons/fi";
+import { FiFileText, FiCode, FiImage, FiChevronRight, FiChevronDown, FiFolder, FiDownload, FiUpload, FiEdit2, FiTrash2, FiPlus } from "react-icons/fi";
 
 function extIcon(name) {
   const type = getIconType(name);
@@ -25,7 +25,7 @@ function sortFsEntries(entries) {
 }
 
 const FileTree = memo(() => {
-  const { activeFile, setActiveFile, setFiles, playing, paused, currentWorkspace, setToast, setRecordName, currentRecord, setCurrentRecord, setPlaying, recording, previewFile, setPreviewFile } = useContext(GlobalContext);
+  const { activeFile, setActiveFile, setFiles, playing, paused, currentWorkspace, setToast, setRecordName, currentRecord, setCurrentRecord, setPlaying, recording, setPreviewFile } = useContext(GlobalContext);
   const importInputRef = useRef(null);
   const f = window.electronAPI?.file;
   const pathUtil = window.electronAPI?.path;
@@ -41,13 +41,23 @@ const FileTree = memo(() => {
   const [missingFiles, setMissingFiles] = useState([]);
   const [newFileParent, setNewFileParent] = useState(null);
   const [newFileName, setNewFileName] = useState("");
+  const [newFolderParent, setNewFolderParent] = useState(null);
+  const [newFolderName, setNewFolderName] = useState("");
+  const [targetDir, setTargetDir] = useState("");
+  const [selectedPath, setSelectedPath] = useState(null);
+  const [dragOverTarget, setDragOverTarget] = useState(null);
+  const [dragOverRoot, setDragOverRoot] = useState(false);
 
   const expandedRef = useRef(expanded);
   const dirContentsRef = useRef(dirContents);
   const loadingRef = useRef(loading);
+  const dragOverTargetRef = useRef(dragOverTarget);
+  const dragOverRootRef = useRef(dragOverRoot);
   useEffect(() => { expandedRef.current = expanded; }, [expanded]);
   useEffect(() => { dirContentsRef.current = dirContents; }, [dirContents]);
   useEffect(() => { loadingRef.current = loading; }, [loading]);
+  useEffect(() => { dragOverTargetRef.current = dragOverTarget; }, [dragOverTarget]);
+  useEffect(() => { dragOverRootRef.current = dragOverRoot; }, [dragOverRoot]);
 
   const getAbsPath = useCallback((relativePath) => {
     if (!workspacePath || !pathUtil) return null;
@@ -148,6 +158,64 @@ const FileTree = memo(() => {
     await loadDir(workspacePath, workspacePath);
   }, [workspacePath, f, loadDir]);
 
+  const moveItem = useCallback(async (sourceRelPath, targetDirRelPath) => {
+    if (playing && !paused) return;
+    if (!sourceRelPath) return;
+
+    const sourceName = sourceRelPath.split('/').pop();
+    const newRelPath = targetDirRelPath ? targetDirRelPath + '/' + sourceName : sourceName;
+    if (sourceRelPath === newRelPath) return;
+    if (newRelPath.startsWith(sourceRelPath + '/')) return;
+
+    setToast({ type: "INFO", message: `Moving "${sourceRelPath}"...` });
+
+    if (workspacePath && f && pathUtil) {
+      const oldAbs = pathUtil.join(workspacePath, sourceRelPath);
+      const newAbs = pathUtil.join(workspacePath, newRelPath);
+      try {
+        if (sourceRelPath.includes('/')) {
+          const parentDir = targetDirRelPath ? pathUtil.join(workspacePath, targetDirRelPath) : workspacePath;
+          await f.mkdir(parentDir);
+        }
+        const exists = await f.exists(newAbs);
+        if (exists) {
+          setToast({ type: "WARNING", message: `"${newRelPath}" already exists` });
+          return;
+        }
+        await f.rename(oldAbs, newAbs);
+      } catch (err) {
+        setToast({ type: "ERROR", message: err.message || "Failed to move file/directory" });
+        return;
+      }
+    }
+
+    // Update recording references
+    const allFiles = getFiles();
+    const prefix = sourceRelPath + '/';
+    const moved = allFiles.filter(f => f.name === sourceRelPath || f.name.startsWith(prefix));
+    if (moved.length > 0) {
+      for (const file of moved) {
+        const newName = file.name === sourceRelPath
+          ? newRelPath
+          : newRelPath + file.name.substring(prefix.length - 1);
+        const renamed = recordRenameFile(file.name, newName);
+        if (renamed) {
+          window.__renameModel?.(file.name, newName);
+        }
+      }
+      setFiles(getFiles());
+      if (getActiveFile() && moved.some(f => f.name === getActiveFile())) {
+        const newActive = getActiveFile() === sourceRelPath
+          ? newRelPath
+          : newRelPath + getActiveFile().substring(prefix.length - 1);
+        if (getActiveFile() !== newActive) setActiveFile(newActive);
+      }
+    }
+
+    setToast({ type: "SUCCESS", message: `Moved "${sourceRelPath}"` });
+    if (workspacePath) await forceRefresh();
+  }, [playing, paused, workspacePath, f, pathUtil, setToast, setFiles, setActiveFile, forceRefresh]);
+
   const restoreMissingFile = useCallback(async (name) => {
     if (playing && !paused) return;
     if (!workspacePath || !f || !pathUtil) {
@@ -176,6 +244,16 @@ const FileTree = memo(() => {
     setNewFileName("");
     setCtxMenu(null);
     setConfirmDelete(null);
+    if (parentRel) {
+      setExpanded(prev => {
+        const next = { ...prev, [parentRel]: true };
+        const parts = parentRel.split('/');
+        for (let i = 1; i < parts.length; i++) {
+          next[parts.slice(0, i).join('/')] = true;
+        }
+        return next;
+      });
+    }
   }, []);
 
   useEffect(() => {
@@ -219,6 +297,124 @@ const FileTree = memo(() => {
     setNewFileName("");
   }, [newFileName, newFileParent, workspacePath, f, pathUtil, setToast, setActiveFile, setFiles, forceRefresh]);
 
+  const startNewFolder = useCallback((parentRel) => {
+    setNewFolderParent(parentRel);
+    setNewFolderName("");
+    setCtxMenu(null);
+    setConfirmDelete(null);
+    if (parentRel) {
+      setExpanded(prev => {
+        const next = { ...prev, [parentRel]: true };
+        const parts = parentRel.split('/');
+        for (let i = 1; i < parts.length; i++) {
+          next[parts.slice(0, i).join('/')] = true;
+        }
+        return next;
+      });
+    }
+  }, []);
+
+  const submitNewFolder = useCallback(async () => {
+    const name = newFolderName.trim();
+    if (!name) { setNewFolderParent(null); return; }
+    const relPath = newFolderParent ? newFolderParent + "/" + name : name;
+
+    if (workspacePath && f && pathUtil) {
+      const absPath = pathUtil.join(workspacePath, relPath);
+      try {
+        const exists = await f.exists(absPath);
+        if (exists) {
+          setToast({ type: "WARNING", message: `"${name}" already exists` });
+          return;
+        }
+        await f.mkdir(absPath);
+      } catch (err) {
+        setToast({ type: "ERROR", message: err.message || "Failed to create directory" });
+        setNewFolderParent(null);
+        setNewFolderName("");
+        return;
+      }
+    }
+
+    setToast({ type: "SUCCESS", message: `Created directory "${relPath}"` });
+    await forceRefresh();
+    setNewFolderParent(null);
+    setNewFolderName("");
+  }, [newFolderName, newFolderParent, workspacePath, f, pathUtil, setToast, forceRefresh]);
+
+  // --- Drag & Drop ---
+
+  const handleDragStart = useCallback((e, relPath) => {
+    if (playing && !paused) return;
+    e.dataTransfer.setData('text/plain', relPath);
+    e.dataTransfer.effectAllowed = 'move';
+    e.currentTarget.classList.add('dragging');
+  }, [playing, paused]);
+
+  const handleDragEnd = useCallback((e) => {
+    e.currentTarget.classList.remove('dragging');
+    setDragOverTarget(null);
+    setDragOverRoot(false);
+  }, []);
+
+  const handleDragOver = useCallback((e, relPath) => {
+    if (e.dataTransfer.types.includes('text/plain')) {
+      e.preventDefault();
+      e.dataTransfer.dropEffect = 'move';
+      if (relPath !== dragOverTargetRef.current) {
+        setDragOverTarget(relPath);
+      }
+    }
+  }, []);
+
+  const handleDragLeave = useCallback((e, relPath) => {
+    if (dragOverTargetRef.current === relPath) {
+      setDragOverTarget(null);
+    }
+  }, []);
+
+  const handleDrop = useCallback((e, targetDirRelPath) => {
+    e.preventDefault();
+    e.stopPropagation();
+    const sourceRelPath = e.dataTransfer.getData('text/plain');
+    setDragOverTarget(null);
+    setDragOverRoot(false);
+    if (!sourceRelPath) return;
+    moveItem(sourceRelPath, targetDirRelPath);
+  }, [moveItem]);
+
+  const handleRootDragOver = useCallback((e) => {
+    if (e.dataTransfer.types.includes('text/plain')) {
+      e.preventDefault();
+      e.dataTransfer.dropEffect = 'move';
+      if (!dragOverRootRef.current) {
+        setDragOverRoot(true);
+      }
+    }
+  }, []);
+
+  const handleRootDragLeave = useCallback((e) => {
+    const rect = e.currentTarget.getBoundingClientRect();
+    const x = e.clientX;
+    const y = e.clientY;
+    if (x < rect.left || x > rect.right || y < rect.top || y > rect.bottom) {
+      setDragOverRoot(false);
+    }
+  }, []);
+
+  const handleRootDrop = useCallback((e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    const sourceRelPath = e.dataTransfer.getData('text/plain');
+    setDragOverRoot(false);
+    if (!sourceRelPath) return;
+    moveItem(sourceRelPath, "");
+  }, [moveItem]);
+
+  const targetParent = useCallback((relPath, isDir) => {
+    return isDir ? relPath : (relPath.includes('/') ? relPath.substring(0, relPath.lastIndexOf('/')) : "");
+  }, []);
+
   const handleContextMenu = useCallback((e, relPath, isDir) => {
     if (playing) return;
     e.preventDefault();
@@ -236,8 +432,10 @@ const FileTree = memo(() => {
       y = Math.max(0, rect.height - menuHeight);
     }
     setCtxMenu({ x, y, relPath, isDir });
+    setSelectedPath(relPath);
+    setTargetDir(targetParent(relPath, isDir));
     setRenaming(null);
-  }, [playing]);
+  }, [playing, targetParent]);
 
   const startRename = useCallback((relPath) => {
     const name = relPath.split('/').pop();
@@ -393,12 +591,60 @@ const FileTree = memo(() => {
 
   const currentActive = playing ? activeFile : (getActiveFile() || activeFile);
 
+  function renderNewFileInput(depth) {
+    return (
+      <div key="new-file-input" className="file-tree-item" style={{ paddingLeft: 8 + depth * 14, background: 'var(--bg-hover)' }}>
+        <span className="file-tree-item-icon" />
+        <span className="file-tree-item-icon"><FiFileText size={14} /></span>
+        <input
+          className="file-tree-rename-input"
+          value={newFileName}
+          onChange={e => setNewFileName(e.target.value)}
+          onKeyDown={e => {
+            if (e.key === 'Enter') submitNewFile();
+            if (e.key === 'Escape') { setNewFileParent(null); setNewFileName(""); }
+          }}
+          onBlur={() => submitNewFile()}
+          placeholder="filename.ext"
+          autoFocus
+          onClick={e => e.stopPropagation()}
+        />
+      </div>
+    );
+  }
+
+  function renderNewFolderInput(depth) {
+    return (
+      <div key="new-folder-input" className="file-tree-item" style={{ paddingLeft: 8 + depth * 14, background: 'var(--bg-hover)' }}>
+        <span className="file-tree-item-icon" />
+        <span className="file-tree-item-icon"><FiFolder size={14} /></span>
+        <input
+          className="file-tree-rename-input"
+          value={newFolderName}
+          onChange={e => setNewFolderName(e.target.value)}
+          onKeyDown={e => {
+            if (e.key === 'Enter') submitNewFolder();
+            if (e.key === 'Escape') { setNewFolderParent(null); setNewFolderName(""); }
+          }}
+          onBlur={() => submitNewFolder()}
+          placeholder="folder name"
+          autoFocus
+          onClick={e => e.stopPropagation()}
+        />
+      </div>
+    );
+  }
+
   function renderChildren(children, parentRel, depth) {
     const { dirs, files } = children ? sortFsEntries(children) : { dirs: [], files: [] };
     const directMissing = getMissingFilesInDir(parentRel);
     const virtDirs = getVirtualDirs(dirs.map(d => d.name), parentRel);
+    const showNewInput = newFileParent === parentRel;
+    const showNewFolderInput = newFolderParent === parentRel;
     return (
       <>
+        {showNewFolderInput && renderNewFolderInput(depth + 1)}
+        {showNewInput && renderNewFileInput(depth + 1)}
         {dirs.map(d => {
           const relPath = parentRel ? parentRel + "/" + d.name : d.name;
           return renderDir(d, relPath, depth + 1);
@@ -419,14 +665,35 @@ const FileTree = memo(() => {
     const isOpen = !!expanded[relPath];
     const children = dirContents[relPath];
     const isLoading = !!loading[relPath];
+    const isDragOver = dragOverTarget === relPath;
+    const isSelected = selectedPath === relPath;
+
+    const dirClasses = "file-tree-item file-tree-folder"
+      + (isDragOver ? " drag-over" : "")
+      + (isSelected ? " selected" : "");
 
     return (
       <div key={relPath}>
         <div
-          className="file-tree-item file-tree-folder"
+          className={dirClasses}
           style={{ paddingLeft: 8 + depth * 14 }}
-          onClick={() => toggleDir(absPath, relPath, isOpen)}
+          draggable={!(playing && !paused)}
+          onClick={() => {
+            toggleDir(absPath, relPath, isOpen);
+            if (selectedPath === relPath) {
+              setSelectedPath(null);
+              setTargetDir("");
+            } else {
+              setSelectedPath(relPath);
+              setTargetDir(relPath);
+            }
+          }}
           onContextMenu={(e) => handleContextMenu(e, relPath, true)}
+          onDragStart={(e) => handleDragStart(e, relPath)}
+          onDragEnd={handleDragEnd}
+          onDragOver={(e) => handleDragOver(e, relPath)}
+          onDragLeave={(e) => handleDragLeave(e, relPath)}
+          onDrop={(e) => handleDrop(e, relPath)}
         >
           <span className="file-tree-item-icon">
             {isLoading ? <span style={{ fontSize: 10 }}>...</span>
@@ -450,13 +717,24 @@ const FileTree = memo(() => {
 
   function renderFile(entry, relPath, depth) {
     const isRenaming = renaming === relPath;
+    const isDragOver = dragOverTarget === relPath;
+    const isSelected = selectedPath === relPath;
+    const fileClasses = "file-tree-item"
+      + (relPath === currentActive ? " active" : "")
+      + (playing ? " no-interact" : "")
+      + (isRenaming ? " renaming" : "")
+      + (isDragOver ? " drag-over" : "")
+      + (isSelected ? " selected" : "");
     return (
       <div
         key={relPath}
-        className={"file-tree-item" + (relPath === currentActive ? " active" : "") + (playing ? " no-interact" : "") + (isRenaming ? " renaming" : "")}
+        className={fileClasses}
         style={{ paddingLeft: 8 + depth * 14 }}
-        onClick={() => { if (!isRenaming) handleFileClick(relPath); }}
+        draggable={!(playing && !paused)}
+        onClick={() => { if (!isRenaming) { handleFileClick(relPath); if (selectedPath === relPath) { setSelectedPath(null); setTargetDir(""); } else { setSelectedPath(relPath); const parent = relPath.includes('/') ? relPath.substring(0, relPath.lastIndexOf('/')) : ""; setTargetDir(parent); if (parent) { setExpanded(prev => { const next = { ...prev, [parent]: true }; const parts = parent.split('/'); for (let j = 1; j < parts.length; j++) next[parts.slice(0, j).join('/')] = true; return next; }); } } } }}
         onContextMenu={(e) => handleContextMenu(e, relPath, false)}
+        onDragStart={(e) => handleDragStart(e, relPath)}
+        onDragEnd={handleDragEnd}
         title={relPath}
       >
         <span className="file-tree-item-icon" />
@@ -558,15 +836,21 @@ const FileTree = memo(() => {
   const rootLoading = loading[workspacePath];
 
   return (
-    <div className="file-tree-items">
+    <div
+      className={"file-tree-items" + (dragOverRoot ? " drag-over-root" : "")}
+      onDragOver={handleRootDragOver}
+      onDragLeave={handleRootDragLeave}
+      onDrop={handleRootDrop}
+      onClick={(e) => { if (e.target === e.currentTarget || e.target.closest('.file-tree-meta') || e.target.closest('.file-tree-empty')) { setSelectedPath(null); setTargetDir(""); } }}
+    >
       <div className="file-tree-meta">
         <span>{workspacePath ? currentWorkspace?.name || "Project" : "No project"}</span>
         <span className="file-tree-actions">
           {!playing && (
             <button
               className="file-tree-action-btn"
-              onClick={() => startNewFile("")}
-              title="New file"
+              onClick={() => startNewFile(targetDir)}
+              title={targetDir ? `New file in ${targetDir}` : "New file"}
               aria-label="New file"
             >
               <FiPlus size={12} />
@@ -593,24 +877,6 @@ const FileTree = memo(() => {
           )}
         </span>
       </div>
-      {newFileParent !== null && (
-        <div className="file-tree-new-input" style={{ paddingLeft: 20 }}>
-          <span className="file-tree-item-icon"><FiFileText size={14} /></span>
-          <input
-            className="file-tree-rename-input"
-            value={newFileName}
-            onChange={e => setNewFileName(e.target.value)}
-            onKeyDown={e => {
-              if (e.key === 'Enter') submitNewFile();
-              if (e.key === 'Escape') { setNewFileParent(null); setNewFileName(""); }
-            }}
-            onBlur={() => submitNewFile()}
-            placeholder="filename.ext"
-            autoFocus
-            onClick={e => e.stopPropagation()}
-          />
-        </div>
-      )}
       <input
         ref={importInputRef}
         type="file"
@@ -629,11 +895,11 @@ const FileTree = memo(() => {
         )
       ) : (
         <div>
-          {rootContents ? renderChildren(rootContents, "", -1) : missingFiles.length > 0 ? renderChildren(null, "", -1) : null}
-          {!rootContents && rootLoading && (
+          {rootLoading && !rootContents && (
             <div className="file-tree-empty">Loading...</div>
           )}
-          {!rootContents && !rootLoading && missingFiles.length === 0 && (
+          {renderChildren(rootContents || null, "", -1)}
+          {!rootLoading && !rootContents && missingFiles.length === 0 && newFileParent !== "" && (
             <div className="file-tree-empty">Empty project</div>
           )}
         </div>
@@ -644,9 +910,14 @@ const FileTree = memo(() => {
           style={{ left: ctxMenu.x, top: ctxMenu.y, position: 'absolute' }}
           onClick={e => e.stopPropagation()}
         >
-          <button className="menu-item" onClick={() => startNewFile(ctxMenu.relPath)}>
+          <button className="menu-item" onClick={() => startNewFile(targetParent(ctxMenu.relPath, ctxMenu.isDir))}>
             <span style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
               <FiPlus size={12} /> New File
+            </span>
+          </button>
+          <button className="menu-item" onClick={() => startNewFolder(targetParent(ctxMenu.relPath, ctxMenu.isDir))}>
+            <span style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+              <FiFolder size={12} /> New Folder
             </span>
           </button>
           <div className="menu-separator" />
