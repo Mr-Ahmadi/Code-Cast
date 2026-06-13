@@ -1,5 +1,6 @@
 import { useContext, useCallback, useRef, useState, memo, useEffect } from "react";
 import { GlobalContext } from "../../contexts/GlobalStates";
+import { useMode, MODES } from "../../contexts/ModeContext";
 import {
   getActiveFile, switchFile as recordSwitchFile,
   getFiles, exportRecord, importFromFile, isTypistLoaded, stopPlay,
@@ -90,19 +91,45 @@ const FileTree = memo(() => {
     return Array.from(result).sort();
   }, [missingFiles]);
 
-  const loadDir = useCallback(async (absPath, loadKey) => {
+  const loadDir = useCallback(async (absPath, loadKey, force = false) => {
     if (!f) return;
-    if (dirContentsRef.current[loadKey]) return;
+    if (!force && dirContentsRef.current[loadKey]) return;
     if (loadingRef.current[loadKey]) return;
-    setLoading(prev => ({ ...prev, [loadKey]: true }));
+
+    // Only show loading indicator if we don't have content yet
+    if (!dirContentsRef.current[loadKey]) {
+      setLoading(prev => ({ ...prev, [loadKey]: true }));
+    }
+
     try {
       const entries = await f.list(absPath);
-      if (dirContentsRef.current[loadKey]) return;
-      setDirContents(prev => ({ ...prev, [loadKey]: entries }));
+      const current = dirContentsRef.current[loadKey];
+      // Only update if content changed
+      if (JSON.stringify(current) !== JSON.stringify(entries)) {
+        setDirContents(prev => ({ ...prev, [loadKey]: entries }));
+      }
     } catch (err) {
       console.warn("Failed to list directory:", absPath, err);
+      setDirContents(prev => {
+        if (!prev[loadKey]) return prev;
+        const next = { ...prev };
+        delete next[loadKey];
+        return next;
+      });
+      setExpanded(prev => {
+        if (!prev[loadKey]) return prev;
+        const next = { ...prev };
+        delete next[loadKey];
+        return next;
+      });
+    } finally {
+      setLoading(prev => {
+        if (!prev[loadKey]) return prev;
+        const next = { ...prev };
+        delete next[loadKey];
+        return next;
+      });
     }
-    setLoading(prev => ({ ...prev, [loadKey]: false }));
   }, [f]);
 
   useEffect(() => {
@@ -146,17 +173,74 @@ const FileTree = memo(() => {
       }
       setMissingFiles(results);
     };
-    check();
+    const timer = setTimeout(check, 100);
+    return () => clearTimeout(timer);
   }, [workspacePath, currentRecord, f, pathUtil]);
+
+  const { mode } = useMode();
+  const isLocal = mode === MODES.LOCAL;
+  const [gitStatus, setGitStatus] = useState({});
+  const gitStatusRef = useRef({});
+
+  const fetchGitStatus = useCallback(async () => {
+    if (!isLocal || !workspacePath || !window.electronAPI?.git?.exec) {
+      if (Object.keys(gitStatusRef.current).length === 0) return;
+      gitStatusRef.current = {};
+      setGitStatus({});
+      return;
+    }
+    const res = await window.electronAPI.git.exec(workspacePath, ["status", "--porcelain"]);
+    if (res.code !== 0) {
+      if (Object.keys(gitStatusRef.current).length === 0) return;
+      gitStatusRef.current = {};
+      setGitStatus({});
+      return;
+    }
+    const map = {};
+    for (const line of res.stdout.split("\n")) {
+      if (!line.trim()) continue;
+      const xy = line.slice(0, 2);
+      const file = line.slice(3);
+      const staged = xy[0];
+      const worktree = xy[1];
+      let label = "";
+      if (staged !== " " && staged !== "?" && staged !== "!") {
+        label = ({ M: "M", A: "A", D: "D", R: "R" })[staged] || staged;
+      } else if (worktree !== " " && worktree !== "?" && worktree !== "!") {
+        label = ({ M: "M", D: "D", "?": "U" })[worktree] || worktree;
+      } else if (xy === "??") {
+        label = "U";
+      }
+      if (label) map[file] = label;
+    }
+    const curr = JSON.stringify(gitStatusRef.current);
+    const next = JSON.stringify(map);
+    if (curr !== next) {
+      gitStatusRef.current = map;
+      setGitStatus(map);
+    }
+  }, [isLocal, workspacePath]);
+
+  useEffect(() => {
+    fetchGitStatus();
+  }, [fetchGitStatus]);
 
   const forceRefresh = useCallback(async () => {
     if (!workspacePath || !f) return;
-    dirContentsRef.current = {};
-    loadingRef.current = {};
-    setDirContents({});
-    setExpanded({});
-    await loadDir(workspacePath, workspacePath);
-  }, [workspacePath, f, loadDir]);
+    const currentExpanded = { ...expandedRef.current };
+    
+    // Background refresh root
+    await loadDir(workspacePath, workspacePath, true);
+    
+    // Background refresh all expanded dirs
+    for (const key of Object.keys(currentExpanded)) {
+      if (key && key !== workspacePath) {
+        const absPath = getAbsPath(key);
+        if (absPath) loadDir(absPath, key, true);
+      }
+    }
+    fetchGitStatus();
+  }, [workspacePath, f, loadDir, getAbsPath, fetchGitStatus]);
 
   const moveItem = useCallback(async (sourceRelPath, targetDirRelPath) => {
     if (playing && !paused) return;
@@ -719,6 +803,7 @@ const FileTree = memo(() => {
     const isRenaming = renaming === relPath;
     const isDragOver = dragOverTarget === relPath;
     const isSelected = selectedPath === relPath;
+    const gitLabel = gitStatus[relPath];
     const fileClasses = "file-tree-item"
       + (relPath === currentActive ? " active" : "")
       + (playing ? " no-interact" : "")
@@ -754,6 +839,7 @@ const FileTree = memo(() => {
           />
         ) : (
           <>
+            {gitLabel && <span className={`file-tree-git-badge git-status-${gitLabel.toLowerCase()}`}>{gitLabel}</span>}
             <span className="file-tree-item-name">{entry.name}</span>
             <span className="file-tree-item-lang">{extLang(relPath)}</span>
           </>

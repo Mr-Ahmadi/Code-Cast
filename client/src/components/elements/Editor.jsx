@@ -7,15 +7,18 @@ import {
   ensureFileContent, isTypistLoaded,
 } from '../../functions/record';
 import { isBinaryFile, extLang } from '../../functions/fileTypes';
-import { FiFolder, FiScissors, FiCopy, FiClipboard, FiList, FiAlertTriangle, FiFileText } from 'react-icons/fi';
+import { formatDocument } from '../../services/formatter';
+import { useMode, MODES } from '../../contexts/ModeContext';
+import { FiFolder, FiScissors, FiCopy, FiClipboard, FiList, FiAlertTriangle, FiFileText, FiCode } from 'react-icons/fi';
 import PropTypes from 'prop-types';
 
 const _Editor = memo(({ editorRef }) => {
   const { 
     recording, fontSize, showMinimap, activeFile, previewFile,
     setActiveFile, setFiles, currentWorkspace, autoSave, setToast, theme,
-    setDirtyFiles,
+    setDirtyFiles, settings,
   } = useContext(GlobalContext);
+  const { mode } = useMode();
 
   const oldValue = useRef("");
   const monacoRef = useRef(null);
@@ -70,15 +73,32 @@ const _Editor = memo(({ editorRef }) => {
 
   const saveCurrentFile = useCallback(async () => {
     if (!activeFile || activeFile === previewFile) return false;
-    const content = editorRef.current?.getValue();
+    let content = editorRef.current?.getValue();
     if (content === undefined) return false;
+
+    if (settings?.formatter?.formatOnSave && !recordingRef.current) {
+      const formatted = await formatDocument(activeFile, content, mode, settings);
+      if (formatted !== content) {
+        const editor = editorRef.current;
+        if (editor) {
+          editor.executeEdits('format', [{
+            range: editor.getModel().getFullModelRange(),
+            text: formatted,
+            forceMoveMarkers: true,
+          }]);
+        }
+        content = formatted;
+        oldValue.current = formatted;
+      }
+    }
+
     const ok = await saveRelativeFile(activeFile, content);
     if (ok) {
       savedContentRef.current[activeFile] = content;
       markClean(activeFile);
     }
     return ok;
-  }, [activeFile, previewFile, editorRef, saveRelativeFile, markClean]);
+  }, [activeFile, previewFile, editorRef, saveRelativeFile, markClean, settings, mode]);
 
   const saveAllFiles = useCallback(async () => {
     if (!currentWorkspace?.path) return false;
@@ -128,6 +148,22 @@ const _Editor = memo(({ editorRef }) => {
   }, [editorRef]);
 
   const [ctxMenu, setCtxMenu] = useState(null);
+
+  const handleFormatDocument = useCallback(async () => {
+    const editor = editorRef.current;
+    if (!editor || !activeFile) return;
+    const content = editor.getValue();
+    if (!content) return;
+    const formatted = await formatDocument(activeFile, content, mode, settings);
+    if (formatted !== content) {
+      editor.executeEdits('format', [{
+        range: editor.getModel().getFullModelRange(),
+        text: formatted,
+        forceMoveMarkers: true,
+      }]);
+      oldValue.current = formatted;
+    }
+  }, [editorRef, activeFile, mode, settings]);
 
   const modKey = window.electronAPI?.platform === 'darwin' ? 'Cmd' : 'Ctrl';
 
@@ -326,6 +362,40 @@ const _Editor = memo(({ editorRef }) => {
     editorReady.current = true;
     applyEditorTheme(monaco);
 
+    const lsp = settings?.lsp;
+    const enableDiagnostics = lsp?.diagnostics !== false;
+    const enableLsp = lsp?.enabled !== false;
+
+    monaco.languages.typescript.javascriptDefaults.setDiagnosticsOptions({
+      noSemanticValidation: !enableDiagnostics,
+      noSyntaxValidation: !enableDiagnostics,
+    });
+    monaco.languages.typescript.typescriptDefaults.setDiagnosticsOptions({
+      noSemanticValidation: !enableDiagnostics,
+      noSyntaxValidation: !enableDiagnostics,
+    });
+
+    if (enableLsp) {
+      monaco.languages.typescript.javascriptDefaults.setCompilerOptions({
+        target: monaco.languages.typescript.ScriptTarget.ESNext,
+        allowNonTsExtensions: true,
+        moduleResolution: monaco.languages.typescript.ModuleResolutionKind.NodeJs,
+        module: monaco.languages.typescript.ModuleKind.ESNext,
+        noEmit: true,
+        strict: false,
+        jsx: monaco.languages.typescript.JsxEmit.React,
+      });
+      monaco.languages.typescript.typescriptDefaults.setCompilerOptions({
+        target: monaco.languages.typescript.ScriptTarget.ESNext,
+        allowNonTsExtensions: true,
+        moduleResolution: monaco.languages.typescript.ModuleResolutionKind.NodeJs,
+        module: monaco.languages.typescript.ModuleKind.ESNext,
+        noEmit: true,
+        strict: false,
+        jsx: monaco.languages.typescript.JsxEmit.React,
+      });
+    }
+
     const active = getActiveFile();
     if (active) {
       const content = getFileFirstValue(active) || "";
@@ -410,6 +480,21 @@ const _Editor = memo(({ editorRef }) => {
     return () => clearTimeout(timer);
   }, [theme, applyEditorTheme]);
 
+  useEffect(() => {
+    const monaco = monacoRef.current;
+    if (!monaco) return;
+    const lsp = settings?.lsp;
+    const enableDiagnostics = lsp?.diagnostics !== false;
+    monaco.languages.typescript.javascriptDefaults.setDiagnosticsOptions({
+      noSemanticValidation: !enableDiagnostics,
+      noSyntaxValidation: !enableDiagnostics,
+    });
+    monaco.languages.typescript.typescriptDefaults.setDiagnosticsOptions({
+      noSemanticValidation: !enableDiagnostics,
+      noSyntaxValidation: !enableDiagnostics,
+    });
+  }, [settings?.lsp?.diagnostics, settings?.lsp?.enabled]);
+
   const saveFileByName = useCallback(async (name) => {
     if (!name || !currentWorkspace?.path) return false;
     const model = modelsRef.current[name];
@@ -431,6 +516,8 @@ const _Editor = memo(({ editorRef }) => {
     window.__runEditorAction = triggerEditorAction;
     window.__focusEditor = () => editorRef.current?.focus();
     window.__saveFileByName = saveFileByName;
+    window.__formatDocument = handleFormatDocument;
+    window.__getEditor = () => editorRef.current;
     return () => {
       window.__saveCurrentFile = undefined;
       window.__saveCurrentFileAs = undefined;
@@ -438,8 +525,10 @@ const _Editor = memo(({ editorRef }) => {
       window.__runEditorAction = undefined;
       window.__focusEditor = undefined;
       window.__saveFileByName = undefined;
+      window.__formatDocument = undefined;
+      window.__getEditor = undefined;
     };
-  }, [editorRef, saveCurrentFile, saveCurrentFileAs, saveAllFiles, triggerEditorAction, saveFileByName]);
+  }, [editorRef, saveCurrentFile, saveCurrentFileAs, saveAllFiles, triggerEditorAction, saveFileByName, handleFormatDocument]);
 
   window.__ensureModel = ensureModel;
   window.__switchEditorModel = switchEditorModel;
@@ -536,6 +625,11 @@ const _Editor = memo(({ editorRef }) => {
   const noProject = !currentWorkspace && !isTypistLoaded();
   const noTabsOpen = !noProject && !activeFile;
 
+  const cursorStyle = settings?.editor?.cursorStyle || 'line';
+  const tabSize = settings?.editor?.tabSize || 4;
+  const wordWrap = settings?.editor?.wordWrap || 'off';
+  const enableLsp = settings?.lsp?.enabled !== false;
+
   const options = {
     fontSize,
     minimap: { enabled: showMinimap },
@@ -546,10 +640,40 @@ const _Editor = memo(({ editorRef }) => {
     smoothScrolling: true,
     cursorBlinking: noProject ? "solid" : "smooth",
     cursorSmoothCaretAnimation: noProject ? "off" : "on",
+    cursorStyle,
+    tabSize,
+    wordWrap,
     padding: { top: 12 },
     readOnly: noProject,
     domReadOnly: noProject,
     contextmenu: false,
+    suggestOnTriggerCharacters: enableLsp,
+    quickSuggestions: enableLsp,
+    suggest: {
+      showMethods: enableLsp,
+      showFunctions: enableLsp,
+      showConstructors: enableLsp,
+      showFields: enableLsp,
+      showVariables: enableLsp,
+      showClasses: enableLsp,
+      showStructs: enableLsp,
+      showInterfaces: enableLsp,
+      showModules: enableLsp,
+      showProperties: enableLsp,
+      showEvents: enableLsp,
+      showOperators: enableLsp,
+      showUnits: enableLsp,
+      showValues: enableLsp,
+      showConstants: enableLsp,
+      showEnums: enableLsp,
+      showEnumMembers: enableLsp,
+      showKeywords: enableLsp,
+      showWords: enableLsp,
+      showColors: enableLsp,
+      showFiles: enableLsp,
+      showReferences: enableLsp,
+      showSnippets: enableLsp,
+    },
   };
 
   const isBinary = activeFile && isBinaryFile(activeFile);
@@ -617,6 +741,11 @@ const _Editor = memo(({ editorRef }) => {
             <button className="menu-item" onClick={() => editorCtxActions('editor.action.selectAll')}>
               <span style={{ display: 'flex', alignItems: 'center', gap: 8 }}><FiList size={12} /> Select All</span>
               <span className="menu-item-shortcut">{modKey}+A</span>
+            </button>
+            <div className="menu-separator" />
+            <button className="menu-item" onClick={() => { handleFormatDocument(); setCtxMenu(null); }}>
+              <span style={{ display: 'flex', alignItems: 'center', gap: 8 }}><FiCode size={12} /> Format Document</span>
+              <span className="menu-item-shortcut">Shift+Alt+F</span>
             </button>
           </div>
         )}

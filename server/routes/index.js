@@ -3,10 +3,13 @@ const Record = require("../models/Record");
 const User = require("../models/User");
 const Workspace = require("../models/Project");
 const authenticated = require("../middlewares/authenticated");
-const { exec } = require("child_process");
+const { exec, spawn } = require("child_process");
 const fs = require("fs");
 const path = require("path");
 const os = require("os");
+
+let prettier;
+try { prettier = require("prettier"); } catch {}
 
 const CPU_LIMIT_SEC = parseInt(process.env.CVID_CPU_LIMIT || "10", 10);
 const MEM_LIMIT_MB = parseInt(process.env.CVID_MEM_LIMIT || "128", 10);
@@ -319,6 +322,112 @@ router.delete("/workspace/:id", authenticated, async (req, res) => {
     await Record.destroy({ where: { workspaceId: req.params.id, userId: res.locals.user.id } });
     await ws.destroy();
     res.json({ message: "Workspace deleted" });
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+});
+
+// --- Format endpoint ---
+
+router.post("/format", authenticated, async (req, res) => {
+  const { formatter, language, sourceCode } = req.body;
+  if (!formatter || !sourceCode) {
+    return res.status(400).json({ message: "formatter and sourceCode required" });
+  }
+
+  // Prettier — use in-process JS API (fast, no process spawn)
+  if (formatter === "prettier") {
+    if (!prettier) {
+      return res.status(500).json({ message: "Prettier not available", formatted: null });
+    }
+    try {
+      const parserMap = { javascript: "babel", typescript: "typescript" };
+      const parser = parserMap[language] || language;
+      const formatted = await prettier.format(sourceCode, { parser, filepath: `file.${language}` });
+      return res.json({ formatted });
+    } catch (err) {
+      return res.status(500).json({ message: err.message, formatted: null });
+    }
+  }
+
+  try {
+    let cmd, args;
+
+    switch (formatter) {
+      case "black":
+        cmd = "black";
+        args = ["-", "--quiet", "--line-length", "88"];
+        break;
+      case "clang-format":
+        cmd = "clang-format";
+        args = ["-style=file", "-assume-filename", `file.${language}`];
+        break;
+      case "google-java-format":
+        cmd = "google-java-format";
+        args = ["-"];
+        break;
+      case "rustfmt": {
+        const tmpFile = path.join(os.tmpdir(), `cc_fmt_${Date.now()}_${Math.random().toString(36).slice(2, 8)}.rs`);
+        fs.writeFileSync(tmpFile, sourceCode);
+        exec(`rustfmt --edition 2021 "${tmpFile}"`, { timeout: 15000 }, (err, stdout, stderr) => {
+          if (err) {
+            fs.unlink(tmpFile, () => {});
+            return res.status(500).json({ message: stderr || err.message, formatted: null });
+          }
+          try {
+            const formatted = fs.readFileSync(tmpFile, "utf-8");
+            fs.unlink(tmpFile, () => {});
+            return res.json({ formatted });
+          } catch (e) {
+            return res.status(500).json({ message: e.message, formatted: null });
+          }
+        });
+        return;
+      }
+      case "gofmt":
+        cmd = "gofmt";
+        args = [];
+        break;
+      default:
+        return res.status(400).json({ message: `Unknown formatter: ${formatter}` });
+    }
+
+    const proc = spawn(cmd, args, { stdio: ["pipe", "pipe", "pipe"], timeout: 10000 });
+    let stdout = "";
+    let stderr = "";
+    proc.stdout.on("data", d => stdout += d);
+    proc.stderr.on("data", d => stderr += d);
+    proc.on("error", err => res.status(500).json({ message: `${formatter} not found: ${err.message}`, formatted: null }));
+    proc.on("close", code => {
+      if (code === 0 && stdout) return res.json({ formatted: stdout });
+      res.status(500).json({ message: stderr || `${formatter} exited with code ${code}`, formatted: null });
+    });
+    proc.stdin.write(sourceCode);
+    proc.stdin.end();
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+});
+
+// --- Settings endpoints ---
+
+router.get("/settings", authenticated, async (req, res) => {
+  try {
+    const user = await User.findByPk(res.locals.user.id, { attributes: ["settings"] });
+    res.json({ settings: user?.settings || null });
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+});
+
+router.post("/settings", authenticated, async (req, res) => {
+  try {
+    const { settings } = req.body;
+    const user = await User.findByPk(res.locals.user.id);
+    if (!user) return res.status(404).json({ message: "User not found" });
+    user.settings = settings;
+    await user.save();
+    res.json({ message: "Settings saved" });
   } catch (err) {
     res.status(500).json({ message: err.message });
   }

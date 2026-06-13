@@ -1,22 +1,47 @@
 import { useContext, memo } from "react";
 import { GlobalContext } from "../../contexts/GlobalStates";
-import { FiFolder, FiTerminal, FiSettings, FiCodepen } from "react-icons/fi";
-import { useMode, MODES } from "../../contexts/ModeContext";
+import { FiFolder, FiTerminal, FiSettings, FiCodepen, FiGitBranch } from "react-icons/fi";
+import PropTypes from "prop-types";
 
-const ActivityBar = memo(() => {
-  const { sidebarOpen, setSidebarOpen } = useContext(GlobalContext);
-  const { mode } = useMode();
+const ActivityBar = memo(({ activeSidebarPanel, setActiveSidebarPanel }) => {
+  const { sidebarOpen, setSidebarOpen, settingsOpen, setSettingsOpen } = useContext(GlobalContext);
+
+  const handleExplorer = () => {
+    if (sidebarOpen && activeSidebarPanel === "explorer") {
+      setSidebarOpen(false);
+    } else {
+      setSidebarOpen(true);
+      setActiveSidebarPanel("explorer");
+    }
+  };
+
+  const handleSourceControl = () => {
+    if (sidebarOpen && activeSidebarPanel === "git") {
+      setSidebarOpen(false);
+    } else {
+      setSidebarOpen(true);
+      setActiveSidebarPanel("git");
+    }
+  };
 
   return (
     <div className="activity-bar" role="navigation" aria-label="Activity Bar">
       <div className="activity-bar-top">
         <button
-          className={`activity-btn${sidebarOpen ? " active" : ""}`}
-          onClick={() => setSidebarOpen(!sidebarOpen)}
+          className={`activity-btn${sidebarOpen && activeSidebarPanel === "explorer" ? " active" : ""}`}
+          onClick={handleExplorer}
           title="Explorer"
           aria-label="Toggle Explorer"
         >
           <FiFolder />
+        </button>
+        <button
+          className={`activity-btn${sidebarOpen && activeSidebarPanel === "git" ? " active" : ""}`}
+          onClick={handleSourceControl}
+          title="Source Control"
+          aria-label="Toggle Source Control"
+        >
+          <FiGitBranch />
         </button>
         <button
           className="activity-btn"
@@ -37,9 +62,10 @@ const ActivityBar = memo(() => {
           <FiCodepen />
         </button>
         <button
-          className="activity-btn"
-          title={`Mode: ${mode === MODES.LOCAL ? "Local" : "Online"}`}
-          aria-label="Mode"
+          className={`activity-btn${settingsOpen ? " active" : ""}`}
+          onClick={() => setSettingsOpen(!settingsOpen)}
+          title="Settings"
+          aria-label="Toggle Settings"
         >
           <FiSettings />
         </button>

@@ -11,6 +11,11 @@ const __root = path.resolve(__dirname, '..');
 // Resolve modules from client/ where node_modules lives
 const require = createRequire(path.resolve(__root, 'client', 'package.json'));
 
+let prettier;
+try {
+  prettier = require('prettier');
+} catch {}
+
 const isDev = process.env.NODE_ENV === 'development' || !app.isPackaged;
 
 let mainWindow;
@@ -193,6 +198,25 @@ function buildApplicationMenu() {
           label: 'Go to Bracket',
           accelerator: 'CmdOrCtrl+Shift+\\',
           click: () => sendMenuAction('go-to-bracket'),
+        },
+      ],
+    },
+    {
+      label: 'Format',
+      submenu: [
+        {
+          label: 'Format Document',
+          accelerator: 'Shift+Alt+F',
+          click: () => sendMenuAction('format-document'),
+        },
+        {
+          label: 'Toggle Format on Save',
+          click: () => sendMenuAction('toggle-format-on-save'),
+        },
+        { type: 'separator' },
+        {
+          label: 'Open Settings',
+          click: () => sendMenuAction('open-settings'),
         },
       ],
     },
@@ -602,6 +626,119 @@ ipcMain.handle('terminal:killAll', () => {
   terminalProcesses = {};
 });
 
+// --- Formatter IPC for local mode ---
+
+ipcMain.handle('formatter:format', async (event, formatterId, language, sourceCode) => {
+  return new Promise((resolve) => {
+    let cmd;
+    let args;
+    let parser;
+
+    switch (formatterId) {
+      case 'prettier':
+        if (prettier) {
+          parser = language;
+          if (parser === 'javascript') parser = 'babel';
+          if (parser === 'typescript') parser = 'typescript';
+          try {
+            prettier.format(sourceCode, { parser, filepath: `file.${language}` })
+              .then(formatted => resolve({ error: null, formatted }))
+              .catch(err => resolve({ error: err.message, formatted: null }));
+          } catch (err) {
+            resolve({ error: err.message, formatted: null });
+          }
+          return;
+        }
+        // Fallback to npx if prettier module isn't available
+        parser = language;
+        if (parser === 'javascript') parser = 'babel';
+        if (parser === 'typescript') parser = 'typescript';
+        cmd = 'npx';
+        args = ['prettier', '--parser', parser, '--stdin-filepath', `file.${language}`];
+        break;
+      case 'black':
+        cmd = 'black';
+        args = ['-', '--quiet', '--line-length', '88'];
+        break;
+      case 'clang-format':
+        cmd = 'clang-format';
+        args = ['-style=file', '-assume-filename', `file.${language}`];
+        break;
+      case 'google-java-format':
+        cmd = 'google-java-format';
+        args = ['-'];
+        break;
+      case 'rustfmt':
+        // rustfmt requires a file; write to temp and read back
+        const tmpFile = path.join(os.tmpdir(), `codecast_${Date.now()}_fmt.rs`);
+        fs.writeFileSync(tmpFile, sourceCode);
+        const rustfmt = spawn('rustfmt', ['--edition', '2021', tmpFile], {
+          stdio: ['pipe', 'pipe', 'pipe'],
+          timeout: 30000,
+        });
+        rustfmt.on('close', (code) => {
+          if (code === 0) {
+            try {
+              const formatted = fs.readFileSync(tmpFile, 'utf-8');
+              fs.unlinkSync(tmpFile);
+              resolve({ error: null, formatted });
+            } catch (e) {
+              resolve({ error: e.message, formatted: null });
+            }
+          } else {
+            let errData = '';
+            rustfmt.stderr.on('data', (d) => { errData += d; });
+            rustfmt.on('error', (e) => { resolve({ error: e.message, formatted: null }); });
+            rustfmt.on('close', () => {
+              fs.unlink(tmpFile, () => {});
+              resolve({ error: errData || `rustfmt exited with code ${code}`, formatted: null });
+            });
+          }
+        });
+        return;
+      case 'gofmt':
+        cmd = 'gofmt';
+        args = [];
+        break;
+      default:
+        resolve({ error: `Unknown formatter: ${formatterId}`, formatted: null });
+        return;
+    }
+
+    const proc = spawn(cmd, args, {
+      stdio: ['pipe', 'pipe', 'pipe'],
+      timeout: 10000,
+      env: { ...process.env, PATH: process.env.PATH },
+    });
+
+    let stdout = '';
+    let stderr = '';
+
+    proc.stdout.on('data', (data) => {
+      stdout += data.toString();
+    });
+
+    proc.stderr.on('data', (data) => {
+      stderr += data.toString();
+    });
+
+    proc.on('error', (err) => {
+      resolve({ error: `${formatterId} not found: ${err.message}. Is it installed?`, formatted: null });
+    });
+
+    proc.on('close', (code) => {
+      if (code === 0 && stdout) {
+        resolve({ error: null, formatted: stdout });
+      } else {
+        resolve({ error: stderr || `Formatter exited with code ${code}`, formatted: null });
+      }
+    });
+
+    proc.stdin.write(sourceCode);
+    proc.stdin.end();
+  });
+});
+
 // --- Code execution IPC ---
 
 // --- File system IPC for local mode ---
@@ -794,6 +931,36 @@ ipcMain.handle('file:listRecursive', async (event, dirPath) => {
   }
   walk(dirPath);
   return results;
+});
+
+// --- Shell IPC for running arbitrary commands ---
+
+ipcMain.handle('shell:exec', async (event, cwd, command) => {
+  return new Promise((resolve) => {
+    exec(command, { cwd, maxBuffer: 10 * 1024 * 1024 }, (err, stdout, stderr) => {
+      resolve({
+        stdout: stdout || '',
+        stderr: stderr || '',
+        code: err ? (err.code || 1) : 0,
+      });
+    });
+  });
+});
+
+// --- Git IPC for local mode ---
+
+ipcMain.handle('git:exec', async (event, cwd, args) => {
+  return new Promise((resolve) => {
+    const quoted = args.map(a => `'${a.replace(/'/g, "'\\''")}'`).join(' ');
+    const cmd = `git ${quoted}`;
+    exec(cmd, { cwd, maxBuffer: 10 * 1024 * 1024 }, (err, stdout, stderr) => {
+      resolve({
+        stdout: stdout || '',
+        stderr: stderr || '',
+        code: err ? (err.code || 1) : 0,
+      });
+    });
+  });
 });
 
 ipcMain.handle('execute:run', async (event, { language, sourceCode }) => {

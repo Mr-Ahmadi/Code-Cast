@@ -2,6 +2,7 @@ import { createContext, useReducer, useMemo, useCallback } from "react";
 import AppReducer from "./AppReducer"
 import checkAuth from "../functions/requests/checkAuth";
 import PropTypes from "prop-types";
+import { loadSettings } from "../constants/settings";
 
 const initialState = {
     recording: false,
@@ -23,6 +24,8 @@ const initialState = {
     autoSave: localStorage.getItem("codecast_autosave") === "true",
     theme: localStorage.getItem("codecast_theme") || "dark",
     dirtyFiles: new Set(),
+    settings: loadSettings(),
+    settingsOpen: false,
 };
 
 export const GlobalContext = createContext(initialState);
@@ -52,6 +55,14 @@ export const GlobalProvider = ({ children }) => {
         dispatch({ type: "SET_AUTOSAVE", payload: { value } });
     }, []);
     const setDirtyFiles = useCallback((value) => dispatch({ type: "SET_DIRTY_FILES", payload: { value } }), []);
+
+    const setSettings = useCallback((value) => {
+        dispatch({ type: "SET_SETTINGS", payload: { value } });
+    }, []);
+
+    const setSettingsOpen = useCallback((value) => {
+        dispatch({ type: "SET_SETTINGS_OPEN", payload: { value } });
+    }, []);
 
     const setTheme = useCallback((value) => {
         const next = value === "light" ? "light" : "dark";
@@ -84,6 +95,8 @@ export const GlobalProvider = ({ children }) => {
         autoSave: state.autoSave, setAutoSave,
         theme: state.theme, setTheme,
         dirtyFiles: state.dirtyFiles, setDirtyFiles,
+        settings: state.settings, setSettings,
+        settingsOpen: state.settingsOpen, setSettingsOpen,
         refreshUser,
     }), [
         state.recording, state.paused, state.user, state.recordName,
@@ -94,6 +107,7 @@ export const GlobalProvider = ({ children }) => {
         state.autoSave,
         state.theme,
         state.dirtyFiles,
+        state.settings, state.settingsOpen,
         startRecording, stopRecording, setPaused, setUser, setRecordName,
         setPlaying, setOutput, setToast,
         setAudioEnabled, setFontSize, setShowMinimap,
@@ -101,6 +115,7 @@ export const GlobalProvider = ({ children }) => {
         setAutoSave,
         setTheme,
         setDirtyFiles,
+        setSettings, setSettingsOpen,
         refreshUser,
     ]);
 

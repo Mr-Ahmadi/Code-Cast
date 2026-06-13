@@ -23,6 +23,10 @@ contextBridge.exposeInMainWorld('electronAPI', {
     },
   },
 
+  formatter: {
+    format: (formatterId, language, sourceCode) => ipcRenderer.invoke('formatter:format', formatterId, language, sourceCode),
+  },
+
   execute: {
     run: (options) => ipcRenderer.invoke('execute:run', options),
   },
@@ -76,6 +80,14 @@ contextBridge.exposeInMainWorld('electronAPI', {
       ipcRenderer.on('file:file-changed', handler);
       return () => ipcRenderer.removeListener('file:file-changed', handler);
     },
+  },
+
+  git: {
+    exec: (cwd, args) => ipcRenderer.invoke('git:exec', cwd, args),
+  },
+
+  shell: {
+    exec: (cwd, command) => ipcRenderer.invoke('shell:exec', cwd, command),
   },
 
   path: {

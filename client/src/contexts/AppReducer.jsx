@@ -40,6 +40,10 @@ const defaultFunc = (state, action) => {
             return { ...state, theme: action.payload.value }
         case "SET_DIRTY_FILES":
             return { ...state, dirtyFiles: action.payload.value }
+        case "SET_SETTINGS":
+            return { ...state, settings: action.payload.value }
+        case "SET_SETTINGS_OPEN":
+            return { ...state, settingsOpen: action.payload.value }
         default:
             return state
     }

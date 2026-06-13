@@ -7,11 +7,13 @@ import MenuBar from '../elements/MenuBar';
 import Toast from '../elements/Toast';
 import FileTabs from '../elements/FileTabs';
 import FileTree from '../elements/FileTree';
+import GitPanel from '../elements/GitPanel';
 import ShortcutsHelp from '../elements/ShortcutsHelp';
 import TerminalPanel from '../elements/Terminal';
 import LocalSetupPrompt from '../elements/LocalSetupPrompt';
 import ActivityBar from '../elements/ActivityBar';
 import StatusBar from '../elements/StatusBar';
+import Settings from '../elements/Settings';
 import { GlobalContext } from '../../contexts/GlobalStates';
 import { getFiles, exportRecord, isTypistLoaded, importFromFile, stopPlay } from "../../functions/record";
 import { useMode, MODES } from '../../contexts/ModeContext';
@@ -27,13 +29,14 @@ export default function App() {
         theme, setTheme,
         autoSave, setAutoSave,
         setRecordName, setPlaying, setCurrentRecord, setToast,
-        dirtyFiles,
+        dirtyFiles, settings, setSettings, setSettingsOpen,
     } = useContext(GlobalContext);
     const [showShortcuts, setShowShortcuts] = useState(false);
     const [terminalVisible, setTerminalVisible] = useState(false);
     const [showSetup, setShowSetup] = useState(false);
     const [showAppCloseDialog, setShowAppCloseDialog] = useState(false);
     const isMacElectron = !!window.electronAPI?.isElectron && window.electronAPI?.platform === 'darwin';
+    const [activeSidebarPanel, setActiveSidebarPanel] = useState('explorer');
     const [activePanel, setActivePanel] = useState('output');
     const [terminals, setTerminals] = useState([{ id: "terminal-1", name: "Terminal 1" }]);
     const [activeTerminalId, setActiveTerminalId] = useState("terminal-1");
@@ -285,6 +288,11 @@ export default function App() {
             window.__runEditorAction?.('editor.action.jumpToBracket');
             return;
         }
+        if (e.shiftKey && e.altKey && e.key === 'f') {
+            e.preventDefault();
+            window.__formatDocument?.();
+            return;
+        }
         if (e.shiftKey && e.altKey && e.key === 'ArrowRight') {
             e.preventDefault();
             window.__focusEditor?.();
@@ -503,6 +511,15 @@ export default function App() {
                 case 'close-terminal':
                     handleCloseActiveTerminal();
                     break;
+                case 'format-document':
+                    window.__formatDocument?.();
+                    break;
+                case 'toggle-format-on-save':
+                    setSettings(prev => ({ ...prev, formatter: { ...prev.formatter, formatOnSave: !prev.formatter?.formatOnSave } }));
+                    break;
+                case 'open-settings':
+                    setSettingsOpen(true);
+                    break;
                 case 'show-shortcuts':
                     setShowShortcuts(true);
                     break;
@@ -567,26 +584,45 @@ export default function App() {
                     onNewTerminal={handleNewTerminal}
                     onCloseTerminal={handleCloseActiveTerminal}
                     onShowShortcuts={() => setShowShortcuts(true)}
+                    onFormatDocument={() => window.__formatDocument?.()}
+                    onOpenSettings={() => setSettingsOpen(true)}
+                    formatOnSave={settings?.formatter?.formatOnSave || false}
+                    onToggleFormatOnSave={(val) => setSettings(prev => ({ ...prev, formatter: { ...prev.formatter, formatOnSave: val } }))}
                 />
             )}
             <Top editorRef={editorRef} />
             <div className="main-body">
-                <ActivityBar />
+                <ActivityBar activeSidebarPanel={activeSidebarPanel} setActiveSidebarPanel={setActiveSidebarPanel} />
                 <div 
                     className={"sidebar" + (sidebarOpen ? "" : " closed") + (isResizingSidebar ? " resizing" : "")}
                     style={{ width: sidebarOpen ? sidebarWidth : 0 }}
                 >
-                    <div className="sidebar-header">
-                        <div className="sidebar-title-row">
-                            <span className="sidebar-title">Explorer</span>
-                            <span className="sidebar-mode-badge">{explorerMode}</span>
-                        </div>
-                        <span className="sidebar-context" title={explorerContext}>{explorerContext}</span>
-                    </div>
-                    <div className="sidebar-section-title">Files</div>
-                    <div className="sidebar-content">
-                        <FileTree />
-                    </div>
+                    {activeSidebarPanel === 'explorer' ? (
+                        <>
+                            <div className="sidebar-header">
+                                <div className="sidebar-title-row">
+                                    <span className="sidebar-title">Explorer</span>
+                                    <span className="sidebar-mode-badge">{explorerMode}</span>
+                                </div>
+                                <span className="sidebar-context" title={explorerContext}>{explorerContext}</span>
+                            </div>
+                            <div className="sidebar-section-title">Files</div>
+                            <div className="sidebar-content">
+                                <FileTree />
+                            </div>
+                        </>
+                    ) : (
+                        <>
+                            <div className="sidebar-header">
+                                <div className="sidebar-title-row">
+                                    <span className="sidebar-title">Source Control</span>
+                                </div>
+                            </div>
+                            <div className="sidebar-content">
+                                <GitPanel />
+                            </div>
+                        </>
+                    )}
                 </div>
                 {sidebarOpen && (
                     <div className="resizer resizer-h" onMouseDown={startResizingSidebar} />
@@ -675,6 +711,7 @@ export default function App() {
             <StatusBar />
             <Toast />
             <ShortcutsHelp display={showShortcuts} setDisplay={setShowShortcuts} />
+            <Settings />
 
             {showAppCloseDialog && (
                 <div

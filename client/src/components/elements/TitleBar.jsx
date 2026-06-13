@@ -26,10 +26,10 @@ export default function TitleBar() {
                             <FiMinus size={14} />
                         </button>
                         <button className="title-bar-btn" onClick={handleMaximize} title="Maximize">
-                            <FiSquare size={12} />
+                            <FiSquare size={14} />
                         </button>
                         <button className="title-bar-btn close" onClick={handleClose} title="Close">
-                            <FiX size={16} />
+                            <FiX size={14} />
                         </button>
                     </div>
                 )}

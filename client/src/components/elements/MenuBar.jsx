@@ -45,6 +45,10 @@ const MenuBar = memo(({
   onNewTerminal,
   onCloseTerminal,
   onShowShortcuts,
+  onFormatDocument,
+  onOpenSettings,
+  formatOnSave,
+  onToggleFormatOnSave,
 }) => {
   const [openMenu, setOpenMenu] = useState(null);
   const rootRef = useRef(null);
@@ -140,6 +144,16 @@ const MenuBar = memo(({
       ],
     },
     {
+      id: "format",
+      label: "Format",
+      items: [
+        { label: "Format Document", shortcut: "Shift+Alt+F", action: onFormatDocument, disabled: !hasWorkspace },
+        { label: formatOnSave ? "Disable Format on Save" : "Enable Format on Save", action: () => onToggleFormatOnSave?.(!formatOnSave) },
+        { separator: true },
+        { label: "Open Settings", action: onOpenSettings },
+      ],
+    },
+    {
       id: "run",
       label: "Run",
       items: [
@@ -214,6 +228,10 @@ const MenuBar = memo(({
     onNewTerminal,
     onCloseTerminal,
     onShowShortcuts,
+    onFormatDocument,
+    onOpenSettings,
+    formatOnSave,
+    onToggleFormatOnSave,
   ]);
 
   return (
@@ -310,6 +328,10 @@ MenuBar.propTypes = {
   onNewTerminal: PropTypes.func,
   onCloseTerminal: PropTypes.func,
   onShowShortcuts: PropTypes.func,
+  onFormatDocument: PropTypes.func,
+  onOpenSettings: PropTypes.func,
+  formatOnSave: PropTypes.bool,
+  onToggleFormatOnSave: PropTypes.func,
 };
 
 export default MenuBar;

@@ -26,6 +26,10 @@ const User = sequelize.define(
       type: DataTypes.STRING,
       allowNull: false,
     },
+    settings: {
+      type: DataTypes.JSONB,
+      defaultValue: null,
+    },
   },
   {
     tableName: "users",
