@@ -566,7 +566,7 @@ const RecordsList = memo(({ display, setDisplay }) => {
               <FiPlus size={12} /> New Project
             </button>
           </div>
-          <div>
+          <div className="modal-footer-right">
             <button className="btn btn-secondary btn-sm" onClick={closeModal}>Cancel</button>
             {selectedWs && !selected && (
               <button
