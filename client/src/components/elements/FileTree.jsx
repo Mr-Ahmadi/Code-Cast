@@ -228,19 +228,14 @@ const FileTree = memo(() => {
   const forceRefresh = useCallback(async () => {
     if (!workspacePath || !f) return;
     const currentExpanded = { ...expandedRef.current };
-    
-    // Background refresh root
     await loadDir(workspacePath, workspacePath, true);
-    
-    // Background refresh all expanded dirs
     for (const key of Object.keys(currentExpanded)) {
       if (key && key !== workspacePath) {
         const absPath = getAbsPath(key);
         if (absPath) loadDir(absPath, key, true);
       }
     }
-    fetchGitStatus();
-  }, [workspacePath, f, loadDir, getAbsPath, fetchGitStatus]);
+  }, [workspacePath, f, loadDir, getAbsPath]);
 
   const moveItem = useCallback(async (sourceRelPath, targetDirRelPath) => {
     if (playing && !paused) return;

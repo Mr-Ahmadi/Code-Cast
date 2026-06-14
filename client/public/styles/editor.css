@@ -877,6 +877,10 @@ body.dialog-open .resizer {
   animation: pulse 1.5s ease-in-out infinite;
 }
 
+.pulse {
+  animation: pulse 1.5s ease-in-out infinite;
+}
+
 .git-commit-area {
   padding: 8px 12px;
   border-bottom: 1px solid var(--border);
@@ -911,6 +915,38 @@ body.dialog-open .resizer {
 
 .git-commit-input::placeholder {
   color: var(--text-muted);
+}
+
+.git-commit-input-wrap {
+  position: relative;
+}
+
+.git-commit-magic-btn {
+  position: absolute;
+  top: 4px;
+  right: 4px;
+  background: var(--bg-tertiary);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  color: var(--text-muted);
+  cursor: pointer;
+  padding: 3px 5px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: color 0.15s, border-color 0.15s, background 0.15s;
+  line-height: 1;
+}
+
+.git-commit-magic-btn:hover:not(:disabled) {
+  color: var(--accent);
+  border-color: var(--accent);
+  background: var(--bg-hover);
+}
+
+.git-commit-magic-btn:disabled {
+  opacity: 0.5;
+  cursor: default;
 }
 
 .git-commit-btn {
@@ -2516,6 +2552,27 @@ body.dialog-open .resizer {
 
 .settings-select:focus {
   border-color: var(--accent);
+}
+
+.settings-input {
+  background: var(--bg-tertiary);
+  border: 1px solid var(--border);
+  border-radius: 3px;
+  color: var(--text-primary);
+  font-size: 12px;
+  font-family: var(--font-mono);
+  padding: 5px 8px;
+  outline: none;
+  width: 100%;
+  box-sizing: border-box;
+}
+
+.settings-input:focus {
+  border-color: var(--accent);
+}
+
+.settings-input::placeholder {
+  color: var(--text-muted);
 }
 
 .settings-select-sm {

@@ -3,7 +3,7 @@ import { GlobalContext } from '../../contexts/GlobalStates';
 import { useMode, MODES } from '../../contexts/ModeContext';
 import { saveSettings as persistSettings, DEFAULT_SETTINGS } from '../../constants/settings';
 import { getAvailableFormatters } from '../../services/formatter';
-import { FiX, FiEdit3, FiCode, FiTerminal, FiSave } from 'react-icons/fi';
+import { FiX, FiEdit3, FiCode, FiTerminal, FiSave, FiGitCommit } from 'react-icons/fi';
 import axios from 'axios';
 
 export default function Settings() {
@@ -13,6 +13,7 @@ export default function Settings() {
   const [localSettings, setLocalSettings] = useState(settings);
   const [saving, setSaving] = useState(false);
   const [dirty, setDirty] = useState(false);
+  const [availableModels, setAvailableModels] = useState([]);
 
   useEffect(() => {
     setLocalSettings(settings);
@@ -31,6 +32,16 @@ export default function Settings() {
         .catch(() => {});
     }
   }, [mode]);
+
+  useEffect(() => {
+    if (window.electronAPI?.opencode?.listModels) {
+      window.electronAPI.opencode.listModels().then(res => {
+        if (res.models?.length) {
+          setAvailableModels(res.models);
+        }
+      });
+    }
+  }, []);
 
   const updateLocal = useCallback((section, key, value) => {
     setLocalSettings(prev => ({
@@ -280,6 +291,40 @@ export default function Settings() {
             disabled={!localSettings.lsp.enabled}
           />
           <span className="settings-field-label">Refactoring (rename, extract)</span>
+        </label>
+      </div>
+    )},
+    { id: 'commit', label: 'Commit', icon: FiGitCommit, content: (
+      <div className="settings-section">
+        <h4 className="settings-section-title">Commit Messages</h4>
+        <p className="settings-section-desc">
+          Generate commit messages from staged changes using opencode AI.
+        </p>
+
+        <label className="settings-field settings-checkbox-field">
+          <input
+            type="checkbox"
+            checked={localSettings.commitMessage.enabled}
+            onChange={e => updateLocal('commitMessage', 'enabled', e.target.checked)}
+          />
+          <span className="settings-field-label">Enable AI Commit Messages</span>
+        </label>
+
+        <label className="settings-field">
+          <span className="settings-field-label">Model</span>
+          <select
+            className="settings-select"
+            value={localSettings.commitMessage.model}
+            onChange={e => updateLocal('commitMessage', 'model', e.target.value)}
+            disabled={!localSettings.commitMessage.enabled}
+          >
+            {availableModels.length === 0 && (
+              <option value="opencode/claude-sonnet-4">opencode/claude-sonnet-4</option>
+            )}
+            {availableModels.map(m => (
+              <option key={m} value={m}>{m}</option>
+            ))}
+          </select>
         </label>
       </div>
     )},

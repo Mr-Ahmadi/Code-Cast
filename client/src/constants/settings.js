@@ -34,6 +34,10 @@ export const DEFAULT_SETTINGS = {
     autocomplete: true,
     refactoring: true,
   },
+  commitMessage: {
+    enabled: true,
+    model: 'opencode/claude-sonnet-4',
+  },
 };
 
 export function getFormatterForLanguage(lang, settings) {

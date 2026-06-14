@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback, useContext } from "react";
 import { GlobalContext } from "../../contexts/GlobalStates";
 import { useMode, MODES } from "../../contexts/ModeContext";
-import { FiGitBranch, FiRefreshCw, FiPlus, FiMinus, FiChevronRight, FiChevronDown, FiGithub, FiRotateCcw, FiArrowUp } from "react-icons/fi";
+import { FiGitBranch, FiRefreshCw, FiPlus, FiMinus, FiChevronRight, FiChevronDown, FiGithub, FiRotateCcw, FiArrowUp, FiZap } from "react-icons/fi";
 
 function parsePorcelain(output) {
   const staged = [];
@@ -36,7 +36,7 @@ function parsePorcelain(output) {
 }
 
 export default function GitPanel() {
-  const { currentWorkspace } = useContext(GlobalContext);
+  const { currentWorkspace, settings } = useContext(GlobalContext);
   const { mode } = useMode();
   const isLocal = mode === MODES.LOCAL;
   const repoPath = currentWorkspace?.path;
@@ -57,6 +57,7 @@ export default function GitPanel() {
   const [repoName, setRepoName] = useState("");
   const [repoVisibility, setRepoVisibility] = useState("public");
   const [publishing, setPublishing] = useState(false);
+  const [generating, setGenerating] = useState(false);
   const [publishError, setPublishError] = useState("");
   const [expandedSections, setExpandedSections] = useState({ staged: true, unstaged: true, untracked: true, commits: false });
 
@@ -69,6 +70,19 @@ export default function GitPanel() {
     if (!window.electronAPI?.shell?.exec) return { stdout: "", stderr: "", code: 1 };
     return window.electronAPI.shell.exec(repoPath || ".", command);
   }, [repoPath]);
+
+  const handleGenerateMsg = useCallback(async () => {
+    if (!window.electronAPI?.opencode?.suggestCommit || !repoPath) return;
+    const model = settings?.commitMessage?.model;
+    setGenerating(true);
+    const res = await window.electronAPI.opencode.suggestCommit(repoPath, model || null);
+    if (res.message) {
+      setCommitMsg(res.message);
+    } else if (res.error) {
+      console.warn('opencode suggest-commit failed:', res.error);
+    }
+    setGenerating(false);
+  }, [repoPath, settings]);
 
   const clearState = useCallback(() => {
     setHasRepo(false);
@@ -330,19 +344,31 @@ export default function GitPanel() {
       </div>
 
       <div className="git-commit-area">
-        <textarea
-          className="git-commit-input"
-          placeholder="Commit message (Ctrl+Enter to commit)"
-          value={commitMsg}
-          onChange={(e) => setCommitMsg(e.target.value)}
-          onKeyDown={(e) => {
-            if ((e.ctrlKey || e.metaKey) && e.key === "Enter") {
-              e.preventDefault();
-              handleCommit(false);
-            }
-          }}
-          rows={2}
-        />
+        <div className="git-commit-input-wrap">
+          <textarea
+            className="git-commit-input"
+            placeholder="Commit message (Ctrl+Enter to commit)"
+            value={commitMsg}
+            onChange={(e) => setCommitMsg(e.target.value)}
+            onKeyDown={(e) => {
+              if ((e.ctrlKey || e.metaKey) && e.key === "Enter") {
+                e.preventDefault();
+                handleCommit(false);
+              }
+            }}
+            rows={2}
+          />
+          {settings?.commitMessage?.enabled && stagedCount > 0 && (
+            <button
+              className="git-commit-magic-btn"
+              onClick={handleGenerateMsg}
+              disabled={generating}
+              title={generating ? "Generating..." : "Generate commit message with opencode"}
+            >
+              <FiZap size={14} className={generating ? "pulse" : ""} />
+            </button>
+          )}
+        </div>
         <div className="git-commit-actions">
           <button
             className="git-commit-btn"

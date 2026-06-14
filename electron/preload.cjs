@@ -90,6 +90,11 @@ contextBridge.exposeInMainWorld('electronAPI', {
     exec: (cwd, command) => ipcRenderer.invoke('shell:exec', cwd, command),
   },
 
+  opencode: {
+    suggestCommit: (cwd, model) => ipcRenderer.invoke('opencode:suggestCommit', cwd, model),
+    listModels: () => ipcRenderer.invoke('opencode:listModels'),
+  },
+
   path: {
     join: (...args) => args.join(process.platform === 'win32' ? '\\' : '/'),
     basename: (p) => p.split(/[\\/]/).pop(),
