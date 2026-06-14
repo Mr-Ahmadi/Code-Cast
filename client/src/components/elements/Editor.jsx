@@ -365,15 +365,28 @@ const _Editor = memo(({ editorRef }) => {
     const lsp = settings?.lsp;
     const enableDiagnostics = lsp?.diagnostics !== false;
     const enableLsp = lsp?.enabled !== false;
+    const diagnosticCodesToIgnore = [80005, 2580];
 
     monaco.languages.typescript.javascriptDefaults.setDiagnosticsOptions({
       noSemanticValidation: !enableDiagnostics,
       noSyntaxValidation: !enableDiagnostics,
+      diagnosticCodesToIgnore,
     });
     monaco.languages.typescript.typescriptDefaults.setDiagnosticsOptions({
       noSemanticValidation: !enableDiagnostics,
       noSyntaxValidation: !enableDiagnostics,
+      diagnosticCodesToIgnore,
     });
+
+    monaco.languages.typescript.javascriptDefaults.addExtraLib(
+      'declare const process: {\n  env: Record<string, string | undefined>;\n  platform: string;\n  cwd(): string;\n  exit(code?: number): never;\n  argv: string[];\n  pid: number;\n  kill(pid: number, signal?: string): void;\n  stdout: { write(data: string): boolean };\n  stderr: { write(data: string): boolean };\n};',
+      'node:process'
+    );
+
+    monaco.languages.typescript.javascriptDefaults.addExtraLib(
+      'declare var require: (moduleId: string) => any;\ndeclare var __dirname: string;\ndeclare var __filename: string;\ndeclare var module: { exports: any };\ndeclare var exports: any;\n',
+      'node:commonjs'
+    );
 
     if (enableLsp) {
       monaco.languages.typescript.javascriptDefaults.setCompilerOptions({
@@ -485,13 +498,16 @@ const _Editor = memo(({ editorRef }) => {
     if (!monaco) return;
     const lsp = settings?.lsp;
     const enableDiagnostics = lsp?.diagnostics !== false;
+    const diagnosticCodesToIgnore = [80005, 2580];
     monaco.languages.typescript.javascriptDefaults.setDiagnosticsOptions({
       noSemanticValidation: !enableDiagnostics,
       noSyntaxValidation: !enableDiagnostics,
+      diagnosticCodesToIgnore,
     });
     monaco.languages.typescript.typescriptDefaults.setDiagnosticsOptions({
       noSemanticValidation: !enableDiagnostics,
       noSyntaxValidation: !enableDiagnostics,
+      diagnosticCodesToIgnore,
     });
   }, [settings?.lsp?.diagnostics, settings?.lsp?.enabled]);
 
