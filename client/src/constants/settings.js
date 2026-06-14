@@ -38,6 +38,12 @@ export const DEFAULT_SETTINGS = {
     enabled: true,
     model: 'opencode/claude-sonnet-4',
   },
+  aiAutocomplete: {
+    enabled: false,
+    provider: 'ollama',
+    model: 'qwen2.5-coder:1.5b',
+    ollamaUrl: 'http://localhost:11434',
+  },
 };
 
 export function getFormatterForLanguage(lang, settings) {
@@ -67,7 +73,7 @@ export function loadSettings() {
       return deepMerge(DEFAULT_SETTINGS, parsed);
     }
   } catch {}
-  return { ...DEFAULT_SETTINGS, editor: { ...DEFAULT_SETTINGS.editor }, formatter: { ...DEFAULT_SETTINGS.formatter, defaultFormatters: { ...DEFAULT_SETTINGS.formatter.defaultFormatters } }, lsp: { ...DEFAULT_SETTINGS.lsp } };
+  return { ...DEFAULT_SETTINGS, editor: { ...DEFAULT_SETTINGS.editor }, formatter: { ...DEFAULT_SETTINGS.formatter, defaultFormatters: { ...DEFAULT_SETTINGS.formatter.defaultFormatters } }, lsp: { ...DEFAULT_SETTINGS.lsp }, commitMessage: { ...DEFAULT_SETTINGS.commitMessage }, aiAutocomplete: { ...DEFAULT_SETTINGS.aiAutocomplete } };
 }
 
 export function saveSettings(settings) {

@@ -3,7 +3,7 @@ import { GlobalContext } from '../../contexts/GlobalStates';
 import { useMode, MODES } from '../../contexts/ModeContext';
 import { saveSettings as persistSettings, DEFAULT_SETTINGS } from '../../constants/settings';
 import { getAvailableFormatters } from '../../services/formatter';
-import { FiX, FiEdit3, FiCode, FiTerminal, FiSave, FiGitCommit } from 'react-icons/fi';
+import { FiX, FiEdit3, FiCode, FiTerminal, FiSave, FiGitCommit, FiCpu } from 'react-icons/fi';
 import axios from 'axios';
 
 export default function Settings() {
@@ -92,7 +92,7 @@ export default function Settings() {
   }, [localSettings, mode, setSettings, setFontSize, setShowMinimap, setAutoSave, setTheme]);
 
   const handleReset = useCallback(() => {
-    setLocalSettings({ ...DEFAULT_SETTINGS, editor: { ...DEFAULT_SETTINGS.editor }, formatter: { ...DEFAULT_SETTINGS.formatter, defaultFormatters: { ...DEFAULT_SETTINGS.formatter.defaultFormatters } }, lsp: { ...DEFAULT_SETTINGS.lsp } });
+    setLocalSettings({ ...DEFAULT_SETTINGS, editor: { ...DEFAULT_SETTINGS.editor }, formatter: { ...DEFAULT_SETTINGS.formatter, defaultFormatters: { ...DEFAULT_SETTINGS.formatter.defaultFormatters } }, lsp: { ...DEFAULT_SETTINGS.lsp }, commitMessage: { ...DEFAULT_SETTINGS.commitMessage }, aiAutocomplete: { ...DEFAULT_SETTINGS.aiAutocomplete } });
     setDirty(true);
   }, []);
 
@@ -324,6 +324,55 @@ export default function Settings() {
             {availableModels.map(m => (
               <option key={m} value={m}>{m}</option>
             ))}
+          </select>
+        </label>
+      </div>
+    )},
+    { id: 'aiAutocomplete', label: 'AI Autocomplete', icon: FiCpu, content: (
+      <div className="settings-section">
+        <h4 className="settings-section-title">AI Autocomplete</h4>
+        <p className="settings-section-desc">
+          Use local Ollama models for AI-powered inline code completion (e.g. Qwen2.5-Coder).
+        </p>
+
+        <label className="settings-field settings-checkbox-field">
+          <input
+            type="checkbox"
+            checked={localSettings.aiAutocomplete.enabled}
+            onChange={e => updateLocal('aiAutocomplete', 'enabled', e.target.checked)}
+          />
+          <span className="settings-field-label">Enable AI Autocomplete</span>
+        </label>
+
+        <label className="settings-field">
+          <span className="settings-field-label">Ollama URL</span>
+          <input
+            type="text"
+            className="settings-input"
+            value={localSettings.aiAutocomplete.ollamaUrl}
+            onChange={e => updateLocal('aiAutocomplete', 'ollamaUrl', e.target.value)}
+            disabled={!localSettings.aiAutocomplete.enabled}
+            placeholder="http://localhost:11434"
+          />
+        </label>
+
+        <label className="settings-field">
+          <span className="settings-field-label">Model</span>
+          <select
+            className="settings-select"
+            value={localSettings.aiAutocomplete.model}
+            onChange={e => updateLocal('aiAutocomplete', 'model', e.target.value)}
+            disabled={!localSettings.aiAutocomplete.enabled}
+          >
+            <option value="qwen2.5-coder:1.5b">Qwen2.5-Coder 1.5B</option>
+            <option value="qwen2.5-coder:3b">Qwen2.5-Coder 3B</option>
+            <option value="qwen2.5-coder:7b">Qwen2.5-Coder 7B</option>
+            <option value="qwen2.5-coder:14b">Qwen2.5-Coder 14B</option>
+            <option value="codellama:7b">CodeLlama 7B</option>
+            <option value="codellama:13b">CodeLlama 13B</option>
+            <option value="codellama:34b">CodeLlama 34B</option>
+            <option value="stable-code:3b">Stable Code 3B</option>
+            <option value="deepseek-coder:6.7b">DeepSeek Coder 6.7B</option>
           </select>
         </label>
       </div>

@@ -2414,6 +2414,18 @@ body.dialog-open .resizer {
   border-bottom: 1px solid var(--border);
   flex-shrink: 0;
   padding: 0 12px;
+  overflow-x: auto;
+  overflow-y: hidden;
+  scrollbar-width: thin;
+}
+
+.settings-tabs::-webkit-scrollbar {
+  height: 3px;
+}
+
+.settings-tabs::-webkit-scrollbar-thumb {
+  background: var(--border);
+  border-radius: 2px;
 }
 
 .settings-tab {
@@ -2651,4 +2663,21 @@ body.dialog-open .resizer {
 @keyframes resumePulse {
   0%, 100% { outline-color: var(--accent); }
   50% { outline-color: transparent; }
+}
+
+/* ============================================================
+   SUGGESTION WIDGET — match editor font
+   ============================================================ */
+
+.monaco-suggest-widget {
+  font-family: var(--font-mono) !important;
+}
+
+.monaco-suggest-widget .monaco-list-row {
+  font-family: inherit !important;
+}
+
+.monaco-suggest-widget .main-label,
+.monaco-suggest-widget .monaco-highlighted-label {
+  font-family: inherit !important;
 }

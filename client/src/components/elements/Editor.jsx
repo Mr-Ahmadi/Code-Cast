@@ -8,6 +8,7 @@ import {
 } from '../../functions/record';
 import { isBinaryFile, extLang } from '../../functions/fileTypes';
 import { formatDocument } from '../../services/formatter';
+import { registerAiAutocomplete, updateAiSettings, disposeAiAutocomplete } from '../../services/autocomplete';
 import { useMode, MODES } from '../../contexts/ModeContext';
 import { FiFolder, FiScissors, FiCopy, FiClipboard, FiList, FiAlertTriangle, FiFileText, FiCode } from 'react-icons/fi';
 import PropTypes from 'prop-types';
@@ -71,22 +72,21 @@ const _Editor = memo(({ editorRef }) => {
     setDirtyFiles(new Set(dirtyRef.current));
   }, [setDirtyFiles]);
 
-  const saveCurrentFile = useCallback(async () => {
+  const saveCurrentFile = useCallback(async (skipFormat) => {
     if (!activeFile || activeFile === previewFile) return false;
     let content = editorRef.current?.getValue();
     if (content === undefined) return false;
 
-    if (settings?.formatter?.formatOnSave && !recordingRef.current) {
+    if (!skipFormat && settings?.formatter?.formatOnSave && !recordingRef.current) {
+      const versionBefore = editorRef.current?.getModel()?.getVersionId();
       const formatted = await formatDocument(activeFile, content, mode, settings);
-      if (formatted !== content) {
-        const editor = editorRef.current;
-        if (editor) {
-          editor.executeEdits('format', [{
-            range: editor.getModel().getFullModelRange(),
-            text: formatted,
-            forceMoveMarkers: true,
-          }]);
-        }
+      const model = editorRef.current?.getModel();
+      if (model && formatted !== content && model.getVersionId() === versionBefore) {
+        model.pushEditOperations(
+          [],
+          [{ range: model.getFullModelRange(), text: formatted }],
+          () => []
+        );
         content = formatted;
         oldValue.current = formatted;
       }
@@ -279,7 +279,7 @@ const _Editor = memo(({ editorRef }) => {
     if (autoSave && !recordingRef.current && activeFileRef.current !== previewFile) {
       if (autoSaveTimerRef.current) clearTimeout(autoSaveTimerRef.current);
       autoSaveTimerRef.current = setTimeout(() => {
-        saveCurrentFile();
+        saveCurrentFile(true);
       }, 1000);
     }
   }, [autoSave, editorRef, saveCurrentFile, previewFile, setDirtyFiles]);
@@ -361,6 +361,7 @@ const _Editor = memo(({ editorRef }) => {
     monacoRef.current = monaco;
     editorReady.current = true;
     applyEditorTheme(monaco);
+    registerAiAutocomplete(editor, monaco, settings);
 
     const lsp = settings?.lsp;
     const enableDiagnostics = lsp?.diagnostics !== false;
@@ -510,6 +511,17 @@ const _Editor = memo(({ editorRef }) => {
       diagnosticCodesToIgnore,
     });
   }, [settings?.lsp?.diagnostics, settings?.lsp?.enabled]);
+
+  useEffect(() => {
+    updateAiSettings(settings);
+    const monaco = monacoRef.current;
+    const editor = editorRef.current;
+    if (monaco && editor) {
+      disposeAiAutocomplete();
+      registerAiAutocomplete(editor, monaco, settings);
+    }
+    return () => disposeAiAutocomplete();
+  }, [settings?.aiAutocomplete]);
 
   const saveFileByName = useCallback(async (name) => {
     if (!name || !currentWorkspace?.path) return false;
@@ -663,6 +675,9 @@ const _Editor = memo(({ editorRef }) => {
     readOnly: noProject,
     domReadOnly: noProject,
     contextmenu: false,
+    inlineSuggest: { enabled: true },
+    suggestFontSize: 0,
+    suggestLineHeight: 0,
     suggestOnTriggerCharacters: enableLsp,
     quickSuggestions: enableLsp,
     suggest: {
