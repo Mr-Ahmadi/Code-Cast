@@ -286,6 +286,7 @@ function createWindow() {
     minWidth: 800,
     minHeight: 600,
     title: 'CodeCast',
+    icon: path.join(__root, 'client', 'public', 'codecast-256.png'),
     frame: false,
     titleBarStyle: 'hidden',
     webPreferences: {

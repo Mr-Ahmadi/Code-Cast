@@ -56,14 +56,18 @@
       "dist/**/*",
       "../electron/**/*"
     ],
+    "icon": "public/codecast-512.png",
     "mac": {
-      "target": "dmg"
+      "target": "dmg",
+      "icon": "public/codecast-512.png"
     },
     "win": {
-      "target": "nsis"
+      "target": "nsis",
+      "icon": "public/codecast-512.png"
     },
     "linux": {
-      "target": "AppImage"
+      "target": "AppImage",
+      "icon": "public/codecast-512.png"
     }
   }
 }
