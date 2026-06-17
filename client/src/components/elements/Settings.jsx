@@ -377,6 +377,114 @@ export default function Settings() {
         </label>
       </div>
     )},
+    { id: 'playbackExplanation', label: 'Explain', icon: FiCpu, content: (
+      <div className="settings-section">
+        <h4 className="settings-section-title">Playback Explanation</h4>
+        <p className="settings-section-desc">
+          Explain code at the current playback position using local AI models.
+        </p>
+
+        <label className="settings-field settings-checkbox-field">
+          <input
+            type="checkbox"
+            checked={localSettings.playbackExplanation.enabled}
+            onChange={e => updateLocal('playbackExplanation', 'enabled', e.target.checked)}
+          />
+          <span className="settings-field-label">Enable Playback Explanation</span>
+        </label>
+
+        <label className="settings-field settings-checkbox-field">
+          <input
+            type="checkbox"
+            checked={localSettings.playbackExplanation.autoExplain}
+            onChange={e => updateLocal('playbackExplanation', 'autoExplain', e.target.checked)}
+            disabled={!localSettings.playbackExplanation.enabled}
+          />
+          <span className="settings-field-label">Auto-explain on seek</span>
+        </label>
+
+        <label className="settings-field">
+          <span className="settings-field-label">Ollama URL</span>
+          <input
+            type="text"
+            className="settings-input"
+            value={localSettings.playbackExplanation.ollamaUrl}
+            onChange={e => updateLocal('playbackExplanation', 'ollamaUrl', e.target.value)}
+            disabled={!localSettings.playbackExplanation.enabled}
+            placeholder="http://localhost:11434"
+          />
+        </label>
+
+        <label className="settings-field">
+          <span className="settings-field-label">Model</span>
+          <select
+            className="settings-select"
+            value={localSettings.playbackExplanation.model}
+            onChange={e => updateLocal('playbackExplanation', 'model', e.target.value)}
+            disabled={!localSettings.playbackExplanation.enabled}
+          >
+            <option value="qwen2.5-coder:1.5b">Qwen2.5-Coder 1.5B</option>
+            <option value="qwen2.5-coder:3b">Qwen2.5-Coder 3B</option>
+            <option value="qwen2.5-coder:7b">Qwen2.5-Coder 7B</option>
+            <option value="qwen2.5-coder:14b">Qwen2.5-Coder 14B</option>
+            <option value="codellama:7b">CodeLlama 7B</option>
+            <option value="codellama:13b">CodeLlama 13B</option>
+            <option value="codellama:34b">CodeLlama 34B</option>
+            <option value="stable-code:3b">Stable Code 3B</option>
+            <option value="deepseek-coder:6.7b">DeepSeek Coder 6.7B</option>
+          </select>
+        </label>
+      </div>
+    )},
+    { id: 'terminalAI', label: 'Terminal AI', icon: FiTerminal, content: (
+      <div className="settings-section">
+        <h4 className="settings-section-title">Terminal AI Assistant</h4>
+        <p className="settings-section-desc">
+          Convert natural language to shell commands and explain terminal errors using local AI.
+        </p>
+
+        <label className="settings-field settings-checkbox-field">
+          <input
+            type="checkbox"
+            checked={localSettings.terminalAI.enabled}
+            onChange={e => updateLocal('terminalAI', 'enabled', e.target.checked)}
+          />
+          <span className="settings-field-label">Enable Terminal AI</span>
+        </label>
+
+        <label className="settings-field">
+          <span className="settings-field-label">Ollama URL</span>
+          <input
+            type="text"
+            className="settings-input"
+            value={localSettings.terminalAI.ollamaUrl}
+            onChange={e => updateLocal('terminalAI', 'ollamaUrl', e.target.value)}
+            disabled={!localSettings.terminalAI.enabled}
+            placeholder="http://localhost:11434"
+          />
+        </label>
+
+        <label className="settings-field">
+          <span className="settings-field-label">Model</span>
+          <select
+            className="settings-select"
+            value={localSettings.terminalAI.model}
+            onChange={e => updateLocal('terminalAI', 'model', e.target.value)}
+            disabled={!localSettings.terminalAI.enabled}
+          >
+            <option value="qwen2.5-coder:1.5b">Qwen2.5-Coder 1.5B</option>
+            <option value="qwen2.5-coder:3b">Qwen2.5-Coder 3B</option>
+            <option value="qwen2.5-coder:7b">Qwen2.5-Coder 7B</option>
+            <option value="qwen2.5-coder:14b">Qwen2.5-Coder 14B</option>
+            <option value="codellama:7b">CodeLlama 7B</option>
+            <option value="codellama:13b">CodeLlama 13B</option>
+            <option value="codellama:34b">CodeLlama 34B</option>
+            <option value="stable-code:3b">Stable Code 3B</option>
+            <option value="deepseek-coder:6.7b">DeepSeek Coder 6.7B</option>
+          </select>
+        </label>
+      </div>
+    )},
   ];
 
   return (

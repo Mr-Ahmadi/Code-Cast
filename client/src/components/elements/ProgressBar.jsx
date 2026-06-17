@@ -1,6 +1,6 @@
 import { useRef, useCallback, memo } from "react";
 import PropTypes from 'prop-types';
-import { FiSkipBack, FiSkipForward } from "react-icons/fi";
+import { FiSkipBack, FiSkipForward, FiCpu } from "react-icons/fi";
 
 const formatMs = (ms) => {
   const totalSec = Math.floor(ms / 1000);
@@ -9,7 +9,7 @@ const formatMs = (ms) => {
   return `${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`;
 };
 
-const ProgressBar = memo(({ progress, duration, onSeek, speed, onSkipBack, onSkipForward }) => {
+const ProgressBar = memo(({ progress, duration, onSeek, speed, onSkipBack, onSkipForward, onExplain, explaining }) => {
   const barRef = useRef(null);
   const dragging = useRef(false);
 
@@ -83,6 +83,18 @@ const ProgressBar = memo(({ progress, duration, onSeek, speed, onSkipBack, onSki
       </button>
       <span className="progress-time">{formatMs(currentTime)} / {formatMs(duration)}</span>
       {speed !== 1 && <span className="speed-badge" style={{ marginLeft: 6 }}>{speed}x</span>}
+      {onExplain && (
+        <button
+          className="progress-explain-btn"
+          onClick={onExplain}
+          disabled={explaining}
+          title="Explain current code with AI"
+          aria-label="Explain current code"
+        >
+          <FiCpu size={12} />
+          {explaining ? '...' : 'Explain'}
+        </button>
+      )}
     </div>
   );
 });
@@ -96,6 +108,8 @@ ProgressBar.propTypes = {
   speed: PropTypes.number.isRequired,
   onSkipBack: PropTypes.func.isRequired,
   onSkipForward: PropTypes.func.isRequired,
+  onExplain: PropTypes.func,
+  explaining: PropTypes.bool,
 };
 
 export default ProgressBar;

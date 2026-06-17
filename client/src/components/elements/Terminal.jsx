@@ -4,6 +4,7 @@ import { FitAddon } from '@xterm/addon-fit';
 import '@xterm/xterm/css/xterm.css';
 import { GlobalContext } from '../../contexts/GlobalStates';
 import { useMode, MODES } from '../../contexts/ModeContext';
+import TerminalAI from './TerminalAI';
 import PropTypes from "prop-types";
 
 export default function TerminalPanel({ visible, terminalId }) {
@@ -11,7 +12,7 @@ export default function TerminalPanel({ visible, terminalId }) {
   const xtermRef = useRef(null);
   const fitAddonRef = useRef(null);
   const resizeTransportRef = useRef(null);
-  const { theme, setToast, currentWorkspace } = useContext(GlobalContext);
+  const { theme, setToast, currentWorkspace, settings } = useContext(GlobalContext);
   const themeRef = useRef(theme);
   const { mode } = useMode();
   const isLocal = mode === MODES.LOCAL;
@@ -62,6 +63,8 @@ export default function TerminalPanel({ visible, terminalId }) {
       xtermRef.current.refresh(0, xtermRef.current.rows - 1);
     }
   }, [buildTerminalTheme]);
+
+  const injectCommandRef = useRef(null);
 
   const fitAndSync = useCallback(() => {
     const term = xtermRef.current;
@@ -213,6 +216,10 @@ export default function TerminalPanel({ visible, terminalId }) {
             }
           });
 
+          injectCommandRef.current = (cmd) => {
+            term.write(cmd + '\r\n');
+            termAPI.write(id, cmd + '\r');
+          };
           disposables.push(term.onData((data) => {
             termAPI.write(id, data);
           }));
@@ -278,6 +285,10 @@ export default function TerminalPanel({ visible, terminalId }) {
           }
         };
 
+        injectCommandRef.current = (cmd) => {
+          term.write(cmd + '\r\n');
+          if (ws.readyState === WebSocket.OPEN) ws.send(cmd + '\r');
+        };
         disposables.push(term.onData((data) => {
           if (ws.readyState === WebSocket.OPEN) ws.send(data);
         }));
@@ -310,6 +321,12 @@ export default function TerminalPanel({ visible, terminalId }) {
       aria-hidden={!visible}
       onClick={() => xtermRef.current?.focus()}
     >
+      {visible && (
+        <TerminalAI
+          settings={settings}
+          onInjectCommand={(cmd) => injectCommandRef.current?.(cmd)}
+        />
+      )}
       <div className="terminal-body" ref={terminalRef} />
     </div>
   );

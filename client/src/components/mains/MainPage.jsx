@@ -10,6 +10,7 @@ import FileTree from '../elements/FileTree';
 import GitPanel from '../elements/GitPanel';
 import ShortcutsHelp from '../elements/ShortcutsHelp';
 import TerminalPanel from '../elements/Terminal';
+import ExplainPanel from '../elements/ExplainPanel';
 import LocalSetupPrompt from '../elements/LocalSetupPrompt';
 import ActivityBar from '../elements/ActivityBar';
 import StatusBar from '../elements/StatusBar';
@@ -40,6 +41,7 @@ export default function App() {
     const [activePanel, setActivePanel] = useState('output');
     const [terminals, setTerminals] = useState([{ id: "terminal-1", name: "Terminal 1" }]);
     const [activeTerminalId, setActiveTerminalId] = useState("terminal-1");
+    const [explainTrigger, setExplainTrigger] = useState(0);
     const { mode } = useMode();
     const isLocal = mode === MODES.LOCAL;
 
@@ -105,6 +107,8 @@ export default function App() {
         setShowSetup(false);
     };
 
+    window.__setActivePanel = setActivePanel;
+    window.__triggerExplain = () => setExplainTrigger(n => n + 1);
     window.__setTerminalVisible = (updater) => {
         if (typeof updater === "function") {
             setTerminalVisible((prev) => updater(prev));
@@ -324,7 +328,7 @@ export default function App() {
         return () => document.removeEventListener('keydown', handleKeyDown);
     }, [handleKeyDown]);
 
-    const hasBottomContent = output || terminalVisible;
+    const hasBottomContent = output || terminalVisible || activePanel === 'explain';
     const explorerContext = currentRecord
         ? "Record Snapshot"
         : currentWorkspace?.name || "No Project";
@@ -649,6 +653,12 @@ export default function App() {
                                     >
                                         TERMINAL
                                     </button>
+                                    <button
+                                        className={"panel-tab" + (activePanel === 'explain' ? ' active' : '')}
+                                        onClick={() => setActivePanel('explain')}
+                                    >
+                                        EXPLAIN
+                                    </button>
                                     {terminalVisible && (
                                         <div className="terminal-tabs-list">
                                             {terminals.map((terminal) => (
@@ -702,6 +712,14 @@ export default function App() {
                                             />
                                         ))}
                                     </div>
+                                </div>
+                                <div className="panel-body" style={{ display: activePanel === 'explain' ? 'flex' : 'none' }}>
+                                    <ExplainPanel
+                                        code={window.__getEditor?.()?.getValue() || ''}
+                                        language={window.__getEditor?.()?.getModel?.()?.getLanguageId() || 'plaintext'}
+                                        settings={settings}
+                                        explainTrigger={explainTrigger}
+                                    />
                                 </div>
                             </div>
                         </>

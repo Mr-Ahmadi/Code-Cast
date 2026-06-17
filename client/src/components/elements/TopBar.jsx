@@ -281,6 +281,11 @@ const TopBar = memo(({ editorRef }) => {
     handleSeek(newMs / totalMs);
   }, [playProgress, handleSeek]);
 
+  const handleExplain = useCallback(() => {
+    window.__setActivePanel?.('explain');
+    setTimeout(() => window.__triggerExplain?.(), 100);
+  }, []);
+
   const handleSpeedSelect = useCallback((s) => {
     setSpeed(s);
     setShowSpeed(false);
@@ -552,6 +557,7 @@ const TopBar = memo(({ editorRef }) => {
           speed={speed}
           onSkipBack={handleSkipBack}
           onSkipForward={handleSkipForward}
+          onExplain={handleExplain}
         />
       )}
       <RecordsList display={recordsDisplay} setDisplay={setRecordsDisplay} />

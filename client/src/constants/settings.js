@@ -44,6 +44,19 @@ export const DEFAULT_SETTINGS = {
     model: 'qwen2.5-coder:1.5b',
     ollamaUrl: 'http://localhost:11434',
   },
+  playbackExplanation: {
+    enabled: true,
+    provider: 'ollama',
+    model: 'qwen2.5-coder:1.5b',
+    ollamaUrl: 'http://localhost:11434',
+    autoExplain: false,
+  },
+  terminalAI: {
+    enabled: true,
+    provider: 'ollama',
+    model: 'qwen2.5-coder:1.5b',
+    ollamaUrl: 'http://localhost:11434',
+  },
 };
 
 export function getFormatterForLanguage(lang, settings) {
