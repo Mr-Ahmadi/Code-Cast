@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback, useContext } from "react";
 import { GlobalContext } from "../../contexts/GlobalStates";
 import { useMode, MODES } from "../../contexts/ModeContext";
-import { FiGitBranch, FiRefreshCw, FiPlus, FiMinus, FiChevronRight, FiChevronDown, FiGithub, FiRotateCcw, FiArrowUp, FiZap } from "react-icons/fi";
+import { FiGitBranch, FiRefreshCw, FiPlus, FiMinus, FiChevronRight, FiChevronDown, FiGithub, FiRotateCcw, FiArrowUp, FiZap, FiAlertCircle } from "react-icons/fi";
 
 function parsePorcelain(output) {
   const staged = [];
@@ -36,7 +36,7 @@ function parsePorcelain(output) {
 }
 
 export default function GitPanel() {
-  const { currentWorkspace, settings } = useContext(GlobalContext);
+  const { currentWorkspace, settings, setToast } = useContext(GlobalContext);
   const { mode } = useMode();
   const isLocal = mode === MODES.LOCAL;
   const repoPath = currentWorkspace?.path;
@@ -79,7 +79,7 @@ export default function GitPanel() {
     if (res.message) {
       setCommitMsg(res.message);
     } else if (res.error) {
-      console.warn('opencode suggest-commit failed:', res.error);
+      setToast({ message: `Commit message generation failed: ${res.error}`, type: "ERROR" });
     }
     setGenerating(false);
   }, [repoPath, settings]);

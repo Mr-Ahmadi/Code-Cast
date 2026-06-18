@@ -3,15 +3,18 @@
   "private": true,
   "version": "0.0.0",
   "type": "module",
-  "main": "../electron/main.js",
+  "main": "electron/main.cjs",
   "scripts": {
     "postinstall": "electron-rebuild -f -w node-pty",
+    "sync:electron": "rm -rf electron && cp -r ../electron ./electron",
+    "prebuild": "npm run sync:electron",
     "dev": "vite",
     "build": "vite build",
     "lint": "eslint . --ext js,jsx --report-unused-disable-directives --max-warnings 0",
     "preview": "vite preview",
+    "preelectron:dev": "npm run sync:electron",
     "electron:dev": "concurrently -k \"vite\" \"wait-on tcp:5173 && NODE_ENV=development electron .\"",
-    "electron:build": "vite build && electron-builder",
+    "electron:build": "npm run prebuild && vite build && electron-builder",
     "electron": "NODE_ENV=development electron ."
   },
   "dependencies": {
@@ -54,11 +57,11 @@
     },
     "files": [
       "dist/**/*",
-      "../electron/**/*"
+      "electron/**/*"
     ],
     "icon": "public/codecast-512.png",
     "mac": {
-      "target": "dmg",
+      "target": ["dir", "dmg"],
       "icon": "public/codecast-512.png"
     },
     "win": {

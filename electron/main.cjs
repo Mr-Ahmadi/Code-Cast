@@ -1,22 +1,32 @@
-import { app, BrowserWindow, ipcMain, dialog, Menu } from 'electron';
-import path from 'path';
-import { fileURLToPath } from 'url';
-import { exec, spawn } from 'child_process';
-import os from 'os';
-import fs from 'fs';
-import { createRequire } from 'module';
+const { app, BrowserWindow, ipcMain, dialog, Menu } = require('electron');
+const path = require('path');
+const { exec, execSync, spawn } = require('child_process');
+const os = require('os');
+const fs = require('fs');
 
-const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const __root = path.resolve(__dirname, '..');
-// Resolve modules from client/ where node_modules lives
-const require = createRequire(path.resolve(__root, 'client', 'package.json'));
+const isPackaged = app.isPackaged;
+const electronParent = path.resolve(__dirname, '..');
+const isCopiedIntoClient = !isPackaged
+  && fs.existsSync(path.join(electronParent, 'package.json'))
+  && fs.existsSync(path.join(electronParent, 'index.html'));
+const __root = isPackaged
+  ? app.getAppPath()
+  : isCopiedIntoClient
+    ? path.resolve(electronParent, '..')
+    : electronParent;
+const clientRoot = isCopiedIntoClient ? electronParent : path.join(__root, 'client');
+
+const iconPath = app.isPackaged
+  ? path.join(__root, 'dist', 'codecast-256.png')
+  : path.join(clientRoot, 'public', 'codecast-256.png');
+const rendererIndexPath = path.join(__root, 'dist', 'index.html');
 
 let prettier;
 try {
   prettier = require('prettier');
 } catch {}
 
-const isDev = process.env.NODE_ENV === 'development' || !app.isPackaged;
+const isDev = process.env.NODE_ENV === 'development' || !isPackaged;
 
 let mainWindow;
 let terminalProcesses = {};
@@ -286,7 +296,7 @@ function createWindow() {
     minWidth: 800,
     minHeight: 600,
     title: 'CodeCast',
-    icon: path.join(__root, 'client', 'public', 'codecast-256.png'),
+    icon: iconPath,
     frame: false,
     titleBarStyle: 'hidden',
     webPreferences: {
@@ -304,11 +314,23 @@ function createWindow() {
   if (isDev) {
     loadDevServer();
   } else {
-    mainWindow.loadFile(path.join(__dirname, '..', 'client', 'dist', 'index.html'));
+    mainWindow.loadFile(rendererIndexPath).catch((err) => {
+      console.error('Failed to load renderer:', err);
+      mainWindow.loadURL('data:text/html;charset=utf-8,' +
+        encodeURIComponent(
+          '<html><body style="background:#1a1a2e;color:#e8e8e8;font-family:sans-serif;display:flex;align-items:center;justify-content:center;height:100vh;margin:0">' +
+          '<div style="text-align:center">' +
+          '<h2>Failed to load app</h2>' +
+          '<p style="color:#a0a0b0">' + err.message + '</p>' +
+          '</div></body></html>'
+        )
+      );
+    });
     mainWindow.once('ready-to-show', () => mainWindow.show());
   }
 
   mainWindow.on('close', (e) => {
+    if (global._quitting) return;
     e.preventDefault();
     mainWindow.webContents.send('app:before-close');
   });
@@ -373,9 +395,15 @@ function loadDevServer() {
   tryConnect();
 }
 
+app.commandLine.appendSwitch('disable-features', 'PasswordManager');
+
 app.whenReady().then(() => {
   createWindow();
   buildApplicationMenu();
+});
+
+app.on('before-quit', () => {
+  global._quitting = true;
 });
 
 app.on('window-all-closed', () => {
@@ -966,9 +994,34 @@ ipcMain.handle('git:exec', async (event, cwd, args) => {
 
 // --- Opencode IPC for commit message generation ---
 
+function findOpencode() {
+  const commonPaths = [
+    '/opt/homebrew/bin',
+    '/usr/local/bin',
+    path.join(os.homedir(), '.npm-global', 'bin'),
+    path.join(os.homedir(), '.local', 'bin'),
+  ];
+  for (const dir of commonPaths) {
+    const candidate = path.join(dir, 'opencode');
+    try {
+      fs.accessSync(candidate, fs.constants.X_OK);
+      return candidate;
+    } catch {}
+  }
+  // Try resolving via npm root -g
+  try {
+    const npmRoot = execSync('npm root -g', { encoding: 'utf-8' }).trim();
+    const candidate = path.join(path.dirname(npmRoot), 'opencode');
+    fs.accessSync(candidate, fs.constants.X_OK);
+    return candidate;
+  } catch {}
+  return 'opencode';
+}
+
 ipcMain.handle('opencode:listModels', async () => {
   return new Promise((resolve) => {
-    const proc = spawn('opencode', ['models'], { stdio: ['pipe', 'pipe', 'pipe'] });
+    const opencodeBin = findOpencode();
+    const proc = spawn(opencodeBin, ['models'], { stdio: ['pipe', 'pipe', 'pipe'] });
     let stdout = '';
     let stderr = '';
     proc.stdout.on('data', (data) => { stdout += data.toString(); });
@@ -1001,7 +1054,8 @@ ipcMain.handle('opencode:suggestCommit', async (event, cwd, model) => {
       if (model) {
         args.push('--model', model);
       }
-      const proc = spawn('opencode', args, { cwd, stdio: ['pipe', 'pipe', 'pipe'] });
+      const opencodeBin = findOpencode();
+      const proc = spawn(opencodeBin, args, { cwd, stdio: ['pipe', 'pipe', 'pipe'] });
 
       let output = '';
       let errOutput = '';

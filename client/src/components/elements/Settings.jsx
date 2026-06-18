@@ -7,7 +7,7 @@ import { FiX, FiEdit3, FiCode, FiTerminal, FiSave, FiGitCommit, FiCpu } from 're
 import axios from 'axios';
 
 export default function Settings() {
-  const { settings, setSettings, settingsOpen, setSettingsOpen, theme, setTheme, fontSize, setFontSize, showMinimap, setShowMinimap, autoSave, setAutoSave } = useContext(GlobalContext);
+  const { settings, setSettings, settingsOpen, setSettingsOpen, theme, setTheme, fontSize, setFontSize, showMinimap, setShowMinimap, autoSave, setAutoSave, setToast } = useContext(GlobalContext);
   const { mode } = useMode();
   const [activeSection, setActiveSection] = useState('editor');
   const [localSettings, setLocalSettings] = useState(settings);
@@ -38,6 +38,8 @@ export default function Settings() {
       window.electronAPI.opencode.listModels().then(res => {
         if (res.models?.length) {
           setAvailableModels(res.models);
+        } else if (res.error) {
+          setToast({ message: `Failed to list opencode models: ${res.error}`, type: "WARNING" });
         }
       });
     }
