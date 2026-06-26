@@ -3188,3 +3188,27 @@ body.dialog-open .resizer {
   white-space: pre-wrap;
   word-break: break-word;
 }
+
+.markdown-preview-body {
+  flex: 1;
+  display: flex;
+  min-height: 0;
+  position: relative;
+}
+
+.markdown-preview-pane {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.markdown-preview-pane.hidden {
+  display: none;
+}
+
+.markdown-preview-source-editor {
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+}

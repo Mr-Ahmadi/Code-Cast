@@ -13,7 +13,6 @@ export default function Settings() {
   const [localSettings, setLocalSettings] = useState(settings);
   const [saving, setSaving] = useState(false);
   const [dirty, setDirty] = useState(false);
-  const [availableModels, setAvailableModels] = useState([]);
 
   useEffect(() => {
     setLocalSettings(settings);
@@ -32,18 +31,6 @@ export default function Settings() {
         .catch(() => {});
     }
   }, [mode]);
-
-  useEffect(() => {
-    if (window.electronAPI?.opencode?.listModels) {
-      window.electronAPI.opencode.listModels().then(res => {
-        if (res.models?.length) {
-          setAvailableModels(res.models);
-        } else if (res.error) {
-          setToast({ message: `Failed to list opencode models: ${res.error}`, type: "WARNING" });
-        }
-      });
-    }
-  }, []);
 
   const updateLocal = useCallback((section, key, value) => {
     setLocalSettings(prev => ({
@@ -300,7 +287,7 @@ export default function Settings() {
       <div className="settings-section">
         <h4 className="settings-section-title">Commit Messages</h4>
         <p className="settings-section-desc">
-          Generate commit messages from staged changes using opencode AI.
+          Generate commit messages from staged changes using a local Ollama model (e.g. Qwen2.5-Coder).
         </p>
 
         <label className="settings-field settings-checkbox-field">
@@ -313,6 +300,18 @@ export default function Settings() {
         </label>
 
         <label className="settings-field">
+          <span className="settings-field-label">Ollama URL</span>
+          <input
+            type="text"
+            className="settings-input"
+            value={localSettings.commitMessage.ollamaUrl}
+            onChange={e => updateLocal('commitMessage', 'ollamaUrl', e.target.value)}
+            disabled={!localSettings.commitMessage.enabled}
+            placeholder="http://localhost:11434"
+          />
+        </label>
+
+        <label className="settings-field">
           <span className="settings-field-label">Model</span>
           <select
             className="settings-select"
@@ -320,12 +319,15 @@ export default function Settings() {
             onChange={e => updateLocal('commitMessage', 'model', e.target.value)}
             disabled={!localSettings.commitMessage.enabled}
           >
-            {availableModels.length === 0 && (
-              <option value="opencode/claude-sonnet-4">opencode/claude-sonnet-4</option>
-            )}
-            {availableModels.map(m => (
-              <option key={m} value={m}>{m}</option>
-            ))}
+            <option value="qwen2.5-coder:1.5b">Qwen2.5-Coder 1.5B</option>
+            <option value="qwen2.5-coder:3b">Qwen2.5-Coder 3B</option>
+            <option value="qwen2.5-coder:7b">Qwen2.5-Coder 7B</option>
+            <option value="qwen2.5-coder:14b">Qwen2.5-Coder 14B</option>
+            <option value="codellama:7b">CodeLlama 7B</option>
+            <option value="codellama:13b">CodeLlama 13B</option>
+            <option value="codellama:34b">CodeLlama 34B</option>
+            <option value="stable-code:3b">Stable Code 3B</option>
+            <option value="deepseek-coder:6.7b">DeepSeek Coder 6.7B</option>
           </select>
         </label>
       </div>

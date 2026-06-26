@@ -1,21 +1,27 @@
 import { useState, useEffect, useContext, useMemo, useRef, useCallback } from 'react';
 import { GlobalContext } from '../../contexts/GlobalStates';
-import { FiAlertTriangle, FiEye, FiEdit3 } from 'react-icons/fi';
+import { FiAlertTriangle, FiEye, FiEdit3, FiSave } from 'react-icons/fi';
 import { marked } from 'marked';
+import MonacoEditor from '@monaco-editor/react';
 
 const MarkdownPreview = ({ file }) => {
-  const { currentWorkspace } = useContext(GlobalContext);
+  const { currentWorkspace, theme, setToast } = useContext(GlobalContext);
   const previewRef = useRef(null);
+  const monacoRef = useRef(null);
   const [content, setContent] = useState('');
   const [error, setError] = useState(null);
   const [loading, setLoading] = useState(true);
   const [showPreview, setShowPreview] = useState(true);
 
+  const fullPath = useMemo(() => {
+    if (!file || !currentWorkspace?.path) return null;
+    return window.electronAPI.path.join(currentWorkspace.path, file);
+  }, [file, currentWorkspace?.path]);
+
   useEffect(() => {
-    if (!file || !currentWorkspace?.path) return;
+    if (!fullPath) return;
     setLoading(true);
     setError(null);
-    const fullPath = window.electronAPI.path.join(currentWorkspace.path, file);
 
     window.electronAPI.file.read(fullPath).then((text) => {
       if (text === null || text === undefined) {
@@ -29,7 +35,46 @@ const MarkdownPreview = ({ file }) => {
       setError(err.message || 'Failed to load file');
       setLoading(false);
     });
-  }, [file, currentWorkspace?.path]);
+  }, [fullPath]);
+
+  const saveContent = useCallback(async (text) => {
+    if (!fullPath) return false;
+    const ok = await window.electronAPI.file.write(fullPath, text ?? content);
+    if (ok) {
+      setToast({ type: 'SUCCESS', message: `Saved ${file}` });
+    } else {
+      setToast({ type: 'ERROR', message: `Failed to save ${file}` });
+    }
+    return ok;
+  }, [fullPath, content, file, setToast]);
+
+  const handleEditorMount = useCallback((editor, monaco) => {
+    monacoRef.current = editor;
+    editor.focus();
+  }, []);
+
+  const handleMonacoChange = useCallback((value) => {
+    setContent(value || '');
+  }, []);
+
+  useEffect(() => {
+    const handleKeyDown = (e) => {
+      if ((e.metaKey || e.ctrlKey) && e.key === 's' && !showPreview && monacoRef.current) {
+        e.preventDefault();
+        saveContent(monacoRef.current.getValue());
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [showPreview, saveContent]);
+
+  const handleToggleMode = useCallback((preview) => {
+    if (!preview && monacoRef.current) {
+      // Syncing latest from Monaco before switching to preview
+      setContent(monacoRef.current.getValue());
+    }
+    setShowPreview(preview);
+  }, []);
 
   const fileDir = useMemo(() => {
     if (!file) return '';
@@ -41,7 +86,6 @@ const MarkdownPreview = ({ file }) => {
   const html = useMemo(() => {
     if (!content) return '';
     try {
-      // Prefix relative image URLs with the file's directory path using file://
       const processed = content.replace(
         /!\[([^\]]*)\]\(([^)]+)\)/g,
         (match, alt, href) => {
@@ -81,7 +125,6 @@ const MarkdownPreview = ({ file }) => {
 
   useEffect(() => {
     if (showPreview && html) {
-      // Small delay to ensure DOM is updated
       requestAnimationFrame(loadImages);
     }
   }, [showPreview, html, loadImages]);
@@ -105,34 +148,67 @@ const MarkdownPreview = ({ file }) => {
     );
   }
 
+  const editorTheme = theme === 'light' ? 'vs' : 'vs-dark';
+
   return (
     <div className="viewer-container markdown-preview">
       <div className="markdown-preview-toolbar">
         <button
           className={`markdown-preview-btn ${showPreview ? 'active' : ''}`}
-          onClick={() => setShowPreview(true)}
+          onClick={() => handleToggleMode(true)}
           title="Show rendered preview"
         >
           <FiEye size={14} /> Preview
         </button>
         <button
           className={`markdown-preview-btn ${!showPreview ? 'active' : ''}`}
-          onClick={() => setShowPreview(false)}
+          onClick={() => handleToggleMode(false)}
           title="Show source"
         >
           <FiEdit3 size={14} /> Source
         </button>
+        {!showPreview && (
+          <button
+            className="markdown-preview-btn"
+            onClick={() => saveContent(monacoRef.current?.getValue())}
+            title="Save (Cmd+S)"
+          >
+            <FiSave size={14} /> Save
+          </button>
+        )}
         <span className="markdown-preview-filename">{file}</span>
       </div>
-      {showPreview ? (
-        <div
-          className="markdown-preview-content"
-          ref={previewRef}
-          dangerouslySetInnerHTML={{ __html: html }}
-        />
-      ) : (
-        <pre className="markdown-preview-source">{content}</pre>
-      )}
+      <div className="markdown-preview-body">
+        <div className={`markdown-preview-pane ${showPreview ? '' : 'hidden'}`}>
+          <div
+            className="markdown-preview-content"
+            ref={previewRef}
+            dangerouslySetInnerHTML={{ __html: html }}
+          />
+        </div>
+        <div className={`markdown-preview-pane ${!showPreview ? '' : 'hidden'}`}>
+          <div className="markdown-preview-source-editor">
+            <MonacoEditor
+              height="100%"
+              language="markdown"
+              theme={editorTheme}
+              defaultValue={content}
+              onChange={handleMonacoChange}
+              onMount={handleEditorMount}
+              options={{
+                fontSize: 13,
+                minimap: { enabled: false },
+                wordWrap: 'on',
+                lineNumbers: 'on',
+                scrollBeyondLastLine: false,
+                automaticLayout: true,
+                padding: { top: 12 },
+                tabSize: 2,
+              }}
+            />
+          </div>
+        </div>
+      </div>
     </div>
   );
 };

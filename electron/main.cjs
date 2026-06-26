@@ -1,6 +1,6 @@
 const { app, BrowserWindow, ipcMain, dialog, Menu } = require('electron');
 const path = require('path');
-const { exec, execSync, spawn } = require('child_process');
+const { exec, spawn } = require('child_process');
 const os = require('os');
 const fs = require('fs');
 
@@ -997,120 +997,6 @@ ipcMain.handle('git:exec', async (event, cwd, args) => {
         stderr: stderr || '',
         code: err ? (err.code || 1) : 0,
       });
-    });
-  });
-});
-
-// --- Opencode IPC for commit message generation ---
-
-function findOpencode() {
-  const commonPaths = [
-    '/opt/homebrew/bin',
-    '/usr/local/bin',
-    path.join(os.homedir(), '.npm-global', 'bin'),
-    path.join(os.homedir(), '.local', 'bin'),
-  ];
-  for (const dir of commonPaths) {
-    const candidate = path.join(dir, 'opencode');
-    try {
-      fs.accessSync(candidate, fs.constants.X_OK);
-      return candidate;
-    } catch {}
-  }
-  // Try resolving via npm root -g
-  try {
-    const npmRoot = execSync('npm root -g', { encoding: 'utf-8' }).trim();
-    const candidate = path.join(path.dirname(npmRoot), 'opencode');
-    fs.accessSync(candidate, fs.constants.X_OK);
-    return candidate;
-  } catch {}
-  return 'opencode';
-}
-
-ipcMain.handle('opencode:listModels', async () => {
-  return new Promise((resolve) => {
-    const opencodeBin = findOpencode();
-    const proc = spawn(opencodeBin, ['models'], { stdio: ['pipe', 'pipe', 'pipe'] });
-    let stdout = '';
-    let stderr = '';
-    proc.stdout.on('data', (data) => { stdout += data.toString(); });
-    proc.stderr.on('data', (data) => { stderr += data.toString(); });
-    proc.on('close', (code) => {
-      if (code !== 0) {
-        resolve({ models: [], error: stderr || `opencode exited with code ${code}` });
-        return;
-      }
-      const models = stdout.trim().split('\n').filter(Boolean).map(m => m.trim());
-      resolve({ models, error: null });
-    });
-    proc.on('error', (err) => {
-      resolve({ models: [], error: `opencode not found: ${err.message}. Is it installed?` });
-    });
-  });
-});
-
-ipcMain.handle('opencode:suggestCommit', async (event, cwd, model) => {
-  return new Promise((resolve) => {
-    exec('git diff --cached', { cwd, maxBuffer: 10 * 1024 * 1024 }, (err, stdout) => {
-      const diff = stdout || '';
-      if (!diff.trim()) {
-        resolve({ message: '', error: 'No staged changes found.' });
-        return;
-      }
-
-      const prompt = `Generate a concise git commit message for these staged changes:\n\n${diff}\n\nOnly output the commit message, nothing else.`;
-      const args = ['run', '--format', 'json'];
-      if (model) {
-        args.push('--model', model);
-      }
-      const opencodeBin = findOpencode();
-      const proc = spawn(opencodeBin, args, { cwd, stdio: ['pipe', 'pipe', 'pipe'] });
-
-      let output = '';
-      let errOutput = '';
-      let message = '';
-
-      proc.stdout.on('data', (data) => {
-        output += data.toString();
-        // Parse NDJSON events as they arrive
-        const lines = output.split('\n');
-        for (let i = 0; i < lines.length - 1; i++) {
-          const line = lines[i].trim();
-          if (!line) continue;
-          try {
-            const evt = JSON.parse(line);
-            if (evt.type === 'text' && evt.part?.type === 'text') {
-              message += evt.part.text;
-            }
-          } catch {}
-        }
-        output = lines[lines.length - 1];
-      });
-
-      proc.stderr.on('data', (data) => { errOutput += data.toString(); });
-
-      proc.on('close', (code) => {
-        // Parse any remaining data
-        if (output.trim()) {
-          try {
-            const evt = JSON.parse(output.trim());
-            if (evt.type === 'text' && evt.part?.type === 'text') {
-              message += evt.part.text;
-            }
-          } catch {}
-        }
-        resolve({
-          message: message.trim(),
-          error: code !== 0 ? (errOutput || `opencode exited with code ${code}`) : null,
-        });
-      });
-
-      proc.on('error', (err) => {
-        resolve({ message: '', error: `opencode not found: ${err.message}. Is it installed?` });
-      });
-
-      proc.stdin.write(prompt);
-      proc.stdin.end();
     });
   });
 });

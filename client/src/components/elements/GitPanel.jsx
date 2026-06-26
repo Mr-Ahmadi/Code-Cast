@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback, useContext } from "react";
 import { GlobalContext } from "../../contexts/GlobalStates";
 import { useMode, MODES } from "../../contexts/ModeContext";
 import { FiGitBranch, FiRefreshCw, FiPlus, FiMinus, FiChevronRight, FiChevronDown, FiGithub, FiRotateCcw, FiArrowUp, FiZap, FiAlertCircle } from "react-icons/fi";
+import { ollamaChat } from "../../services/ollama";
 
 function parsePorcelain(output) {
   const staged = [];
@@ -72,17 +73,55 @@ export default function GitPanel() {
   }, [repoPath]);
 
   const handleGenerateMsg = useCallback(async () => {
-    if (!window.electronAPI?.opencode?.suggestCommit || !repoPath) return;
-    const model = settings?.commitMessage?.model;
+    if (!repoPath) return;
+    const diffRes = await gitExec(["diff", "--cached"]);
+    if (diffRes.code !== 0 || !diffRes.stdout.trim()) {
+      setToast({ message: "No staged changes found.", type: "ERROR" });
+      return;
+    }
+    const { model, ollamaUrl } = settings?.commitMessage || {};
+    if (!model || !ollamaUrl) {
+      setToast({ message: "Ollama model or URL not configured in settings.", type: "ERROR" });
+      return;
+    }
     setGenerating(true);
-    const res = await window.electronAPI.opencode.suggestCommit(repoPath, model || null);
-    if (res.message) {
-      setCommitMsg(res.message);
-    } else if (res.error) {
-      setToast({ message: `Commit message generation failed: ${res.error}`, type: "ERROR" });
+    try {
+      const diff = diffRes.stdout;
+      const files = diff.match(/^\+\+\+ b\/(.+)$/gm)?.map(l => l.slice(6)) || [];
+      const lines = diff.split('\n');
+      const added = lines.filter(l => l.startsWith('+') && !l.startsWith('+++')).length;
+      const removed = lines.filter(l => l.startsWith('-') && !l.startsWith('---')).length;
+      const summary = files.length ? `Files: ${files.join(', ')}\n+${added} -${removed}` : diff.slice(0, 500);
+      const msg = await ollamaChat({
+        model,
+        messages: [
+          {
+            role: 'system',
+            content: 'You are a git commit message generator. Reply with ONLY the commit message, one line, max 72 chars.',
+          },
+          { role: 'user', content: summary },
+        ],
+        ollamaUrl,
+      });
+      const lines2 = msg.trim().split('\n');
+      let clean = '';
+      for (const l of lines2) {
+        const t = l.trim();
+        if (!t || t.startsWith('`') || t.startsWith('*') || t.startsWith('-') || t.startsWith('#')) continue;
+        if (t.length > 150 || /^(the|this|i think|here|sure|okay)/i.test(t)) continue;
+        clean = t;
+        break;
+      }
+      if (clean) {
+        setCommitMsg(clean);
+      } else {
+        setToast({ message: "Model returned empty response.", type: "ERROR" });
+      }
+    } catch (err) {
+      setToast({ message: `Commit message generation failed: ${err.message}`, type: "ERROR" });
     }
     setGenerating(false);
-  }, [repoPath, settings]);
+  }, [repoPath, settings, gitExec, setToast]);
 
   const clearState = useCallback(() => {
     setHasRepo(false);
@@ -363,7 +402,7 @@ export default function GitPanel() {
               className="git-commit-magic-btn"
               onClick={handleGenerateMsg}
               disabled={generating}
-              title={generating ? "Generating..." : "Generate commit message with opencode"}
+              title={generating ? "Generating..." : "Generate commit message with Ollama"}
             >
               <FiZap size={14} className={generating ? "pulse" : ""} />
             </button>

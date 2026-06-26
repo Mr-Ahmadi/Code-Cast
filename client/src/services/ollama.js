@@ -33,6 +33,28 @@ export async function ollamaCompletion({ model, prompt, ollamaUrl, signal }) {
   return data.response || '';
 }
 
+export async function ollamaChat({ model, messages, ollamaUrl, signal, temperature = 0.1 }) {
+  const base = normalizeUrl(ollamaUrl);
+  const res = await fetch(`${base}/api/chat`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      model,
+      messages,
+      stream: false,
+      options: { temperature },
+    }),
+    signal,
+  });
+
+  if (!res.ok) {
+    throw new Error(`Ollama API error: ${res.status} ${res.statusText}`);
+  }
+
+  const data = await res.json();
+  return data.message?.content || '';
+}
+
 export async function ollamaListModels(ollamaUrl) {
   const base = normalizeUrl(ollamaUrl);
   const res = await fetch(`${base}/api/tags`);

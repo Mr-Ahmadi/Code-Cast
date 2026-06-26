@@ -36,7 +36,9 @@ export const DEFAULT_SETTINGS = {
   },
   commitMessage: {
     enabled: true,
-    model: 'opencode/claude-sonnet-4',
+    provider: 'ollama',
+    model: 'qwen2.5-coder:1.5b',
+    ollamaUrl: 'http://localhost:11434',
   },
   aiAutocomplete: {
     enabled: false,
