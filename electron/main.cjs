@@ -823,6 +823,15 @@ ipcMain.handle('file:read', async (event, filePath) => {
   }
 });
 
+ipcMain.handle('file:readBase64', async (event, filePath) => {
+  try {
+    const data = fs.readFileSync(filePath);
+    return data.toString('base64');
+  } catch {
+    return null;
+  }
+});
+
 ipcMain.handle('file:write', async (event, filePath, content) => {
   try {
     const dir = path.dirname(filePath);

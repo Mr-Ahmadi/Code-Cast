@@ -54,6 +54,27 @@ export function extLang(name) {
   return map[ext] || "plaintext";
 }
 
+const IMAGE_EXTS = new Set(["png", "jpg", "jpeg", "gif", "bmp", "ico", "webp", "svg"]);
+const PDF_EXTS = new Set(["pdf"]);
+
+export function isImageFile(name) {
+  if (!name) return false;
+  const ext = name.split(".").pop()?.toLowerCase();
+  return IMAGE_EXTS.has(ext);
+}
+
+export function isPdfFile(name) {
+  if (!name) return false;
+  const ext = name.split(".").pop()?.toLowerCase();
+  return PDF_EXTS.has(ext);
+}
+
+export function isReadmeFile(name) {
+  if (!name) return false;
+  const base = name.split("/").pop().toLowerCase();
+  return base === "readme" || base.startsWith("readme.");
+}
+
 export function getIconType(name) {
   const parts = name.split(".");
   const ext = parts.length > 1 ? parts.pop().toLowerCase() : "";

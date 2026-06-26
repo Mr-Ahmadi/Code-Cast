@@ -25,6 +25,7 @@
     "dexie": "^4.0.11",
     "diff": "^5.1.0",
     "js-cookie": "^3.0.5",
+    "marked": "^18.0.5",
     "node-pty": "^1.2.0-beta.13",
     "prettier": "^3.8.4",
     "prop-types": "^15.8.1",
@@ -61,7 +62,10 @@
     ],
     "icon": "public/codecast-512.png",
     "mac": {
-      "target": ["dir", "dmg"],
+      "target": [
+        "dir",
+        "dmg"
+      ],
       "icon": "public/codecast-512.png"
     },
     "win": {

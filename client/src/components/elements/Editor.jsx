@@ -6,7 +6,10 @@ import {
   addFile as recordAddFile, removeFile as recordRemoveFile, switchFile as recordSwitchFile,
   ensureFileContent, isTypistLoaded,
 } from '../../functions/record';
-import { isBinaryFile, extLang } from '../../functions/fileTypes';
+import { isBinaryFile, extLang, isImageFile, isPdfFile, isReadmeFile } from '../../functions/fileTypes';
+import ImageViewer from './ImageViewer';
+import PDFViewer from './PDFViewer';
+import MarkdownPreview from './MarkdownPreview';
 import { formatDocument } from '../../services/formatter';
 import { registerAiAutocomplete, updateAiSettings, disposeAiAutocomplete } from '../../services/autocomplete';
 import { useMode, MODES } from '../../contexts/ModeContext';
@@ -708,6 +711,11 @@ const _Editor = memo(({ editorRef }) => {
   };
 
   const isBinary = activeFile && isBinaryFile(activeFile);
+  const isImage = activeFile && isImageFile(activeFile);
+  const isPdf = activeFile && isPdfFile(activeFile);
+  const isReadme = activeFile && isReadmeFile(activeFile);
+  const showViewer = isImage || isPdf || isReadme;
+  const showMonaco = !noProject && !showViewer && !noTabsOpen;
 
   return (
     <div className='editor-container' ref={resumeFlashRef} role="region" aria-label="Code editor">
@@ -723,7 +731,16 @@ const _Editor = memo(({ editorRef }) => {
             </div>
           </div>
       )}
-      {!noProject && isBinary && (
+      {!noProject && isImage && (
+        <ImageViewer file={activeFile} />
+      )}
+      {!noProject && isPdf && (
+        <PDFViewer file={activeFile} />
+      )}
+      {!noProject && isReadme && (
+        <MarkdownPreview file={activeFile} />
+      )}
+      {!noProject && isBinary && !showViewer && (
           <div className="editor-no-project binary-view">
             <div className="editor-no-project-content">
               <FiFileText size={48} />
@@ -742,7 +759,7 @@ const _Editor = memo(({ editorRef }) => {
           </div>
         </div>
       )}
-      <div className={`editor-monaco-wrapper ${(noProject || isBinary || noTabsOpen) ? 'hidden' : ''}`} onContextMenu={handleEditorContextMenu}>
+      <div className={`editor-monaco-wrapper ${showMonaco ? '' : 'hidden'}`} onContextMenu={handleEditorContextMenu}>
         <Editor
           height="100%"
           width="100%"

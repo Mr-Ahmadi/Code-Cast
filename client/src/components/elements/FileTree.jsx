@@ -7,7 +7,7 @@ import {
   addFile, getFileFirstValue,
   renameFile as recordRenameFile, removeFile as recordRemoveFile,
 } from "../../functions/record";
-import { isBinaryFile, extLang, getIconType } from "../../functions/fileTypes";
+import { isBinaryFile, extLang, getIconType, isImageFile, isPdfFile, isReadmeFile } from "../../functions/fileTypes";
 import { FiFileText, FiCode, FiImage, FiChevronRight, FiChevronDown, FiFolder, FiDownload, FiUpload, FiEdit2, FiTrash2, FiPlus } from "react-icons/fi";
 
 function extIcon(name) {
@@ -606,14 +606,16 @@ const FileTree = memo(() => {
 
   const handleFileClick = useCallback(async (relativePath) => {
     if (playing || !f || !workspacePath) return;
-    
-    if (isBinaryFile(relativePath)) {
+
+    const isViewableBinary = isImageFile(relativePath) || isPdfFile(relativePath);
+
+    if (isBinaryFile(relativePath) && !isViewableBinary) {
       setToast({ type: "WARNING", message: `${relativePath} is a binary file. It may not display correctly.` });
     }
 
     const registeredFiles = getFiles();
     const alreadyRegistered = registeredFiles.some(x => x.name === relativePath);
-    
+
     if (alreadyRegistered) {
       setPreviewFile(null);
       recordSwitchFile(relativePath);
@@ -621,10 +623,16 @@ const FileTree = memo(() => {
       return;
     }
 
-    // File not registered — open directly (no preview/promote)
+    // For viewable binary files (images, PDFs), show as preview tab
+    if (isViewableBinary) {
+      setPreviewFile(relativePath);
+      setActiveFile(relativePath);
+      return;
+    }
+
     const fullPath = getAbsPath(relativePath);
     if (!fullPath) return;
-    
+
     try {
       const content = await f.read(fullPath);
       if (content === null || content === undefined) {

@@ -4,7 +4,7 @@ import {
   getFiles, getActiveFile, addFile as recordAddFile,
   switchFile as recordSwitchFile,
 } from "../../functions/record";
-import { getIconType, extLang } from "../../functions/fileTypes";
+import { getIconType, extLang, isImageFile, isPdfFile } from "../../functions/fileTypes";
 import { FiPlus, FiX, FiFileText, FiCode, FiImage } from "react-icons/fi";
 
 const tabIcon = (name) => {
@@ -130,8 +130,11 @@ const FileTabs = memo(() => {
   const handleTabClick = useCallback((name) => {
     if (playing && !paused) return;
     
+    const isViewableBinary = isImageFile(name) || isPdfFile(name);
     if (name === previewFile && name === currentActive) {
-      promotePreview(name);
+      if (!isViewableBinary) {
+        promotePreview(name);
+      }
       return;
     }
 
@@ -195,21 +198,21 @@ const FileTabs = memo(() => {
   const handleCloseTab = useCallback(async (e, name) => {
     e.stopPropagation();
     if (playing && !paused) return;
+
+    if (name === previewFile) {
+      setPreviewFile(null);
+      if (name === activeFile) {
+        const nextActive = openTabs[0] || null;
+        if (nextActive) recordSwitchFile(nextActive);
+        setActiveFile(nextActive);
+      }
+      return;
+    }
+
     if (openTabs.length <= 1) return;
     
     // Unsaved changes prompt with custom dialog
-    if (dirtyFiles?.has(name) && name !== previewFile) {
-      const action = await new Promise((resolve) => {
-        pendingCloseRef.current = resolve;
-        setConfirmCloseTabName(name);
-      });
-      if (action === 'cancel') return;
-      if (action === 'save') {
-        await window.__saveFileByName?.(name);
-      }
-    }
-
-    if (name === previewFile) {
+    if (dirtyFiles?.has(name)) {
       setPreviewFile(null);
       if (name === currentActive) {
         const nextActive = openTabs[0] || null;
@@ -251,7 +254,7 @@ const FileTabs = memo(() => {
                 <span className="file-tab-path">{f.name.slice(0, f.name.lastIndexOf("/"))}</span>
               )}
             </span>
-            {(!playing || paused) && visibleTabs.length > 1 && (
+            {(!playing || paused) && (
               <button
                 className="file-tab-close"
                 onClick={(e) => handleCloseTab(e, f.name)}
