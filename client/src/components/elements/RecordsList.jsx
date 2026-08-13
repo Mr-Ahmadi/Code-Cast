@@ -164,7 +164,7 @@ const RecordsList = memo(({ display, setDisplay }) => {
     } finally {
       setLoading(null);
     }
-  }, [closeModal, setToast, setCurrentWorkspace, setCurrentRecord, setRecordName]);
+  }, [closeModal, setToast, setCurrentWorkspace, setCurrentRecord, setRecordName, setPlaying]);
 
   const handleOpenRecord = useCallback(async (recordId, name, ws) => {
     stopPlay();
@@ -189,7 +189,7 @@ const RecordsList = memo(({ display, setDisplay }) => {
     } finally {
       setLoading(null);
     }
-  }, [closeModal, setToast, setRecordName, setCurrentWorkspace, setCurrentRecord, isLocal]);
+  }, [closeModal, setToast, setRecordName, setCurrentWorkspace, setCurrentRecord, isLocal, setPlaying]);
 
   const handleOpenFolder = useCallback(async () => {
     stopPlay();
@@ -223,7 +223,7 @@ const RecordsList = memo(({ display, setDisplay }) => {
     } finally {
       setLoading(null);
     }
-  }, [setToast, setCurrentWorkspace, setCurrentRecord, setRecordName, closeModal, openedFolders]);
+  }, [setToast, setCurrentWorkspace, setCurrentRecord, setRecordName, closeModal, openedFolders, setPlaying]);
 
   const handleCreateWorkspace = useCallback(async () => {
     stopPlay();
@@ -257,7 +257,7 @@ const RecordsList = memo(({ display, setDisplay }) => {
     } finally {
       setCreatingWs(false);
     }
-  }, [isLocal, setToast, refreshUser, setCurrentWorkspace, setCurrentRecord, setRecordName, closeModal]);
+  }, [isLocal, setToast, refreshUser, setCurrentWorkspace, setCurrentRecord, setRecordName, closeModal, setPlaying]);
 
   const doCreateProject = useCallback(async () => {
     stopPlay();
@@ -307,7 +307,7 @@ const RecordsList = memo(({ display, setDisplay }) => {
     } finally {
       setCreatingWs(false);
     }
-  }, [newProjectName, newProjectTemplate, setToast, setCurrentWorkspace, setCurrentRecord, setRecordName, closeModal, openedFolders]);
+  }, [newProjectName, newProjectTemplate, setToast, setCurrentWorkspace, setCurrentRecord, setRecordName, closeModal, openedFolders, setPlaying]);
 
   const handleDeleteRecord = useCallback(async (id, name, projectPath) => {
     if (confirmDelete === id) {

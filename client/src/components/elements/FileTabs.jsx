@@ -234,7 +234,7 @@ const FileTabs = memo(() => {
     }
 
     setOpenTabs(next);
-  }, [playing, paused, currentActive, setActiveFile, previewFile, setPreviewFile, openTabs, dirtyFiles]);
+  }, [playing, paused, currentActive, setActiveFile, previewFile, setPreviewFile, openTabs, dirtyFiles, activeFile]);
 
   return (
     <div className={"file-tabs" + (visibleTabs.length === 0 ? " file-tabs-empty" : "")}>

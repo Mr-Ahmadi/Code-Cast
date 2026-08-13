@@ -225,7 +225,7 @@ const TopBar = memo(({ editorRef }) => {
     } catch (e) {
       setToast({ type: "ERROR", message: e.message || "Failed to start recording" });
     }
-  }, [recording, playing, recordName, audioEnabled, startRecording, stopRecording, refreshUser, setActiveFile, setToast, currentWorkspace, currentRecord, setCurrentRecord, activeFile]);
+  }, [recording, playing, recordName, audioEnabled, startRecording, stopRecording, refreshUser, setActiveFile, setToast, currentWorkspace, currentRecord, setCurrentRecord, activeFile, editorRef]);
 
   const handlePauseResume = useCallback(() => {
     if (paused) {

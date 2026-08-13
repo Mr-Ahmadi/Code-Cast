@@ -7,9 +7,42 @@ export const DEFAULT_SETTINGS = {
     autoSave: false,
     theme: 'dark',
     tabSize: 4,
+    insertSpaces: true,
     wordWrap: 'off',
     fontFamily: 'default',
+    fontLigatures: false,
+    lineHeight: 0,
     cursorStyle: 'line',
+    cursorBlinking: 'smooth',
+    renderWhitespace: 'selection',
+    bracketPairColorization: true,
+    stickyScroll: true,
+    indentGuides: true,
+    lineNumbers: 'on',
+    rulers: '',
+    smoothScrolling: true,
+    linkedEditing: true,
+    autoClosingBrackets: 'languageDefined',
+    formatOnPaste: false,
+    formatOnType: false,
+    breadcrumbs: true,
+    dragAndDrop: true,
+    mouseWheelZoom: true,
+    suggestSelection: 'first',
+    acceptSuggestionOnEnter: 'on',
+    tabCompletion: 'on',
+    scrollBeyondLastLine: true,
+    codeLens: false,
+  },
+  files: {
+    autoSaveMode: 'afterDelay',
+    autoSaveDelay: 1000,
+    trimTrailingWhitespace: false,
+    insertFinalNewline: false,
+    trimFinalNewlines: false,
+    hotExit: true,
+    restoreSession: true,
+    confirmDelete: true,
   },
   formatter: {
     formatOnSave: false,
@@ -20,6 +53,9 @@ export const DEFAULT_SETTINGS = {
       css: 'prettier',
       scss: 'prettier',
       less: 'prettier',
+      json: 'prettier',
+      markdown: 'prettier',
+      yaml: 'prettier',
       python: 'black',
       c: 'clang-format',
       cpp: 'clang-format',
@@ -45,6 +81,33 @@ export const DEFAULT_SETTINGS = {
     provider: 'ollama',
     model: 'qwen2.5-coder:1.5b',
     ollamaUrl: 'http://localhost:11434',
+    triggerMode: 'auto',
+    debounceMs: 350,
+    maxTokens: 128,
+    temperature: 0.1,
+    multiline: true,
+    maxPrefixChars: 4000,
+    maxSuffixChars: 1500,
+    useOpenFileContext: true,
+    skipInComments: true,
+    cacheSize: 60,
+    requestTimeoutMs: 12000,
+  },
+  aiChat: {
+    enabled: true,
+    provider: 'ollama',
+    model: 'qwen2.5-coder:7b',
+    ollamaUrl: 'http://localhost:11434',
+    temperature: 0.3,
+    includeActiveFile: true,
+    maxHistory: 12,
+  },
+  aiEdit: {
+    enabled: true,
+    provider: 'ollama',
+    model: 'qwen2.5-coder:7b',
+    ollamaUrl: 'http://localhost:11434',
+    temperature: 0.1,
   },
   playbackExplanation: {
     enabled: true,
@@ -61,9 +124,29 @@ export const DEFAULT_SETTINGS = {
   },
 };
 
+/** Sections whose model/url fields describe an Ollama-backed feature. */
+export const AI_SECTIONS = [
+  'aiAutocomplete', 'aiChat', 'aiEdit', 'commitMessage', 'playbackExplanation', 'terminalAI',
+];
+
+export const SUGGESTED_MODELS = [
+  'qwen2.5-coder:1.5b',
+  'qwen2.5-coder:3b',
+  'qwen2.5-coder:7b',
+  'qwen2.5-coder:14b',
+  'codellama:7b',
+  'codellama:13b',
+  'codellama:34b',
+  'stable-code:3b',
+  'deepseek-coder:6.7b',
+  'starcoder2:3b',
+  'starcoder2:7b',
+  'codegemma:7b',
+];
+
 export function getFormatterForLanguage(lang, settings) {
-  if (settings?.formatter?.defaultFormatters?.[lang]) {
-    return settings.formatter.defaultFormatters[lang];
+  if (settings?.formatter?.defaultFormatters && lang in settings.formatter.defaultFormatters) {
+    return settings.formatter.defaultFormatters[lang] || null;
   }
   return DEFAULT_SETTINGS.formatter.defaultFormatters[lang] || null;
 }
@@ -80,6 +163,10 @@ export function getFormatterDisplayName(formatterId) {
   return names[formatterId] || formatterId;
 }
 
+export function cloneDefaults() {
+  return deepMerge(DEFAULT_SETTINGS, {});
+}
+
 export function loadSettings() {
   try {
     const raw = localStorage.getItem(SETTINGS_KEY);
@@ -87,8 +174,8 @@ export function loadSettings() {
       const parsed = JSON.parse(raw);
       return deepMerge(DEFAULT_SETTINGS, parsed);
     }
-  } catch {}
-  return { ...DEFAULT_SETTINGS, editor: { ...DEFAULT_SETTINGS.editor }, formatter: { ...DEFAULT_SETTINGS.formatter, defaultFormatters: { ...DEFAULT_SETTINGS.formatter.defaultFormatters } }, lsp: { ...DEFAULT_SETTINGS.lsp }, commitMessage: { ...DEFAULT_SETTINGS.commitMessage }, aiAutocomplete: { ...DEFAULT_SETTINGS.aiAutocomplete } };
+  } catch { /* corrupted settings fall back to defaults */ }
+  return cloneDefaults();
 }
 
 export function saveSettings(settings) {
@@ -101,12 +188,17 @@ export function saveSettings(settings) {
 }
 
 function deepMerge(defaults, overrides) {
-  const result = { ...defaults };
-  for (const key of Object.keys(overrides)) {
-    if (overrides[key] && typeof overrides[key] === 'object' && !Array.isArray(overrides[key])) {
-      result[key] = deepMerge(result[key] || {}, overrides[key]);
-    } else if (overrides[key] !== undefined) {
-      result[key] = overrides[key];
+  const result = {};
+  for (const key of Object.keys(defaults)) {
+    const value = defaults[key];
+    result[key] = value && typeof value === 'object' && !Array.isArray(value) ? deepMerge(value, {}) : value;
+  }
+  for (const key of Object.keys(overrides || {})) {
+    const value = overrides[key];
+    if (value && typeof value === 'object' && !Array.isArray(value)) {
+      result[key] = deepMerge(result[key] && typeof result[key] === 'object' ? result[key] : {}, value);
+    } else if (value !== undefined) {
+      result[key] = value;
     }
   }
   return result;

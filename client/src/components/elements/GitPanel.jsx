@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback, useContext } from "react";
 import { GlobalContext } from "../../contexts/GlobalStates";
 import { useMode, MODES } from "../../contexts/ModeContext";
-import { FiGitBranch, FiRefreshCw, FiPlus, FiMinus, FiChevronRight, FiChevronDown, FiGithub, FiRotateCcw, FiArrowUp, FiZap, FiAlertCircle } from "react-icons/fi";
+import { FiGitBranch, FiRefreshCw, FiPlus, FiMinus, FiChevronRight, FiChevronDown, FiGithub, FiRotateCcw, FiArrowUp, FiZap } from "react-icons/fi";
 import { ollamaChat } from "../../services/ollama";
 
 function parsePorcelain(output) {

@@ -76,4 +76,9 @@ const ActivityBar = memo(({ activeSidebarPanel, setActiveSidebarPanel }) => {
 
 ActivityBar.displayName = "ActivityBar";
 
+ActivityBar.propTypes = {
+  activeSidebarPanel: PropTypes.string,
+  setActiveSidebarPanel: PropTypes.func,
+};
+
 export default ActivityBar;

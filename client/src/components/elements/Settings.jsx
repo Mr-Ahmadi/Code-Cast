@@ -1,13 +1,54 @@
 import { useContext, useState, useCallback, useEffect } from 'react';
+import PropTypes from 'prop-types';
 import { GlobalContext } from '../../contexts/GlobalStates';
 import { useMode, MODES } from '../../contexts/ModeContext';
 import { saveSettings as persistSettings, DEFAULT_SETTINGS } from '../../constants/settings';
 import { getAvailableFormatters } from '../../services/formatter';
-import { FiX, FiEdit3, FiCode, FiTerminal, FiSave, FiGitCommit, FiCpu } from 'react-icons/fi';
+import { FiX, FiEdit3, FiCode, FiTerminal, FiSave, FiGitCommit, FiCpu, FiMessageSquare } from 'react-icons/fi';
 import axios from 'axios';
 
+const Toggle = ({ checked, onChange, disabled }) => (
+  <button
+    type="button"
+    role="switch"
+    aria-checked={checked}
+    className={"settings-switch" + (checked ? " on" : "") + (disabled ? " disabled" : "")}
+    onClick={() => !disabled && onChange(!checked)}
+    disabled={disabled}
+  >
+    <span className="settings-switch-knob" />
+  </button>
+);
+
+Toggle.propTypes = {
+  checked: PropTypes.bool,
+  onChange: PropTypes.func,
+  disabled: PropTypes.bool,
+};
+
+function ModelSelect({ value, onChange, disabled }) {
+  const models = [
+    'qwen2.5-coder:1.5b', 'qwen2.5-coder:3b', 'qwen2.5-coder:7b', 'qwen2.5-coder:14b',
+    'codellama:7b', 'codellama:13b', 'codellama:34b',
+    'stable-code:3b', 'deepseek-coder:6.7b', 'starcoder2:3b', 'starcoder2:7b', 'codegemma:7b',
+  ];
+  return (
+    <select className="settings-select" value={value} onChange={e => onChange(e.target.value)} disabled={disabled}>
+      {models.map(m => (
+        <option key={m} value={m}>{m}</option>
+      ))}
+    </select>
+  );
+}
+
+ModelSelect.propTypes = {
+  value: PropTypes.string,
+  onChange: PropTypes.func,
+  disabled: PropTypes.bool,
+};
+
 export default function Settings() {
-  const { settings, setSettings, settingsOpen, setSettingsOpen, theme, setTheme, fontSize, setFontSize, showMinimap, setShowMinimap, autoSave, setAutoSave, setToast } = useContext(GlobalContext);
+  const { settings, setSettings, settingsOpen, setSettingsOpen, setTheme, setFontSize, setShowMinimap, setAutoSave } = useContext(GlobalContext);
   const { mode } = useMode();
   const [activeSection, setActiveSection] = useState('editor');
   const [localSettings, setLocalSettings] = useState(settings);
@@ -23,14 +64,16 @@ export default function Settings() {
       axios.get('/index/settings', { withCredentials: true })
         .then(res => {
           if (res.data?.settings) {
-            const merged = { ...localSettings, ...res.data.settings };
-            setSettings(merged);
-            setLocalSettings(merged);
+            setSettings(prev => {
+              const merged = { ...prev, ...res.data.settings };
+              setLocalSettings(merged);
+              return merged;
+            });
           }
         })
         .catch(() => {});
     }
-  }, [mode]);
+  }, [mode, setSettings]);
 
   const updateLocal = useCallback((section, key, value) => {
     setLocalSettings(prev => ({
@@ -145,6 +188,37 @@ export default function Settings() {
         </label>
 
         <label className="settings-field">
+          <span className="settings-field-label">Font Family</span>
+          <select
+            className="settings-select"
+            value={localSettings.editor.fontFamily}
+            onChange={e => updateLocal('editor', 'fontFamily', e.target.value)}
+          >
+            <option value="default">Default</option>
+            <option value="cascadia">Cascadia Code</option>
+            <option value="fira">Fira Code</option>
+            <option value="jetbrains">JetBrains Mono</option>
+            <option value="menlo">Menlo</option>
+            <option value="monaco">Monaco</option>
+            <option value="consolas">Consolas</option>
+            <option value="courier">Courier New</option>
+          </select>
+        </label>
+
+        <label className="settings-field">
+          <span className="settings-field-label">Line Numbers</span>
+          <select
+            className="settings-select"
+            value={localSettings.editor.lineNumbers}
+            onChange={e => updateLocal('editor', 'lineNumbers', e.target.value)}
+          >
+            <option value="on">On</option>
+            <option value="off">Off</option>
+            <option value="relative">Relative</option>
+          </select>
+        </label>
+
+        <label className="settings-field">
           <span className="settings-field-label">Word Wrap</span>
           <select
             className="settings-select"
@@ -158,20 +232,49 @@ export default function Settings() {
           </select>
         </label>
 
+        <label className="settings-field">
+          <span className="settings-field-label">Word Wrap Column</span>
+          <div className="settings-field-row">
+            <input
+              type="range"
+              min="40"
+              max="200"
+              step="10"
+              value={localSettings.editor.wordWrapColumn ?? 80}
+              onChange={e => updateLocal('editor', 'wordWrapColumn', Number(e.target.value))}
+              className="settings-range"
+            />
+            <span className="settings-range-value">{localSettings.editor.wordWrapColumn ?? 80}</span>
+          </div>
+        </label>
+
+        <label className="settings-field">
+          <span className="settings-field-label">Render Whitespace</span>
+          <select
+            className="settings-select"
+            value={localSettings.editor.renderWhitespace}
+            onChange={e => updateLocal('editor', 'renderWhitespace', e.target.value)}
+          >
+            <option value="none">None</option>
+            <option value="selection">Selection</option>
+            <option value="boundary">Boundary</option>
+            <option value="trailing">Trailing</option>
+            <option value="all">All</option>
+          </select>
+        </label>
+
         <label className="settings-field settings-checkbox-field">
-          <input
-            type="checkbox"
+          <Toggle
             checked={localSettings.editor.showMinimap}
-            onChange={e => updateLocal('editor', 'showMinimap', e.target.checked)}
+            onChange={v => updateLocal('editor', 'showMinimap', v)}
           />
           <span className="settings-field-label">Show Minimap</span>
         </label>
 
         <label className="settings-field settings-checkbox-field">
-          <input
-            type="checkbox"
+          <Toggle
             checked={localSettings.editor.autoSave}
-            onChange={e => updateLocal('editor', 'autoSave', e.target.checked)}
+            onChange={v => updateLocal('editor', 'autoSave', v)}
           />
           <span className="settings-field-label">Auto Save</span>
         </label>
@@ -191,6 +294,89 @@ export default function Settings() {
             <option value="underline-thin">Underline Thin</option>
           </select>
         </label>
+
+        <label className="settings-field">
+          <span className="settings-field-label">Cursor Blinking</span>
+          <select
+            className="settings-select"
+            value={localSettings.editor.cursorBlinking}
+            onChange={e => updateLocal('editor', 'cursorBlinking', e.target.value)}
+          >
+            <option value="blink">Blink</option>
+            <option value="smooth">Smooth</option>
+            <option value="phase">Phase</option>
+            <option value="expand">Expand</option>
+            <option value="solid">Solid</option>
+          </select>
+        </label>
+
+        <div className="settings-subsection">
+          <h5 className="settings-subsection-title">Enhancements</h5>
+
+          <label className="settings-field settings-checkbox-field">
+            <Toggle
+              checked={localSettings.editor.bracketPairColorization !== false}
+              onChange={v => updateLocal('editor', 'bracketPairColorization', v)}
+            />
+            <span className="settings-field-label">Bracket Pair Colorization</span>
+          </label>
+
+          <label className="settings-field settings-checkbox-field">
+            <Toggle
+              checked={localSettings.editor.stickyScroll !== false}
+              onChange={v => updateLocal('editor', 'stickyScroll', v)}
+            />
+            <span className="settings-field-label">Sticky Scroll</span>
+          </label>
+
+          <label className="settings-field settings-checkbox-field">
+            <Toggle
+              checked={localSettings.editor.smoothScrolling !== false}
+              onChange={v => updateLocal('editor', 'smoothScrolling', v)}
+            />
+            <span className="settings-field-label">Smooth Scrolling</span>
+          </label>
+
+          <label className="settings-field settings-checkbox-field">
+            <Toggle
+              checked={localSettings.editor.mouseWheelZoom !== false}
+              onChange={v => updateLocal('editor', 'mouseWheelZoom', v)}
+            />
+            <span className="settings-field-label">Mouse Wheel Zoom</span>
+          </label>
+
+          <label className="settings-field settings-checkbox-field">
+            <Toggle
+              checked={!!localSettings.editor.linkedEditing}
+              onChange={v => updateLocal('editor', 'linkedEditing', v)}
+            />
+            <span className="settings-field-label">Linked Editing</span>
+          </label>
+
+          <label className="settings-field settings-checkbox-field">
+            <Toggle
+              checked={!!localSettings.editor.formatOnPaste}
+              onChange={v => updateLocal('editor', 'formatOnPaste', v)}
+            />
+            <span className="settings-field-label">Format On Paste</span>
+          </label>
+
+          <label className="settings-field settings-checkbox-field">
+            <Toggle
+              checked={!!localSettings.editor.formatOnType}
+              onChange={v => updateLocal('editor', 'formatOnType', v)}
+            />
+            <span className="settings-field-label">Format On Type</span>
+          </label>
+
+          <label className="settings-field settings-checkbox-field">
+            <Toggle
+              checked={localSettings.editor.indentGuides !== false}
+              onChange={v => updateLocal('editor', 'indentGuides', v)}
+            />
+            <span className="settings-field-label">Indent Guides</span>
+          </label>
+        </div>
       </div>
     )},
     { id: 'formatter', label: 'Formatter', icon: FiCode, content: (
@@ -198,10 +384,9 @@ export default function Settings() {
         <h4 className="settings-section-title">Formatter</h4>
 
         <label className="settings-field settings-checkbox-field">
-          <input
-            type="checkbox"
+          <Toggle
             checked={localSettings.formatter.formatOnSave}
-            onChange={e => updateLocal('formatter', 'formatOnSave', e.target.checked)}
+            onChange={v => updateLocal('formatter', 'formatOnSave', v)}
           />
           <span className="settings-field-label">Format On Save</span>
         </label>
@@ -244,39 +429,35 @@ export default function Settings() {
         </p>
 
         <label className="settings-field settings-checkbox-field">
-          <input
-            type="checkbox"
+          <Toggle
             checked={localSettings.lsp.enabled}
-            onChange={e => updateLocal('lsp', 'enabled', e.target.checked)}
+            onChange={v => updateLocal('lsp', 'enabled', v)}
           />
           <span className="settings-field-label">Enable LSP Features</span>
         </label>
 
         <label className="settings-field settings-checkbox-field">
-          <input
-            type="checkbox"
+          <Toggle
             checked={localSettings.lsp.diagnostics}
-            onChange={e => updateLocal('lsp', 'diagnostics', e.target.checked)}
+            onChange={v => updateLocal('lsp', 'diagnostics', v)}
             disabled={!localSettings.lsp.enabled}
           />
           <span className="settings-field-label">Diagnostics (errors & warnings)</span>
         </label>
 
         <label className="settings-field settings-checkbox-field">
-          <input
-            type="checkbox"
+          <Toggle
             checked={localSettings.lsp.autocomplete}
-            onChange={e => updateLocal('lsp', 'autocomplete', e.target.checked)}
+            onChange={v => updateLocal('lsp', 'autocomplete', v)}
             disabled={!localSettings.lsp.enabled}
           />
           <span className="settings-field-label">Autocomplete (IntelliSense)</span>
         </label>
 
         <label className="settings-field settings-checkbox-field">
-          <input
-            type="checkbox"
+          <Toggle
             checked={localSettings.lsp.refactoring}
-            onChange={e => updateLocal('lsp', 'refactoring', e.target.checked)}
+            onChange={v => updateLocal('lsp', 'refactoring', v)}
             disabled={!localSettings.lsp.enabled}
           />
           <span className="settings-field-label">Refactoring (rename, extract)</span>
@@ -291,10 +472,9 @@ export default function Settings() {
         </p>
 
         <label className="settings-field settings-checkbox-field">
-          <input
-            type="checkbox"
+          <Toggle
             checked={localSettings.commitMessage.enabled}
-            onChange={e => updateLocal('commitMessage', 'enabled', e.target.checked)}
+            onChange={v => updateLocal('commitMessage', 'enabled', v)}
           />
           <span className="settings-field-label">Enable AI Commit Messages</span>
         </label>
@@ -313,22 +493,11 @@ export default function Settings() {
 
         <label className="settings-field">
           <span className="settings-field-label">Model</span>
-          <select
-            className="settings-select"
+          <ModelSelect
             value={localSettings.commitMessage.model}
-            onChange={e => updateLocal('commitMessage', 'model', e.target.value)}
+            onChange={v => updateLocal('commitMessage', 'model', v)}
             disabled={!localSettings.commitMessage.enabled}
-          >
-            <option value="qwen2.5-coder:1.5b">Qwen2.5-Coder 1.5B</option>
-            <option value="qwen2.5-coder:3b">Qwen2.5-Coder 3B</option>
-            <option value="qwen2.5-coder:7b">Qwen2.5-Coder 7B</option>
-            <option value="qwen2.5-coder:14b">Qwen2.5-Coder 14B</option>
-            <option value="codellama:7b">CodeLlama 7B</option>
-            <option value="codellama:13b">CodeLlama 13B</option>
-            <option value="codellama:34b">CodeLlama 34B</option>
-            <option value="stable-code:3b">Stable Code 3B</option>
-            <option value="deepseek-coder:6.7b">DeepSeek Coder 6.7B</option>
-          </select>
+          />
         </label>
       </div>
     )},
@@ -340,10 +509,9 @@ export default function Settings() {
         </p>
 
         <label className="settings-field settings-checkbox-field">
-          <input
-            type="checkbox"
+          <Toggle
             checked={localSettings.aiAutocomplete.enabled}
-            onChange={e => updateLocal('aiAutocomplete', 'enabled', e.target.checked)}
+            onChange={v => updateLocal('aiAutocomplete', 'enabled', v)}
           />
           <span className="settings-field-label">Enable AI Autocomplete</span>
         </label>
@@ -362,22 +530,139 @@ export default function Settings() {
 
         <label className="settings-field">
           <span className="settings-field-label">Model</span>
-          <select
-            className="settings-select"
+          <ModelSelect
             value={localSettings.aiAutocomplete.model}
-            onChange={e => updateLocal('aiAutocomplete', 'model', e.target.value)}
+            onChange={v => updateLocal('aiAutocomplete', 'model', v)}
             disabled={!localSettings.aiAutocomplete.enabled}
-          >
-            <option value="qwen2.5-coder:1.5b">Qwen2.5-Coder 1.5B</option>
-            <option value="qwen2.5-coder:3b">Qwen2.5-Coder 3B</option>
-            <option value="qwen2.5-coder:7b">Qwen2.5-Coder 7B</option>
-            <option value="qwen2.5-coder:14b">Qwen2.5-Coder 14B</option>
-            <option value="codellama:7b">CodeLlama 7B</option>
-            <option value="codellama:13b">CodeLlama 13B</option>
-            <option value="codellama:34b">CodeLlama 34B</option>
-            <option value="stable-code:3b">Stable Code 3B</option>
-            <option value="deepseek-coder:6.7b">DeepSeek Coder 6.7B</option>
-          </select>
+          />
+        </label>
+
+        <div className="settings-subsection">
+          <h5 className="settings-subsection-title">Behavior</h5>
+          <label className="settings-field settings-checkbox-field">
+            <Toggle
+              checked={localSettings.aiAutocomplete.multiline}
+              onChange={v => updateLocal('aiAutocomplete', 'multiline', v)}
+              disabled={!localSettings.aiAutocomplete.enabled}
+            />
+            <span className="settings-field-label">Multiline Suggestions</span>
+          </label>
+          <label className="settings-field settings-checkbox-field">
+            <Toggle
+              checked={localSettings.aiAutocomplete.useOpenFileContext}
+              onChange={v => updateLocal('aiAutocomplete', 'useOpenFileContext', v)}
+              disabled={!localSettings.aiAutocomplete.enabled}
+            />
+            <span className="settings-field-label">Use Open Files As Context</span>
+          </label>
+          <label className="settings-field settings-checkbox-field">
+            <Toggle
+              checked={localSettings.aiAutocomplete.skipInComments}
+              onChange={v => updateLocal('aiAutocomplete', 'skipInComments', v)}
+              disabled={!localSettings.aiAutocomplete.enabled}
+            />
+            <span className="settings-field-label">Skip Suggestions In Comments</span>
+          </label>
+          <label className="settings-field">
+            <span className="settings-field-label">Debounce (ms)</span>
+            <input
+              type="number"
+              className="settings-input"
+              min="100"
+              max="3000"
+              value={localSettings.aiAutocomplete.debounceMs ?? 350}
+              onChange={e => updateLocal('aiAutocomplete', 'debounceMs', Number(e.target.value))}
+              disabled={!localSettings.aiAutocomplete.enabled}
+            />
+          </label>
+          <label className="settings-field">
+            <span className="settings-field-label">Max Tokens</span>
+            <input
+              type="number"
+              className="settings-input"
+              min="16"
+              max="1024"
+              value={localSettings.aiAutocomplete.maxTokens ?? 128}
+              onChange={e => updateLocal('aiAutocomplete', 'maxTokens', Number(e.target.value))}
+              disabled={!localSettings.aiAutocomplete.enabled}
+            />
+          </label>
+        </div>
+      </div>
+    )},
+    { id: 'aiChat', label: 'AI Chat', icon: FiMessageSquare, content: (
+      <div className="settings-section">
+        <h4 className="settings-section-title">AI Chat & Code Assistant</h4>
+        <p className="settings-section-desc">
+          Conversational assistant that can explain, edit, and generate code with local Ollama models.
+        </p>
+
+        <label className="settings-field settings-checkbox-field">
+          <Toggle
+            checked={localSettings.aiChat.enabled}
+            onChange={v => updateLocal('aiChat', 'enabled', v)}
+          />
+          <span className="settings-field-label">Enable AI Chat</span>
+        </label>
+
+        <label className="settings-field">
+          <span className="settings-field-label">Ollama URL</span>
+          <input
+            type="text"
+            className="settings-input"
+            value={localSettings.aiChat.ollamaUrl}
+            onChange={e => updateLocal('aiChat', 'ollamaUrl', e.target.value)}
+            disabled={!localSettings.aiChat.enabled}
+            placeholder="http://localhost:11434"
+          />
+        </label>
+
+        <label className="settings-field">
+          <span className="settings-field-label">Model</span>
+          <ModelSelect
+            value={localSettings.aiChat.model}
+            onChange={v => updateLocal('aiChat', 'model', v)}
+            disabled={!localSettings.aiChat.enabled}
+          />
+        </label>
+
+        <label className="settings-field">
+          <span className="settings-field-label">Temperature</span>
+          <div className="settings-field-row">
+            <input
+              type="range"
+              min="0"
+              max="1"
+              step="0.05"
+              value={localSettings.aiChat.temperature ?? 0.3}
+              onChange={e => updateLocal('aiChat', 'temperature', Number(e.target.value))}
+              className="settings-range"
+              disabled={!localSettings.aiChat.enabled}
+            />
+            <span className="settings-range-value">{localSettings.aiChat.temperature ?? 0.3}</span>
+          </div>
+        </label>
+
+        <label className="settings-field settings-checkbox-field">
+          <Toggle
+            checked={localSettings.aiChat.includeActiveFile}
+            onChange={v => updateLocal('aiChat', 'includeActiveFile', v)}
+            disabled={!localSettings.aiChat.enabled}
+          />
+          <span className="settings-field-label">Include Active File As Context</span>
+        </label>
+
+        <label className="settings-field">
+          <span className="settings-field-label">Max History (messages)</span>
+          <input
+            type="number"
+            className="settings-input"
+            min="2"
+            max="40"
+            value={localSettings.aiChat.maxHistory ?? 12}
+            onChange={e => updateLocal('aiChat', 'maxHistory', Number(e.target.value))}
+            disabled={!localSettings.aiChat.enabled}
+          />
         </label>
       </div>
     )},
@@ -389,19 +674,17 @@ export default function Settings() {
         </p>
 
         <label className="settings-field settings-checkbox-field">
-          <input
-            type="checkbox"
+          <Toggle
             checked={localSettings.playbackExplanation.enabled}
-            onChange={e => updateLocal('playbackExplanation', 'enabled', e.target.checked)}
+            onChange={v => updateLocal('playbackExplanation', 'enabled', v)}
           />
           <span className="settings-field-label">Enable Playback Explanation</span>
         </label>
 
         <label className="settings-field settings-checkbox-field">
-          <input
-            type="checkbox"
+          <Toggle
             checked={localSettings.playbackExplanation.autoExplain}
-            onChange={e => updateLocal('playbackExplanation', 'autoExplain', e.target.checked)}
+            onChange={v => updateLocal('playbackExplanation', 'autoExplain', v)}
             disabled={!localSettings.playbackExplanation.enabled}
           />
           <span className="settings-field-label">Auto-explain on seek</span>
@@ -421,22 +704,11 @@ export default function Settings() {
 
         <label className="settings-field">
           <span className="settings-field-label">Model</span>
-          <select
-            className="settings-select"
+          <ModelSelect
             value={localSettings.playbackExplanation.model}
-            onChange={e => updateLocal('playbackExplanation', 'model', e.target.value)}
+            onChange={v => updateLocal('playbackExplanation', 'model', v)}
             disabled={!localSettings.playbackExplanation.enabled}
-          >
-            <option value="qwen2.5-coder:1.5b">Qwen2.5-Coder 1.5B</option>
-            <option value="qwen2.5-coder:3b">Qwen2.5-Coder 3B</option>
-            <option value="qwen2.5-coder:7b">Qwen2.5-Coder 7B</option>
-            <option value="qwen2.5-coder:14b">Qwen2.5-Coder 14B</option>
-            <option value="codellama:7b">CodeLlama 7B</option>
-            <option value="codellama:13b">CodeLlama 13B</option>
-            <option value="codellama:34b">CodeLlama 34B</option>
-            <option value="stable-code:3b">Stable Code 3B</option>
-            <option value="deepseek-coder:6.7b">DeepSeek Coder 6.7B</option>
-          </select>
+          />
         </label>
       </div>
     )},
@@ -448,10 +720,9 @@ export default function Settings() {
         </p>
 
         <label className="settings-field settings-checkbox-field">
-          <input
-            type="checkbox"
+          <Toggle
             checked={localSettings.terminalAI.enabled}
-            onChange={e => updateLocal('terminalAI', 'enabled', e.target.checked)}
+            onChange={v => updateLocal('terminalAI', 'enabled', v)}
           />
           <span className="settings-field-label">Enable Terminal AI</span>
         </label>
@@ -470,22 +741,11 @@ export default function Settings() {
 
         <label className="settings-field">
           <span className="settings-field-label">Model</span>
-          <select
-            className="settings-select"
+          <ModelSelect
             value={localSettings.terminalAI.model}
-            onChange={e => updateLocal('terminalAI', 'model', e.target.value)}
+            onChange={v => updateLocal('terminalAI', 'model', v)}
             disabled={!localSettings.terminalAI.enabled}
-          >
-            <option value="qwen2.5-coder:1.5b">Qwen2.5-Coder 1.5B</option>
-            <option value="qwen2.5-coder:3b">Qwen2.5-Coder 3B</option>
-            <option value="qwen2.5-coder:7b">Qwen2.5-Coder 7B</option>
-            <option value="qwen2.5-coder:14b">Qwen2.5-Coder 14B</option>
-            <option value="codellama:7b">CodeLlama 7B</option>
-            <option value="codellama:13b">CodeLlama 13B</option>
-            <option value="codellama:34b">CodeLlama 34B</option>
-            <option value="stable-code:3b">Stable Code 3B</option>
-            <option value="deepseek-coder:6.7b">DeepSeek Coder 6.7B</option>
-          </select>
+          />
         </label>
       </div>
     )},

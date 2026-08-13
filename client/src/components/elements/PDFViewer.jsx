@@ -1,4 +1,5 @@
 import { useState, useEffect, useContext } from 'react';
+import PropTypes from 'prop-types';
 import { GlobalContext } from '../../contexts/GlobalStates';
 import { FiAlertTriangle } from 'react-icons/fi';
 
@@ -56,6 +57,10 @@ const PDFViewer = ({ file }) => {
       />
     </div>
   );
+};
+
+PDFViewer.propTypes = {
+  file: PropTypes.string,
 };
 
 export default PDFViewer;

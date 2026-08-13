@@ -47,7 +47,7 @@ const StatusBar = memo(() => {
           const pos = editor.getPosition();
           if (pos) setCursorPos({ line: pos.lineNumber, col: pos.column });
         }
-      } catch {}
+      } catch { /* editor not ready yet */ }
     }, 200);
     return () => clearInterval(interval);
   }, []);

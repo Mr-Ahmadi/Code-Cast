@@ -11,6 +11,7 @@ import GitPanel from '../elements/GitPanel';
 import ShortcutsHelp from '../elements/ShortcutsHelp';
 import TerminalPanel from '../elements/Terminal';
 import ExplainPanel from '../elements/ExplainPanel';
+import AiChat from '../elements/AiChat';
 import LocalSetupPrompt from '../elements/LocalSetupPrompt';
 import ActivityBar from '../elements/ActivityBar';
 import StatusBar from '../elements/StatusBar';
@@ -109,6 +110,10 @@ export default function App() {
 
     window.__setActivePanel = setActivePanel;
     window.__triggerExplain = () => setExplainTrigger(n => n + 1);
+    window.__openAiChat = (options) => {
+      setActivePanel('chat');
+      setTimeout(() => window.__aiChatSend?.(options), 60);
+    };
     window.__setTerminalVisible = (updater) => {
         if (typeof updater === "function") {
             setTerminalVisible((prev) => updater(prev));
@@ -328,7 +333,7 @@ export default function App() {
         return () => document.removeEventListener('keydown', handleKeyDown);
     }, [handleKeyDown]);
 
-    const hasBottomContent = output || terminalVisible || activePanel === 'explain';
+    const hasBottomContent = output || terminalVisible || activePanel === 'explain' || activePanel === 'chat';
     const explorerContext = currentRecord
         ? "Record Snapshot"
         : currentWorkspace?.name || "No Project";
@@ -533,7 +538,7 @@ export default function App() {
         });
 
         return unsubscribe;
-    }, [recording, theme, setTheme, setAutoSave, fontSize, setFontSize, runEditorCommand, handleToggleTerminal, handleNewTerminal, handleCloseActiveTerminal, setActiveFile, setCurrentRecord, setFiles, setPlaying, setRecordName, setToast]);
+    }, [recording, theme, setTheme, setAutoSave, fontSize, setFontSize, runEditorCommand, handleToggleTerminal, handleNewTerminal, handleCloseActiveTerminal, setActiveFile, setCurrentRecord, setFiles, setPlaying, setRecordName, setToast, setSettings, setSettingsOpen]);
 
     return (
         <div className='main-container'>
@@ -659,6 +664,12 @@ export default function App() {
                                     >
                                         EXPLAIN
                                     </button>
+                                    <button
+                                        className={"panel-tab" + (activePanel === 'chat' ? ' active' : '')}
+                                        onClick={() => setActivePanel('chat')}
+                                    >
+                                        CHAT
+                                    </button>
                                     {terminalVisible && (
                                         <div className="terminal-tabs-list">
                                             {terminals.map((terminal) => (
@@ -720,6 +731,9 @@ export default function App() {
                                         settings={settings}
                                         explainTrigger={explainTrigger}
                                     />
+                                </div>
+                                <div className="panel-body" style={{ display: activePanel === 'chat' ? 'flex' : 'none' }}>
+                                    <AiChat />
                                 </div>
                             </div>
                         </>

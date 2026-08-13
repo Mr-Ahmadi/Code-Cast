@@ -7,7 +7,7 @@ import {
   addFile, getFileFirstValue,
   renameFile as recordRenameFile, removeFile as recordRemoveFile,
 } from "../../functions/record";
-import { isBinaryFile, extLang, getIconType, isImageFile, isPdfFile, isReadmeFile } from "../../functions/fileTypes";
+import { isBinaryFile, extLang, getIconType, isImageFile, isPdfFile } from "../../functions/fileTypes";
 import { FiFileText, FiCode, FiImage, FiChevronRight, FiChevronDown, FiFolder, FiDownload, FiUpload, FiEdit2, FiTrash2, FiPlus } from "react-icons/fi";
 
 function extIcon(name) {
@@ -557,7 +557,7 @@ const FileTree = memo(() => {
     setRenaming(null);
   }, [renameValue, workspacePath, f, pathUtil, setToast, setFiles, forceRefresh]);
 
-  const handleDelete = useCallback(async (relPath, isDir) => {
+  const handleDelete = useCallback(async (relPath) => {
     if (confirmDelete === relPath) {
       if (workspacePath && f && pathUtil) {
         const absPath = pathUtil.join(workspacePath, relPath);
@@ -648,12 +648,6 @@ const FileTree = memo(() => {
       setToast({ type: "ERROR", message: err.message || "Failed to read file" });
     }
   }, [playing, f, workspacePath, getAbsPath, setActiveFile, setFiles, setToast, setPreviewFile]);
-
-  const handleRecordFileClick = useCallback((name) => {
-    if (playing) return;
-    recordSwitchFile(name);
-    setActiveFile(name);
-  }, [playing, setActiveFile]);
 
   const handleImport = useCallback(async (e) => {
     const file = e.target.files?.[0];
@@ -1018,7 +1012,7 @@ const FileTree = memo(() => {
           <div className="menu-separator" />
           <button
             className={"menu-item" + (confirmDelete === ctxMenu.relPath ? " confirming" : "")}
-            onClick={() => handleDelete(ctxMenu.relPath, ctxMenu.isDir)}
+            onClick={() => handleDelete(ctxMenu.relPath)}
           >
             <span style={{ display: 'flex', alignItems: 'center', gap: 8, color: confirmDelete === ctxMenu.relPath ? '#e74c3c' : undefined }}>
               <FiTrash2 size={12} /> {confirmDelete === ctxMenu.relPath ? 'Confirm Delete' : 'Delete'}

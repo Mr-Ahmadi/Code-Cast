@@ -12,9 +12,111 @@ import PDFViewer from './PDFViewer';
 import MarkdownPreview from './MarkdownPreview';
 import { formatDocument } from '../../services/formatter';
 import { registerAiAutocomplete, updateAiSettings, disposeAiAutocomplete } from '../../services/autocomplete';
-import { useMode, MODES } from '../../contexts/ModeContext';
-import { FiFolder, FiScissors, FiCopy, FiClipboard, FiList, FiAlertTriangle, FiFileText, FiCode } from 'react-icons/fi';
+import { useMode } from '../../contexts/ModeContext';
+import { FiFolder, FiScissors, FiCopy, FiClipboard, FiList, FiAlertTriangle, FiFileText, FiCode, FiCpu, FiZap, FiMessageSquare } from 'react-icons/fi';
 import PropTypes from 'prop-types';
+
+const FONT_FAMILIES = {
+  default: 'Menlo, Monaco, "Cascadia Code", "Fira Code", Consolas, "Courier New", monospace',
+  cascadia: '"Cascadia Code", Consolas, "Courier New", monospace',
+  fira: '"Fira Code", Menlo, Consolas, "Courier New", monospace',
+  jetbrains: '"JetBrains Mono", Menlo, Consolas, monospace',
+  menlo: 'Menlo, Monaco, "Courier New", monospace',
+  monaco: 'Monaco, Menlo, "Courier New", monospace',
+  consolas: 'Consolas, "Courier New", monospace',
+  courier: '"Courier New", monospace',
+};
+
+function parseRulers(value = '') {
+  if (Array.isArray(value)) return value.filter(n => typeof n === 'number');
+  return String(value)
+    .split(',')
+    .map(s => parseInt(s.trim(), 10))
+    .filter(n => Number.isFinite(n) && n > 0);
+}
+
+function buildEditorOptions(settings, { fontSize, showMinimap, readOnly = false, noProject = false } = {}) {
+  const ec = settings?.editor || {};
+  const enableLsp = settings?.lsp?.enabled !== false;
+  const fontFamily = FONT_FAMILIES[ec.fontFamily] || FONT_FAMILIES.default;
+
+  return {
+    fontSize,
+    fontFamily,
+    fontLigatures: !!ec.fontLigatures,
+    lineHeight: Number(ec.lineHeight) > 0 ? Number(ec.lineHeight) : undefined,
+    minimap: { enabled: showMinimap },
+    scrollBeyondLastLine: noProject ? false : ec.scrollBeyondLastLine !== false,
+    lineNumbers: noProject ? 'off' : (ec.lineNumbers || 'on'),
+    renderLineHighlight: 'all',
+    automaticLayout: true,
+    smoothScrolling: ec.smoothScrolling !== false,
+    cursorBlinking: noProject ? 'solid' : (ec.cursorBlinking || 'smooth'),
+    cursorSmoothCaretAnimation: noProject ? 'off' : 'on',
+    cursorStyle: ec.cursorStyle || 'line',
+    tabSize: ec.tabSize || 4,
+    insertSpaces: ec.insertSpaces !== false,
+    wordWrap: ec.wordWrap || 'off',
+    wordWrapColumn: ec.wordWrapColumn || 80,
+    renderWhitespace: ec.renderWhitespace || 'selection',
+    stickyScroll: { enabled: ec.stickyScroll !== false },
+    guides: {
+      indentation: ec.indentGuides !== false,
+      highlightActiveIndentation: true,
+    },
+    bracketPairColorization: { enabled: ec.bracketPairColorization !== false },
+    rulers: parseRulers(ec.rulers),
+    linkedEditing: !!ec.linkedEditing,
+    autoClosingBrackets: ec.autoClosingBrackets || 'languageDefined',
+    autoClosingQuotes: ec.autoClosingQuotes || 'languageDefined',
+    formatOnPaste: !!ec.formatOnPaste,
+    formatOnType: !!ec.formatOnType,
+    breadcrumbs: { enabled: ec.breadcrumbs !== false },
+    dragAndDrop: ec.dragAndDrop !== false,
+    mouseWheelZoom: ec.mouseWheelZoom !== false,
+    padding: { top: 12 },
+    readOnly: !!readOnly,
+    domReadOnly: !!readOnly,
+    contextmenu: false,
+    inlineSuggest: { enabled: true },
+    suggestFontSize: 13,
+    suggestLineHeight: 22,
+    suggestOnTriggerCharacters: enableLsp,
+    quickSuggestions: enableLsp,
+    suggestSelection: ec.suggestSelection || 'first',
+    acceptSuggestionOnEnter: ec.acceptSuggestionOnEnter || 'on',
+    tabCompletion: ec.tabCompletion || 'on',
+    codeLens: !!ec.codeLens,
+    selectionHighlight: true,
+    occurrencesHighlight: 'singleFile',
+    matchBrackets: 'always',
+    suggest: {
+      showMethods: enableLsp,
+      showFunctions: enableLsp,
+      showConstructors: enableLsp,
+      showFields: enableLsp,
+      showVariables: enableLsp,
+      showClasses: enableLsp,
+      showStructs: enableLsp,
+      showInterfaces: enableLsp,
+      showModules: enableLsp,
+      showProperties: enableLsp,
+      showEvents: enableLsp,
+      showOperators: enableLsp,
+      showUnits: enableLsp,
+      showValues: enableLsp,
+      showConstants: enableLsp,
+      showEnums: enableLsp,
+      showEnumMembers: enableLsp,
+      showKeywords: enableLsp,
+      showWords: enableLsp,
+      showColors: enableLsp,
+      showFiles: enableLsp,
+      showReferences: enableLsp,
+      showSnippets: enableLsp,
+    },
+  };
+}
 
 const _Editor = memo(({ editorRef }) => {
   const { 
@@ -185,7 +287,35 @@ const _Editor = memo(({ editorRef }) => {
       triggerEditorAction(actionId);
     }
     setCtxMenu(null);
-  }, [triggerEditorAction]);
+  }, [triggerEditorAction, editorRef]);
+
+  const askAi = useCallback((kind) => {
+    const editor = editorRef.current;
+    if (!editor) return;
+    const model = editor.getModel();
+    if (!model) return;
+    const sel = editor.getSelection();
+    const hasSelection = !!sel && !sel.isEmpty();
+    const code = hasSelection ? model.getValueInRange(sel) : model.getValue();
+    if (!code || !code.trim()) {
+      setToast({ type: 'WARNING', message: 'There is no code to analyze.' });
+      setCtxMenu(null);
+      return;
+    }
+    const language = model.getLanguageId();
+    const prompts = {
+      explain: `Explain the following ${language} code clearly. Describe what it does, its structure, and any notable patterns:\n\n${code}`,
+      improve: `Improve the following ${language} code focusing on readability, performance, and best practices. Return the improved version inside a fenced code block:\n\n${code}`,
+      bugs: `Carefully review the following ${language} code for bugs and issues. Point out each problem and show the corrected code in a fenced code block:\n\n${code}`,
+      comments: `Add clear, concise comments to the following ${language} code. Return the fully annotated code in a fenced code block:\n\n${code}`,
+    };
+    setCtxMenu(null);
+    window.__openAiChat?.({
+      prompt: prompts[kind] || prompts.explain,
+      useSelection: hasSelection,
+      label: kind,
+    });
+  }, [editorRef, setToast]);
 
   const handleEditorContextMenu = useCallback((e) => {
     e.preventDefault();
@@ -513,7 +643,7 @@ const _Editor = memo(({ editorRef }) => {
       noSyntaxValidation: !enableDiagnostics,
       diagnosticCodesToIgnore,
     });
-  }, [settings?.lsp?.diagnostics, settings?.lsp?.enabled]);
+  }, [settings?.lsp]);
 
   useEffect(() => {
     updateAiSettings(settings);
@@ -524,7 +654,7 @@ const _Editor = memo(({ editorRef }) => {
       registerAiAutocomplete(editor, monaco, settings);
     }
     return () => disposeAiAutocomplete();
-  }, [settings?.aiAutocomplete]);
+  }, [settings, editorRef]);
 
   const saveFileByName = useCallback(async (name) => {
     if (!name || !currentWorkspace?.path) return false;
@@ -656,59 +786,13 @@ const _Editor = memo(({ editorRef }) => {
   const noProject = !currentWorkspace && !isTypistLoaded();
   const noTabsOpen = !noProject && !activeFile;
 
-  const cursorStyle = settings?.editor?.cursorStyle || 'line';
-  const tabSize = settings?.editor?.tabSize || 4;
-  const wordWrap = settings?.editor?.wordWrap || 'off';
-  const enableLsp = settings?.lsp?.enabled !== false;
+  const options = buildEditorOptions(settings, { fontSize, showMinimap, readOnly: noProject, noProject });
 
-  const options = {
-    fontSize,
-    minimap: { enabled: showMinimap },
-    scrollBeyondLastLine: noProject,
-    lineNumbers: noProject ? "off" : "on",
-    renderLineHighlight: noProject ? "line" : "line",
-    automaticLayout: true,
-    smoothScrolling: true,
-    cursorBlinking: noProject ? "solid" : "smooth",
-    cursorSmoothCaretAnimation: noProject ? "off" : "on",
-    cursorStyle,
-    tabSize,
-    wordWrap,
-    padding: { top: 12 },
-    readOnly: noProject,
-    domReadOnly: noProject,
-    contextmenu: false,
-    inlineSuggest: { enabled: true },
-    suggestFontSize: 0,
-    suggestLineHeight: 0,
-    suggestOnTriggerCharacters: enableLsp,
-    quickSuggestions: enableLsp,
-    suggest: {
-      showMethods: enableLsp,
-      showFunctions: enableLsp,
-      showConstructors: enableLsp,
-      showFields: enableLsp,
-      showVariables: enableLsp,
-      showClasses: enableLsp,
-      showStructs: enableLsp,
-      showInterfaces: enableLsp,
-      showModules: enableLsp,
-      showProperties: enableLsp,
-      showEvents: enableLsp,
-      showOperators: enableLsp,
-      showUnits: enableLsp,
-      showValues: enableLsp,
-      showConstants: enableLsp,
-      showEnums: enableLsp,
-      showEnumMembers: enableLsp,
-      showKeywords: enableLsp,
-      showWords: enableLsp,
-      showColors: enableLsp,
-      showFiles: enableLsp,
-      showReferences: enableLsp,
-      showSnippets: enableLsp,
-    },
-  };
+  useEffect(() => {
+    const ed = editorRef.current;
+    if (!ed) return;
+    ed.updateOptions(buildEditorOptions(settings, { fontSize, showMinimap, readOnly: noProject, noProject }));
+  }, [settings, fontSize, showMinimap, noProject, editorRef]);
 
   const isBinary = activeFile && isBinaryFile(activeFile);
   const isImage = activeFile && isImageFile(activeFile);
@@ -794,6 +878,19 @@ const _Editor = memo(({ editorRef }) => {
             <button className="menu-item" onClick={() => { handleFormatDocument(); setCtxMenu(null); }}>
               <span style={{ display: 'flex', alignItems: 'center', gap: 8 }}><FiCode size={12} /> Format Document</span>
               <span className="menu-item-shortcut">Shift+Alt+F</span>
+            </button>
+            <div className="menu-separator" />
+            <button className="menu-item" onClick={() => askAi('explain')}>
+              <span style={{ display: 'flex', alignItems: 'center', gap: 8 }}><FiCpu size={12} /> Explain with AI</span>
+            </button>
+            <button className="menu-item" onClick={() => askAi('improve')}>
+              <span style={{ display: 'flex', alignItems: 'center', gap: 8 }}><FiZap size={12} /> Improve with AI</span>
+            </button>
+            <button className="menu-item" onClick={() => askAi('bugs')}>
+              <span style={{ display: 'flex', alignItems: 'center', gap: 8 }}><FiAlertTriangle size={12} /> Find Bugs</span>
+            </button>
+            <button className="menu-item" onClick={() => askAi('comments')}>
+              <span style={{ display: 'flex', alignItems: 'center', gap: 8 }}><FiMessageSquare size={12} /> Add Comments</span>
             </button>
           </div>
         )}

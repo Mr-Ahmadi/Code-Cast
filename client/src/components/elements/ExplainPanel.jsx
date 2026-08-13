@@ -1,7 +1,7 @@
 import { useState, useCallback, useEffect, memo } from 'react';
 import PropTypes from 'prop-types';
 
-const ExplainPanel = memo(({ code, language, settings, onExplain, explainTrigger }) => {
+const ExplainPanel = memo(({ code, language, settings, explainTrigger }) => {
   const [explanation, setExplanation] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
@@ -78,7 +78,6 @@ ExplainPanel.propTypes = {
   code: PropTypes.string,
   language: PropTypes.string,
   settings: PropTypes.object,
-  onExplain: PropTypes.func,
   explainTrigger: PropTypes.number,
 };
 

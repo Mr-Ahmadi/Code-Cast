@@ -1,34 +1,6 @@
 import { getFormatterForLanguage } from '../constants/settings';
 import { MODES } from '../constants/modes';
 
-const LANG_TO_PRETTIER_PARSER = {
-  javascript: 'babel',
-  typescript: 'typescript',
-  html: 'html',
-  css: 'css',
-  scss: 'scss',
-  less: 'less',
-  json: 'json',
-  markdown: 'markdown',
-  yaml: 'yaml',
-  graphql: 'graphql',
-};
-
-const LANG_TO_MONACO_LANG = {
-  javascript: 'javascript',
-  typescript: 'typescript',
-  html: 'html',
-  css: 'css',
-  scss: 'scss',
-  less: 'less',
-  python: 'python',
-  c: 'c',
-  cpp: 'cpp',
-  java: 'java',
-  rust: 'rust',
-  go: 'go',
-};
-
 export function getMonacoLanguage(filePath) {
   if (!filePath) return null;
   const ext = filePath.split('.').pop().toLowerCase();

@@ -108,6 +108,7 @@ export const GlobalProvider = ({ children }) => {
         state.theme,
         state.dirtyFiles,
         state.settings, state.settingsOpen,
+        state.previewFile,
         startRecording, stopRecording, setPaused, setUser, setRecordName,
         setPlaying, setOutput, setToast,
         setAudioEnabled, setFontSize, setShowMinimap,
@@ -116,6 +117,7 @@ export const GlobalProvider = ({ children }) => {
         setTheme,
         setDirtyFiles,
         setSettings, setSettingsOpen,
+        setPreviewFile,
         refreshUser,
     ]);
 

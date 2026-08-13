@@ -1,4 +1,5 @@
 import { useState, useEffect, useContext, useMemo, useRef, useCallback } from 'react';
+import PropTypes from 'prop-types';
 import { GlobalContext } from '../../contexts/GlobalStates';
 import { FiAlertTriangle, FiEye, FiEdit3, FiSave } from 'react-icons/fi';
 import { marked } from 'marked';
@@ -48,7 +49,7 @@ const MarkdownPreview = ({ file }) => {
     return ok;
   }, [fullPath, content, file, setToast]);
 
-  const handleEditorMount = useCallback((editor, monaco) => {
+  const handleEditorMount = useCallback((editor) => {
     monacoRef.current = editor;
     editor.focus();
   }, []);
@@ -211,6 +212,10 @@ const MarkdownPreview = ({ file }) => {
       </div>
     </div>
   );
+};
+
+MarkdownPreview.propTypes = {
+  file: PropTypes.string,
 };
 
 export default MarkdownPreview;
