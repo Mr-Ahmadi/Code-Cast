@@ -17,6 +17,10 @@ Record and replay code typing sessions with synchronized audio. Capture keystrok
 - **Project templates** — HTML/CSS/JS, React, Python, Node.js starters
 - **Export/Import** — save recordings as `.cvid` files for sharing or backup
 - **Git integration** — stage, commit, push, and publish repos to GitHub (local mode)
+- **AI inline completion** — ghost-text suggestions from a local Ollama model, with FIM prompting tuned per model family (Qwen, DeepSeek, StarCoder, CodeGemma, CodeLlama)
+- **AI inline edit** — `Ctrl+K` rewrites the selection from a plain-language instruction and shows a diff before applying it
+- **AI chat** — streaming assistant with quick actions (explain, improve, find bugs, write tests) that can insert code back into the editor
+- **Command palette** — `Ctrl+Shift+P` for fuzzy-searchable commands, `@` to jump to an open file
 - **Explain panel** — AI-powered code explanation (online mode)
 - **Two modes**:
   - **Online** — server-backed with PostgreSQL, JWT auth, cloud storage
@@ -128,8 +132,13 @@ code-cast/
 
 ## Keyboard Shortcuts
 
+On macOS, `Cmd` replaces `Ctrl` throughout.
+
 | Shortcut       | Action               |
 |----------------|----------------------|
+| `Ctrl+Shift+P` | Command palette      |
+| `Ctrl+K`       | Edit selection with AI |
+| `Ctrl+Shift+Space` | Trigger inline AI suggestion |
 | `Ctrl+Enter`   | Execute code         |
 | `Ctrl+R`       | Start / Stop record  |
 | `Ctrl+P`       | Play / Stop playback |
@@ -137,6 +146,8 @@ code-cast/
 | `` Ctrl+` ``   | Toggle terminal      |
 | `←` / `→`      | Skip back / forward 5s |
 | `?`            | Toggle shortcuts help |
+
+The command palette also accepts `@` to jump to an open file.
 
 ## Environment Variables
 

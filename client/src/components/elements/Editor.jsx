@@ -10,6 +10,7 @@ import { isBinaryFile, extLang, isImageFile, isPdfFile, isReadmeFile } from '../
 import ImageViewer from './ImageViewer';
 import PDFViewer from './PDFViewer';
 import MarkdownPreview from './MarkdownPreview';
+import InlineAiEdit from './InlineAiEdit';
 import { formatDocument } from '../../services/formatter';
 import { registerAiAutocomplete, updateAiSettings, disposeAiAutocomplete } from '../../services/autocomplete';
 import { useMode } from '../../contexts/ModeContext';
@@ -26,6 +27,71 @@ const FONT_FAMILIES = {
   consolas: 'Consolas, "Courier New", monospace',
   courier: '"Courier New", monospace',
 };
+
+const THEME_FALLBACKS = {
+  dark: {
+    '--bg-primary': '#13161c', '--text-primary': '#e7ebf2', '--border': '#313a4d',
+    '--bg-hover': '#293141', '--accent': '#a94442', '--text-muted': '#7f8ca0',
+    '--text-secondary': '#b4becd',
+  },
+  light: {
+    '--bg-primary': '#f4f6fb', '--text-primary': '#1f2735', '--border': '#cfd8e6',
+    '--bg-hover': '#e5eaf4', '--accent': '#a94442', '--text-muted': '#66748b',
+    '--text-secondary': '#3a465a',
+  },
+};
+
+export function monacoThemeName(variant) {
+  return `codecast-${variant === 'light' ? 'light' : 'dark'}`;
+}
+
+function themeColors(variant, read) {
+  const light = variant === 'light';
+  return {
+    'editor.background': read('--bg-primary'),
+    'editor.foreground': read('--text-primary'),
+    'editor.lineHighlightBackground': read('--bg-hover'),
+    'editorCursor.foreground': read('--accent'),
+    'editor.selectionBackground': light ? '#c9defa' : '#315f8f',
+    'editor.selectionForeground': light ? '#102033' : '#ffffff',
+    'editor.inactiveSelectionBackground': light ? '#dbe7f6' : '#263f5f',
+    'editorLineNumber.foreground': read('--text-muted'),
+    'editorLineNumber.activeForeground': read('--text-secondary'),
+    'editorWidget.background': read('--bg-primary'),
+    'editorWidget.border': read('--border'),
+    'editorSuggestWidget.background': read('--bg-primary'),
+    'editorSuggestWidget.border': read('--border'),
+    'editorSuggestWidget.selectedBackground': read('--bg-hover'),
+    'editorGhostText.foreground': read('--text-muted'),
+    'editor.border': read('--border'),
+  };
+}
+
+/**
+ * Defines both variants so the `theme` prop always names a known theme.
+ *
+ * Only the variant the document currently renders can be read from the CSS
+ * custom properties — the other one would resolve to the active palette — so
+ * the inactive variant is built from its static defaults instead.
+ */
+function defineEditorThemes(monaco) {
+  const active = document.documentElement.getAttribute('data-theme') === 'light' ? 'light' : 'dark';
+  const styles = getComputedStyle(document.documentElement);
+
+  for (const variant of ['dark', 'light']) {
+    const fallbacks = THEME_FALLBACKS[variant];
+    const read = variant === active
+      ? (name) => styles.getPropertyValue(name).trim() || fallbacks[name]
+      : (name) => fallbacks[name];
+
+    monaco.editor.defineTheme(monacoThemeName(variant), {
+      base: variant === 'light' ? 'vs' : 'vs-dark',
+      inherit: true,
+      rules: [],
+      colors: themeColors(variant, read),
+    });
+  }
+}
 
 function parseRulers(value = '') {
   if (Array.isArray(value)) return value.filter(n => typeof n === 'number');
@@ -347,8 +413,20 @@ const _Editor = memo(({ editorRef }) => {
     if (!model) return;
     const content = model.getValue();
     const lang = model.getLanguageId();
+    delete viewStateCache.current[model.uri.toString()];
     model.dispose();
     delete modelsRef.current[oldName];
+
+    // The dirty/saved bookkeeping is keyed by name and has to follow the rename.
+    if (savedContentRef.current[oldName] !== undefined) {
+      savedContentRef.current[newName] = savedContentRef.current[oldName];
+      delete savedContentRef.current[oldName];
+    }
+    if (dirtyRef.current.delete(oldName)) {
+      dirtyRef.current.add(newName);
+      setDirtyFiles(new Set(dirtyRef.current));
+    }
+
     const uri = monaco.Uri.parse(`file:///${newName}`);
     const newModel = monaco.editor.createModel(content, lang, uri);
     modelsRef.current[newName] = newModel;
@@ -364,20 +442,24 @@ const _Editor = memo(({ editorRef }) => {
       watchedFilesRef.current.delete(oldName);
       watchedFilesRef.current.add(newName);
     }
-  }, [editorRef, currentWorkspace?.path]);
+  }, [editorRef, currentWorkspace?.path, setDirtyFiles]);
 
   const removeModel = useCallback((name) => {
     const model = modelsRef.current[name];
     if (model) {
+      delete viewStateCache.current[model.uri.toString()];
       model.dispose();
       delete modelsRef.current[name];
     }
+    delete savedContentRef.current[name];
+    dirtyRef.current.delete(name);
+    setDirtyFiles(new Set(dirtyRef.current));
     if (currentWorkspace?.path && window.electronAPI?.file?.unwatchFile && watchedFilesRef.current.has(name)) {
       const fullPath = window.electronAPI.path.join(currentWorkspace.path, name);
       window.electronAPI.file.unwatchFile(fullPath);
       watchedFilesRef.current.delete(name);
     }
-  }, [currentWorkspace?.path]);
+  }, [currentWorkspace?.path, setDirtyFiles]);
 
   useEffect(() => {
     if (autoSaveTimerRef.current) {
@@ -454,39 +536,16 @@ const _Editor = memo(({ editorRef }) => {
     const nextTheme = theme === 'light' ? 'light' : 'dark';
     document.documentElement.setAttribute('data-theme', nextTheme);
     document.body.setAttribute('data-theme', nextTheme);
-
-    const styles = getComputedStyle(document.documentElement);
-    const bg = styles.getPropertyValue('--bg-primary').trim() || (nextTheme === 'light' ? '#f4f6fb' : '#13161c');
-    const fg = styles.getPropertyValue('--text-primary').trim() || (nextTheme === 'light' ? '#1f2735' : '#e7ebf2');
-    const border = styles.getPropertyValue('--border').trim() || (nextTheme === 'light' ? '#cfd8e6' : '#313a4d');
-    const selection = nextTheme === 'light' ? '#c9defa' : '#315f8f';
-    const inactiveSelection = nextTheme === 'light' ? '#dbe7f6' : '#263f5f';
-    const selectionFg = nextTheme === 'light' ? '#102033' : '#ffffff';
-    const lineHighlight = styles.getPropertyValue('--bg-hover').trim() || (nextTheme === 'light' ? '#e5eaf4' : '#293141');
-    const cursor = styles.getPropertyValue('--accent').trim() || '#a94442';
-    const lineNum = styles.getPropertyValue('--text-muted').trim() || (nextTheme === 'light' ? '#66748b' : '#7f8ca0');
-    const lineNumActive = styles.getPropertyValue('--text-secondary').trim() || (nextTheme === 'light' ? '#3a465a' : '#b4becd');
-    const monacoThemeName = `codecast-${nextTheme}`;
-
-    monacoInstance.editor.defineTheme(monacoThemeName, {
-      base: nextTheme === 'light' ? 'vs' : 'vs-dark',
-      inherit: true,
-      rules: [],
-      colors: {
-        'editor.background': bg,
-        'editor.foreground': fg,
-        'editor.lineHighlightBackground': lineHighlight,
-        'editorCursor.foreground': cursor,
-        'editor.selectionBackground': selection,
-        'editor.selectionForeground': selectionFg,
-        'editor.inactiveSelectionBackground': inactiveSelection,
-        'editorLineNumber.foreground': lineNum,
-        'editorLineNumber.activeForeground': lineNumActive,
-        'editor.border': border,
-      }
-    });
-    monacoInstance.editor.setTheme(monacoThemeName);
+    defineEditorThemes(monacoInstance);
+    monacoInstance.editor.setTheme(monacoThemeName(nextTheme));
   }, [theme]);
+
+  // Both themes are defined before the editor is created so the `theme` prop
+  // always names a theme Monaco already knows.
+  const handleBeforeMount = useCallback((monaco) => {
+    monacoRef.current = monaco;
+    defineEditorThemes(monaco);
+  }, []);
 
   function handleEditorDidMount(editor, monaco) {
     editorRef.current = editor;
@@ -495,6 +554,15 @@ const _Editor = memo(({ editorRef }) => {
     editorReady.current = true;
     applyEditorTheme(monaco);
     registerAiAutocomplete(editor, monaco, settings);
+
+    // Registered on the editor rather than the document so it wins over
+    // Monaco's own Ctrl/Cmd+K chord prefix.
+    editor.addAction({
+      id: 'codecast.inlineAiEdit',
+      label: 'AI: Edit Selection…',
+      keybindings: [monaco.KeyMod.CtrlCmd | monaco.KeyCode.KeyK],
+      run: () => window.__openInlineAiEdit?.(),
+    });
 
     const lsp = settings?.lsp;
     const enableDiagnostics = lsp?.diagnostics !== false;
@@ -691,11 +759,7 @@ const _Editor = memo(({ editorRef }) => {
     };
   }, [editorRef, saveCurrentFile, saveCurrentFileAs, saveAllFiles, triggerEditorAction, saveFileByName, handleFormatDocument]);
 
-  window.__ensureModel = ensureModel;
-  window.__switchEditorModel = switchEditorModel;
-  window.__renameModel = renameModel;
-  window.__removeModel = removeModel;
-  window.__getAllModelContents = () => {
+  const getAllModelContents = useCallback(() => {
     const trackedFiles = getFiles();
     const result = {};
     for (const file of trackedFiles) {
@@ -703,11 +767,11 @@ const _Editor = memo(({ editorRef }) => {
       result[file.name] = model ? model.getValue() : (getFileFirstValue(file.name) || "");
     }
     return result;
-  };
+  }, []);
 
   const resumeFlashRef = useRef(null);
 
-  window.__playbackHandler = useCallback((name, content, isSwitch, isResume) => {
+  const playbackHandler = useCallback((name, content, isSwitch, isResume) => {
     ensureModel(name, content);
     switchEditorModel(name);
     if (isSwitch) {
@@ -722,6 +786,39 @@ const _Editor = memo(({ editorRef }) => {
       }, 1500);
     }
   }, [ensureModel, switchEditorModel, setActiveFile]);
+
+  useEffect(() => {
+    window.__ensureModel = ensureModel;
+    window.__switchEditorModel = switchEditorModel;
+    window.__renameModel = renameModel;
+    window.__removeModel = removeModel;
+    window.__getAllModelContents = getAllModelContents;
+    window.__playbackHandler = playbackHandler;
+    return () => {
+      window.__ensureModel = undefined;
+      window.__switchEditorModel = undefined;
+      window.__renameModel = undefined;
+      window.__removeModel = undefined;
+      window.__getAllModelContents = undefined;
+      window.__playbackHandler = undefined;
+    };
+  }, [ensureModel, switchEditorModel, renameModel, removeModel, getAllModelContents, playbackHandler]);
+
+  // Monaco models outlive React, so they have to be torn down explicitly or
+  // every workspace switch leaks the previous project's file contents.
+  useEffect(() => {
+    const models = modelsRef.current;
+    const savedContent = savedContentRef.current;
+    const viewStates = viewStateCache.current;
+    return () => {
+      for (const model of Object.values(models)) {
+        try { model.dispose(); } catch { /* already disposed */ }
+      }
+      for (const key of Object.keys(models)) delete models[key];
+      for (const key of Object.keys(savedContent)) delete savedContent[key];
+      for (const key of Object.keys(viewStates)) delete viewStates[key];
+    };
+  }, []);
 
   useEffect(() => {
     if (!currentWorkspace?.path || !window.electronAPI?.file?.onFileChanged) return;
@@ -847,9 +944,10 @@ const _Editor = memo(({ editorRef }) => {
         <Editor
           height="100%"
           width="100%"
+          beforeMount={handleBeforeMount}
           onMount={handleEditorDidMount}
           onChange={handleEditorChange}
-          theme='codecast-theme'
+          theme={monacoThemeName(theme)}
           options={options}
         />
         {ctxMenu && (
@@ -892,8 +990,13 @@ const _Editor = memo(({ editorRef }) => {
             <button className="menu-item" onClick={() => askAi('comments')}>
               <span style={{ display: 'flex', alignItems: 'center', gap: 8 }}><FiMessageSquare size={12} /> Add Comments</span>
             </button>
+            <button className="menu-item" onClick={() => { setCtxMenu(null); window.__openInlineAiEdit?.(); }}>
+              <span style={{ display: 'flex', alignItems: 'center', gap: 8 }}><FiZap size={12} /> Edit with AI…</span>
+              <span className="menu-item-shortcut">{modKey}+K</span>
+            </button>
           </div>
         )}
+        <InlineAiEdit />
       </div>
     </div>
   )

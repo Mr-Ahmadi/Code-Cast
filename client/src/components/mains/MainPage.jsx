@@ -16,6 +16,7 @@ import LocalSetupPrompt from '../elements/LocalSetupPrompt';
 import ActivityBar from '../elements/ActivityBar';
 import StatusBar from '../elements/StatusBar';
 import Settings from '../elements/Settings';
+import CommandPalette from '../elements/CommandPalette';
 import { GlobalContext } from '../../contexts/GlobalStates';
 import { getFiles, exportRecord, isTypistLoaded, importFromFile, stopPlay } from "../../functions/record";
 import { useMode, MODES } from '../../contexts/ModeContext';
@@ -109,6 +110,10 @@ export default function App() {
     };
 
     window.__setActivePanel = setActivePanel;
+    window.__showSidebarPanel = (panel) => {
+        setActiveSidebarPanel(panel);
+        setSidebarOpen(true);
+    };
     window.__triggerExplain = () => setExplainTrigger(n => n + 1);
     window.__openAiChat = (options) => {
       setActivePanel('chat');
@@ -190,7 +195,30 @@ export default function App() {
     const handleKeyDown = useCallback((e) => {
         const cmd = e.ctrlKey || e.metaKey;
 
-        if (e.key === '?' && !cmd) {
+        const target = e.target;
+        const isTyping = target instanceof HTMLElement && (
+            target.tagName === 'INPUT'
+            || target.tagName === 'TEXTAREA'
+            || target.tagName === 'SELECT'
+            || target.isContentEditable
+        );
+
+        if (cmd && e.shiftKey && (e.key === 'p' || e.key === 'P')) {
+            e.preventDefault();
+            window.__openCommandPalette?.('commands');
+            return;
+        }
+
+        // Ctrl/Cmd+K is also registered as a Monaco action for when the editor
+        // has focus; this covers every other part of the app.
+        if (cmd && !e.shiftKey && !e.altKey && (e.key === 'k' || e.key === 'K')) {
+            e.preventDefault();
+            window.__openInlineAiEdit?.();
+            return;
+        }
+
+        // Bare-character shortcuts must not fire while the user is typing.
+        if (e.key === '?' && !cmd && !isTyping) {
             e.preventDefault();
             setShowShortcuts(s => !s);
             return;
@@ -743,6 +771,7 @@ export default function App() {
             <StatusBar />
             <Toast />
             <ShortcutsHelp display={showShortcuts} setDisplay={setShowShortcuts} />
+            <CommandPalette />
             <Settings />
 
             {showAppCloseDialog && (

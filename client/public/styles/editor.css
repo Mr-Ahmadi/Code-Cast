@@ -3560,3 +3560,408 @@ body.dialog-open .resizer {
   color: #fff;
 }
 
+
+/* ------------------------------------------------------------------ *
+ * Inline AI edit (Ctrl/Cmd+K)
+ * ------------------------------------------------------------------ */
+
+.inline-ai-edit {
+  position: absolute;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 40;
+  width: min(680px, calc(100% - 32px));
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 10px;
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-light);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-lg);
+  font-family: var(--font-ui);
+  animation: inline-ai-edit-in 0.12s ease;
+}
+
+@keyframes inline-ai-edit-in {
+  from { opacity: 0; transform: translateX(-50%) translateY(-4px); }
+  to { opacity: 1; transform: translateX(-50%) translateY(0); }
+}
+
+.inline-ai-edit-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.inline-ai-edit-title {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.inline-ai-edit-model {
+  padding: 1px 6px;
+  border-radius: 10px;
+  background: var(--bg-tertiary);
+  border: 1px solid var(--border);
+  color: var(--text-muted);
+  font-size: 10px;
+  font-weight: 400;
+}
+
+.inline-ai-edit-scope {
+  flex: 1;
+  font-size: 11px;
+  color: var(--text-muted);
+}
+
+.inline-ai-edit-close {
+  display: inline-flex;
+  padding: 2px;
+  border: none;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--text-muted);
+  cursor: pointer;
+  transition: all var(--transition);
+}
+
+.inline-ai-edit-close:hover {
+  background: var(--bg-hover);
+  color: var(--text-primary);
+}
+
+.inline-ai-edit-input-row {
+  display: flex;
+  gap: 6px;
+}
+
+.inline-ai-edit-input {
+  flex: 1;
+  min-width: 0;
+  padding: 7px 10px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  background: var(--bg-primary);
+  color: var(--text-primary);
+  font-family: var(--font-ui);
+  font-size: 12px;
+  outline: none;
+  transition: border-color var(--transition);
+}
+
+.inline-ai-edit-input:focus {
+  border-color: var(--accent);
+}
+
+.inline-ai-edit-input:disabled {
+  opacity: 0.6;
+}
+
+.inline-ai-edit-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 6px 11px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  background: var(--bg-tertiary);
+  color: var(--text-secondary);
+  font-family: var(--font-ui);
+  font-size: 11px;
+  white-space: nowrap;
+  cursor: pointer;
+  transition: all var(--transition);
+}
+
+.inline-ai-edit-btn:hover:not(:disabled) {
+  background: var(--bg-hover);
+  color: var(--text-primary);
+}
+
+.inline-ai-edit-btn:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.inline-ai-edit-btn-primary {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: var(--status-text);
+}
+
+.inline-ai-edit-btn-primary:hover:not(:disabled) {
+  background: var(--accent-hover);
+  border-color: var(--accent-hover);
+  color: var(--status-text);
+}
+
+.inline-ai-spin {
+  animation: inline-ai-spin 0.9s linear infinite;
+}
+
+@keyframes inline-ai-spin {
+  to { transform: rotate(360deg); }
+}
+
+.inline-ai-edit-presets {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+}
+
+.inline-ai-edit-chip {
+  padding: 3px 9px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--bg-tertiary);
+  color: var(--text-secondary);
+  font-family: var(--font-ui);
+  font-size: 11px;
+  cursor: pointer;
+  transition: all var(--transition);
+}
+
+.inline-ai-edit-chip:hover {
+  border-color: var(--accent);
+  color: var(--text-primary);
+  background: var(--bg-hover);
+}
+
+.inline-ai-edit-error {
+  padding: 6px 10px;
+  border: 1px solid var(--danger-bg);
+  border-radius: var(--radius-md);
+  background: var(--danger-bg);
+  color: var(--danger);
+  font-size: 11px;
+}
+
+.inline-ai-edit-diff {
+  max-height: 260px;
+  overflow: auto;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  background: var(--bg-primary);
+  font-family: var(--font-mono);
+  font-size: 11.5px;
+  line-height: 1.55;
+}
+
+.inline-ai-edit-diff-empty {
+  padding: 10px;
+  color: var(--text-muted);
+  font-family: var(--font-ui);
+  font-size: 11px;
+}
+
+.inline-ai-diff-row {
+  display: flex;
+  gap: 8px;
+  padding: 0 8px;
+  white-space: pre;
+}
+
+.inline-ai-diff-marker {
+  flex: none;
+  width: 10px;
+  color: var(--text-muted);
+  user-select: none;
+}
+
+.inline-ai-diff-text {
+  flex: 1;
+  min-width: 0;
+}
+
+.inline-ai-diff-added {
+  background: var(--success-bg);
+  color: var(--text-primary);
+}
+
+.inline-ai-diff-added .inline-ai-diff-marker {
+  color: var(--success);
+}
+
+.inline-ai-diff-removed {
+  background: var(--danger-bg);
+  color: var(--text-secondary);
+}
+
+.inline-ai-diff-removed .inline-ai-diff-marker {
+  color: var(--danger);
+}
+
+.inline-ai-diff-same {
+  color: var(--text-muted);
+}
+
+.inline-ai-diff-gap {
+  color: var(--text-muted);
+  background: var(--bg-secondary);
+  font-family: var(--font-ui);
+  font-size: 10.5px;
+  font-style: italic;
+}
+
+.inline-ai-edit-actions {
+  display: flex;
+  gap: 6px;
+}
+
+/* ------------------------------------------------------------------ *
+ * Command palette (Ctrl/Cmd+Shift+P)
+ * ------------------------------------------------------------------ */
+
+.command-palette-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 900;
+  display: flex;
+  justify-content: center;
+  align-items: flex-start;
+  padding-top: 12vh;
+  background: var(--overlay-bg);
+  animation: command-palette-fade 0.1s ease;
+}
+
+@keyframes command-palette-fade {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+.command-palette {
+  width: min(620px, calc(100% - 32px));
+  max-height: 62vh;
+  display: flex;
+  flex-direction: column;
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-light);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-lg);
+  overflow: hidden;
+  animation: command-palette-in 0.12s ease;
+}
+
+@keyframes command-palette-in {
+  from { opacity: 0; transform: translateY(-8px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.command-palette-input-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 12px;
+  border-bottom: 1px solid var(--border);
+}
+
+.command-palette-icon {
+  flex: none;
+  color: var(--text-muted);
+}
+
+.command-palette-input {
+  flex: 1;
+  min-width: 0;
+  border: none;
+  background: transparent;
+  color: var(--text-primary);
+  font-family: var(--font-ui);
+  font-size: 13px;
+  outline: none;
+}
+
+.command-palette-input::placeholder {
+  color: var(--text-muted);
+}
+
+.command-palette-mode {
+  flex: none;
+  padding: 2px 8px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--bg-tertiary);
+  color: var(--text-muted);
+  font-size: 10px;
+}
+
+.command-palette-list {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 4px;
+}
+
+.command-palette-empty {
+  padding: 18px 12px;
+  text-align: center;
+  color: var(--text-muted);
+  font-size: 12px;
+}
+
+.command-palette-item {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  width: 100%;
+  padding: 7px 10px;
+  border: none;
+  border-radius: var(--radius-md);
+  background: transparent;
+  color: var(--text-secondary);
+  font-family: var(--font-ui);
+  font-size: 12.5px;
+  text-align: left;
+  cursor: pointer;
+}
+
+.command-palette-item.selected {
+  background: var(--bg-hover);
+  color: var(--text-primary);
+}
+
+.command-palette-item-icon {
+  flex: none;
+  color: var(--text-muted);
+}
+
+.command-palette-item.selected .command-palette-item-icon {
+  color: var(--accent);
+}
+
+.command-palette-item-label {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.command-palette-item-hint {
+  flex: none;
+  padding: 1px 6px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--bg-tertiary);
+  color: var(--text-muted);
+  font-family: var(--font-mono);
+  font-size: 10px;
+}
+
+/* AI autocomplete indicator in the status bar */
+.status-ai-spin {
+  animation: inline-ai-spin 1.1s linear infinite;
+}
+
+.status-ai-loading {
+  color: var(--accent);
+}
+
+.status-ai-error {
+  color: var(--danger);
+}

@@ -2,9 +2,9 @@ import { useContext, useState, useCallback, useEffect } from 'react';
 import PropTypes from 'prop-types';
 import { GlobalContext } from '../../contexts/GlobalStates';
 import { useMode, MODES } from '../../contexts/ModeContext';
-import { saveSettings as persistSettings, DEFAULT_SETTINGS } from '../../constants/settings';
+import { saveSettings as persistSettings, cloneDefaults } from '../../constants/settings';
 import { getAvailableFormatters } from '../../services/formatter';
-import { FiX, FiEdit3, FiCode, FiTerminal, FiSave, FiGitCommit, FiCpu, FiMessageSquare } from 'react-icons/fi';
+import { FiX, FiEdit3, FiCode, FiTerminal, FiSave, FiGitCommit, FiCpu, FiMessageSquare, FiZap } from 'react-icons/fi';
 import axios from 'axios';
 
 const Toggle = ({ checked, onChange, disabled }) => (
@@ -124,7 +124,9 @@ export default function Settings() {
   }, [localSettings, mode, setSettings, setFontSize, setShowMinimap, setAutoSave, setTheme]);
 
   const handleReset = useCallback(() => {
-    setLocalSettings({ ...DEFAULT_SETTINGS, editor: { ...DEFAULT_SETTINGS.editor }, formatter: { ...DEFAULT_SETTINGS.formatter, defaultFormatters: { ...DEFAULT_SETTINGS.formatter.defaultFormatters } }, lsp: { ...DEFAULT_SETTINGS.lsp }, commitMessage: { ...DEFAULT_SETTINGS.commitMessage }, aiAutocomplete: { ...DEFAULT_SETTINGS.aiAutocomplete } });
+    // cloneDefaults deep-copies every section, so newly added ones reset too
+    // instead of being missed by a hand-maintained list.
+    setLocalSettings(cloneDefaults());
     setDirty(true);
   }, []);
 
@@ -539,6 +541,18 @@ export default function Settings() {
 
         <div className="settings-subsection">
           <h5 className="settings-subsection-title">Behavior</h5>
+          <label className="settings-field">
+            <span className="settings-field-label">Trigger</span>
+            <select
+              className="settings-input"
+              value={localSettings.aiAutocomplete.triggerMode || 'auto'}
+              onChange={e => updateLocal('aiAutocomplete', 'triggerMode', e.target.value)}
+              disabled={!localSettings.aiAutocomplete.enabled}
+            >
+              <option value="auto">Automatic (as you type)</option>
+              <option value="manual">Manual (Ctrl/Cmd+Shift+Space)</option>
+            </select>
+          </label>
           <label className="settings-field settings-checkbox-field">
             <Toggle
               checked={localSettings.aiAutocomplete.multiline}
@@ -663,6 +677,61 @@ export default function Settings() {
             onChange={e => updateLocal('aiChat', 'maxHistory', Number(e.target.value))}
             disabled={!localSettings.aiChat.enabled}
           />
+        </label>
+      </div>
+    )},
+    { id: 'aiEdit', label: 'AI Edit', icon: FiZap, content: (
+      <div className="settings-section">
+        <h4 className="settings-section-title">Inline AI Edit</h4>
+        <p className="settings-section-desc">
+          Rewrite the selected code from a plain-language instruction with Ctrl/Cmd+K,
+          then review the diff before applying it.
+        </p>
+
+        <label className="settings-field settings-checkbox-field">
+          <Toggle
+            checked={localSettings.aiEdit.enabled}
+            onChange={v => updateLocal('aiEdit', 'enabled', v)}
+          />
+          <span className="settings-field-label">Enable Inline AI Edit</span>
+        </label>
+
+        <label className="settings-field">
+          <span className="settings-field-label">Ollama URL</span>
+          <input
+            type="text"
+            className="settings-input"
+            value={localSettings.aiEdit.ollamaUrl}
+            onChange={e => updateLocal('aiEdit', 'ollamaUrl', e.target.value)}
+            disabled={!localSettings.aiEdit.enabled}
+            placeholder="http://localhost:11434"
+          />
+        </label>
+
+        <label className="settings-field">
+          <span className="settings-field-label">Model</span>
+          <ModelSelect
+            value={localSettings.aiEdit.model}
+            onChange={v => updateLocal('aiEdit', 'model', v)}
+            disabled={!localSettings.aiEdit.enabled}
+          />
+        </label>
+
+        <label className="settings-field">
+          <span className="settings-field-label">Temperature</span>
+          <div className="settings-field-row">
+            <input
+              type="range"
+              className="settings-range"
+              min="0"
+              max="1"
+              step="0.05"
+              value={localSettings.aiEdit.temperature ?? 0.1}
+              onChange={e => updateLocal('aiEdit', 'temperature', Number(e.target.value))}
+              disabled={!localSettings.aiEdit.enabled}
+            />
+            <span className="settings-range-value">{localSettings.aiEdit.temperature ?? 0.1}</span>
+          </div>
         </label>
       </div>
     )},

@@ -1,6 +1,8 @@
 import { ollamaCompletion } from './ollama';
 import { buildFimPrompt, stripSentinels } from './fim';
 
+const EMPTY = { items: [] };
+
 let canceledHandlerAdded = false;
 function suppressMonacoCanceled() {
   if (canceledHandlerAdded) return;
@@ -10,10 +12,50 @@ function suppressMonacoCanceled() {
   });
 }
 
-let currentRequest = null;
 let currentSettings = null;
 let providerDisposable = null;
-let debounceTimer = null;
+let actionDisposable = null;
+
+/**
+ * The single in-flight suggestion attempt. Monaco calls the provider again on
+ * every keystroke, so a superseded attempt must be *settled* (not just cleared)
+ * or its promise hangs forever and Monaco keeps waiting on it.
+ */
+let inflight = null;
+
+function settleInflight() {
+  if (!inflight) return;
+  const previous = inflight;
+  inflight = null;
+  clearTimeout(previous.timer);
+  previous.cancelSub?.dispose();
+  previous.controller?.abort();
+  previous.resolve(EMPTY);
+}
+
+/* ------------------------------------------------------------------ status */
+
+const statusListeners = new Set();
+let status = 'idle';
+
+/** Subscribe to 'idle' | 'loading' | 'error'. Returns an unsubscribe function. */
+export function onAiStatusChange(listener) {
+  statusListeners.add(listener);
+  listener(status);
+  return () => statusListeners.delete(listener);
+}
+
+export function getAiStatus() {
+  return status;
+}
+
+function setStatus(next) {
+  if (status === next) return;
+  status = next;
+  for (const listener of statusListeners) listener(next);
+}
+
+/* ------------------------------------------------------------------- cache */
 
 const cache = new Map();
 
@@ -51,85 +93,138 @@ export function updateAiSettings(settings) {
   currentSettings = settings;
 }
 
+/* ----------------------------------------------------------------- context */
+
 /** Rough comment detection. Returns the delimiter when the cursor is inside a comment. */
 function commentDelimiterAt(model, position) {
   const line = model.getLineContent(position.lineNumber).slice(0, position.column - 1);
   const trimmed = line.trimStart();
   const delimiters = [
-    ['//', 'js', 'ts', 'c', 'cpp', 'java', 'go', 'rust', 'php', 'swift', 'kt', 'dart', 'scala'],
-    ['#', 'py', 'rb', 'r', 'sh', 'yaml', 'yml', 'toml'],
+    ['//', 'javascript', 'typescript', 'javascriptreact', 'typescriptreact', 'c', 'cpp', 'java', 'go', 'rust', 'php', 'swift', 'kotlin', 'dart', 'scala'],
+    ['#', 'python', 'ruby', 'r', 'shell', 'yaml', 'toml', 'dockerfile'],
     ['<!--', 'html', 'xml', 'vue'],
     ['/*', 'css', 'scss', 'less'],
-    ['*', 'md'],
-    ['--', 'sql'],
+    ['--', 'sql', 'lua', 'haskell'],
   ];
   const lang = model.getLanguageId();
   for (const [delim, ...langs] of delimiters) {
     if (langs.includes(lang) && trimmed.startsWith(delim)) return delim;
   }
-  if (line.includes('/*') && !line.slice(0, position.column - 1).split('*/').pop().includes('*/')) return '/*';
+  // Inside an unterminated block comment opened earlier on this line.
+  const lastOpen = line.lastIndexOf('/*');
+  if (lastOpen !== -1 && line.indexOf('*/', lastOpen) === -1) return '/*';
   return null;
 }
 
-function gatherContextFiles(editor, model) {
-  const setting = currentSettings?.aiAutocomplete?.useOpenFileContext;
-  if (!setting) return [];
+function gatherContextFiles(model) {
+  if (!currentSettings?.aiAutocomplete?.useOpenFileContext) return [];
   try {
     const all = typeof window.__getAllModelContents === 'function' ? (window.__getAllModelContents() || {}) : {};
     const entries = Object.entries(all);
     if (!entries.length) return [];
-    const currentPath = model?.uri?.path || '';
-    const currentDir = currentPath.slice(0, currentPath.lastIndexOf('/'));
-    const scored = entries.map(([name, content]) => {
-      let score = 0;
-      const nameDir = name.slice(0, name.lastIndexOf('/'));
-      if (nameDir === currentDir) score += 2;
-      if (nameDir.startsWith(currentDir)) score += 1;
-      if (nameDir) score += 0.5;
-      if (content && content.trim()) score += 0.5;
-      return { name, content, score };
-    }).filter(e => e.score > 0).sort((a, b) => b.score - a.score);
+
+    // model.uri is file:///<relative name>, matching the keys above.
+    const currentName = decodeURIComponent(model?.uri?.path || '').replace(/^\/+/, '');
+    const currentDir = currentName.slice(0, currentName.lastIndexOf('/'));
+
+    const scored = entries
+      // The current file already arrives as prefix/suffix; repeating it wastes context.
+      .filter(([name, content]) => name !== currentName && content && content.trim())
+      .map(([name, content]) => {
+        const nameDir = name.slice(0, name.lastIndexOf('/'));
+        let score = 1;
+        if (nameDir === currentDir) score += 2;
+        else if (currentDir && nameDir.startsWith(currentDir)) score += 1;
+        return { name, content, score };
+      })
+      .sort((a, b) => b.score - a.score);
+
     return scored.slice(0, 6).map(({ name, content }) => ({ name, content: String(content).slice(0, 4000) }));
   } catch {
     return [];
   }
 }
 
-function cleanCompletion(text, modelName) {
+/* ---------------------------------------------------------------- cleaning */
+
+export function cleanCompletion(text, modelName) {
   let cleaned = stripSentinels(text, modelName);
 
-  let lines = cleaned.split('\n');
-  lines = lines.map(l => l.trimEnd());
+  let lines = cleaned.split('\n').map(l => l.trimEnd());
   while (lines.length && lines[0].trim() === '') lines.shift();
   while (lines.length && lines[lines.length - 1].trim() === '') lines.pop();
 
+  // Small models like to append an English explanation after the code. Cut at
+  // the first run of two consecutive prose-looking lines.
   const isProseLine = (l) => {
     const t = l.trimStart();
-    return t.length > 50 && /^[A-Z][a-z]/.test(t) && !/[{}()[\];]/.test(l) && !/^(def |class |import |from |if |for |while |return |print\b)/.test(t);
+    return t.length > 50 && /^[A-Z][a-z]/.test(t) && !/[{}()[\];]/.test(l)
+      && !/^(def |class |import |from |if |for |while |return |print\b)/.test(t);
   };
-  for (let i = 1; i < lines.length; i++) {
-    if (isProseLine(lines[i]) && isProseLine(lines[Math.min(i + 1, lines.length - 1)])) {
+  for (let i = 1; i < lines.length - 1; i++) {
+    if (isProseLine(lines[i]) && isProseLine(lines[i + 1])) {
       lines = lines.slice(0, i);
       break;
     }
   }
 
   if (!currentSettings?.aiAutocomplete?.multiline) {
-    let single = lines[0] || '';
-    while (lines.length > 1 && lines[1] && !lines[1].trim()) {
-      lines.shift();
-    }
-    lines = [single];
+    lines = lines.length ? [lines[0]] : [];
   }
 
-  return lines.join('\n').trim();
+  // Only the trailing edge is safe to trim: leading indentation is meaningful.
+  return lines.join('\n').replace(/\s+$/, '');
 }
+
+/**
+ * Models frequently re-emit text that already sits after the cursor. Dropping
+ * the overlap keeps accepting a suggestion from duplicating that text.
+ */
+export function trimSuffixOverlap(completion, lineSuffix) {
+  const tail = lineSuffix.trim();
+  if (!tail) return completion;
+  const max = Math.min(completion.length, tail.length);
+  for (let len = max; len > 0; len--) {
+    if (completion.endsWith(tail.slice(0, len))) {
+      return completion.slice(0, completion.length - len);
+    }
+  }
+  return completion;
+}
+
+/**
+ * Builds the range the suggestion replaces.
+ *
+ * Replacing through end-of-line is only correct when nothing but whitespace
+ * follows the cursor; otherwise the accepted suggestion would delete real code.
+ */
+function buildRange(model, position, lineSuffix) {
+  const endColumn = lineSuffix.trim() === ''
+    ? model.getLineMaxColumn(position.lineNumber)
+    : position.column;
+  return {
+    startLineNumber: position.lineNumber,
+    startColumn: position.column,
+    endLineNumber: position.lineNumber,
+    endColumn,
+  };
+}
+
+function positionUnchanged(editor, position) {
+  const now = editor.getPosition();
+  return !!now && now.lineNumber === position.lineNumber && now.column === position.column;
+}
+
+/* --------------------------------------------------------------- provider */
 
 export function registerAiAutocomplete(editor, monaco, settings) {
   currentSettings = settings;
   suppressMonacoCanceled();
 
-  if (!settings?.aiAutocomplete?.enabled) return;
+  if (!settings?.aiAutocomplete?.enabled) {
+    setStatus('idle');
+    return;
+  }
 
   editor.updateOptions({ inlineSuggest: { enabled: true } });
 
@@ -138,32 +233,57 @@ export function registerAiAutocomplete(editor, monaco, settings) {
     {
       provideInlineCompletions: (model, position, context, token) => {
         const conf = currentSettings?.aiAutocomplete;
-        if (!conf?.enabled) return { items: [] };
+        if (!conf?.enabled) return EMPTY;
+
+        // In manual mode only an explicit trigger (Ctrl/Cmd+Shift+Space or the
+        // command palette entry) should reach the model.
+        const explicitKind = monaco.languages.InlineCompletionTriggerKind?.Explicit ?? 1;
+        const isExplicit = context?.triggerKind === explicitKind;
+        if (conf.triggerMode === 'manual' && !isExplicit) return EMPTY;
+
         const language = model.getLanguageId();
-        if (!language || language === 'plaintext') return { items: [] };
+        if (!language || language === 'plaintext') return EMPTY;
 
-        const lineContent = model.getLineContent(position.lineNumber).slice(0, position.column - 1).trim();
-        if (!lineContent) return { items: [] };
+        const fullLine = model.getLineContent(position.lineNumber);
+        const linePrefix = fullLine.slice(0, position.column - 1);
+        const lineSuffix = fullLine.slice(position.column - 1);
+        if (!linePrefix.trim() && !isExplicit) return EMPTY;
 
-        if (conf.skipInComments && commentDelimiterAt(model, position)) {
-          return { items: [] };
-        }
+        if (conf.skipInComments && commentDelimiterAt(model, position)) return EMPTY;
+
+        // Supersede whatever attempt was already running.
+        settleInflight();
 
         return new Promise((resolve) => {
           if (token.isCancellationRequested) {
-            resolve({ items: [] });
+            resolve(EMPTY);
             return;
           }
 
-          if (debounceTimer) clearTimeout(debounceTimer);
+          const controller = new AbortController();
+          const attempt = { resolve, controller, timer: null, cancelSub: null };
+          inflight = attempt;
 
-          const debounceMs = conf.debounceMs ?? 350;
-          debounceTimer = setTimeout(async () => {
-            if (token.isCancellationRequested) { resolve({ items: [] }); return; }
+          /** Settles this attempt exactly once and clears it from the slot. */
+          const finish = (result) => {
+            if (inflight === attempt) inflight = null;
+            clearTimeout(attempt.timer);
+            attempt.cancelSub?.dispose();
+            resolve(result);
+          };
 
-            if (currentRequest) currentRequest.abort();
-            const controller = new AbortController();
-            currentRequest = controller;
+          attempt.cancelSub = token.onCancellationRequested(() => {
+            controller.abort();
+            finish(EMPTY);
+          });
+
+          const debounceMs = isExplicit ? 0 : (conf.debounceMs ?? 350);
+
+          attempt.timer = setTimeout(async () => {
+            if (token.isCancellationRequested || inflight !== attempt) {
+              finish(EMPTY);
+              return;
+            }
 
             const text = model.getValue();
             const offset = model.getOffsetAt(position);
@@ -173,35 +293,33 @@ export function registerAiAutocomplete(editor, monaco, settings) {
             const suffix = text.slice(offset, offset + maxSuffix);
             const modelName = conf.model || 'qwen2.5-coder:1.5b';
 
-            const contextFiles = gatherContextFiles(editor, model);
-            const { prompt, stop } = buildFimPrompt({ model: modelName, prefix, suffix, contextFiles });
+            const emit = (completion) => {
+              const trimmed = trimSuffixOverlap(completion, lineSuffix);
+              if (!trimmed) {
+                finish(EMPTY);
+                return;
+              }
+              finish({
+                items: [{
+                  insertText: trimmed,
+                  range: buildRange(model, position, lineSuffix),
+                }],
+              });
+            };
 
             const cacheKey = `${modelName}|${hashString(prefix.slice(-600))}|${hashString(suffix.slice(0, 600))}|${language}`;
             const cached = lruGet(cacheKey);
             if (cached !== undefined) {
-              const currentPos = editor.getPosition();
-              if (currentPos && currentPos.lineNumber === position.lineNumber && currentPos.column === position.column) {
-                resolve({
-                  items: [{
-                    insertText: cached + '\n',
-                    range: {
-                      startLineNumber: position.lineNumber,
-                      startColumn: position.column,
-                      endLineNumber: position.lineNumber,
-                      endColumn: model.getLineMaxColumn(position.lineNumber),
-                    },
-                  }],
-                });
-                return;
-              }
+              if (positionUnchanged(editor, position)) emit(cached);
+              else finish(EMPTY);
+              return;
             }
 
-            const dispose = token.onCancellationRequested(() => {
-              controller.abort();
-              resolve({ items: [] });
-            });
-
+            setStatus('loading');
             try {
+              const contextFiles = gatherContextFiles(model);
+              const { prompt, stop } = buildFimPrompt({ model: modelName, prefix, suffix, contextFiles });
+
               const completion = await ollamaCompletion({
                 model: modelName,
                 prompt,
@@ -213,54 +331,41 @@ export function registerAiAutocomplete(editor, monaco, settings) {
                 timeout: conf.requestTimeoutMs ?? 12000,
               });
 
-              dispose.dispose();
+              setStatus('idle');
 
               if (!completion || controller.signal.aborted || token.isCancellationRequested) {
-                resolve({ items: [] }); return;
+                finish(EMPTY);
+                return;
               }
 
-              let cleaned = cleanCompletion(completion, modelName);
-              if (!cleaned) { resolve({ items: [] }); return; }
+              const cleaned = cleanCompletion(completion, modelName);
+              if (!cleaned) {
+                finish(EMPTY);
+                return;
+              }
 
               lruPut(cacheKey, cleaned);
 
-              const currentPos = editor.getPosition();
-              if (!currentPos || currentPos.lineNumber !== position.lineNumber || currentPos.column !== position.column) {
-                resolve({ items: [] }); return;
+              if (!positionUnchanged(editor, position)) {
+                finish(EMPTY);
+                return;
               }
-
-              resolve({
-                items: [{
-                  insertText: cleaned + '\n',
-                  range: {
-                    startLineNumber: position.lineNumber,
-                    startColumn: position.column,
-                    endLineNumber: position.lineNumber,
-                    endColumn: model.getLineMaxColumn(position.lineNumber),
-                  },
-                }],
-              });
+              emit(cleaned);
             } catch (err) {
-              dispose.dispose();
-              if (err?.name === 'AbortError') { resolve({ items: [] }); return; }
-              resolve({ items: [] });
+              // An aborted request is a normal supersede, not a failure.
+              setStatus(err?.name === 'AbortError' ? 'idle' : 'error');
+              finish(EMPTY);
             }
           }, debounceMs);
-
-          token.onCancellationRequested(() => {
-            clearTimeout(debounceTimer);
-            if (currentRequest) currentRequest.abort();
-            resolve({ items: [] });
-          });
         });
       },
       freeInlineCompletions: () => {},
     }
   );
 
-  editor.addAction({
+  actionDisposable = editor.addAction({
     id: 'codecast.aiAutocomplete',
-    label: 'AI Autocomplete (Ollama)',
+    label: 'AI: Trigger Inline Suggestion',
     keybindings: [
       monaco.KeyMod.CtrlCmd | monaco.KeyMod.Shift | monaco.KeyCode.Space,
     ],
@@ -273,8 +378,11 @@ export function registerAiAutocomplete(editor, monaco, settings) {
 }
 
 export function disposeAiAutocomplete() {
-  if (currentRequest) { currentRequest.abort(); currentRequest = null; }
-  if (debounceTimer) { clearTimeout(debounceTimer); debounceTimer = null; }
-  if (providerDisposable) { providerDisposable.dispose(); providerDisposable = null; }
+  settleInflight();
+  providerDisposable?.dispose();
+  providerDisposable = null;
+  actionDisposable?.dispose();
+  actionDisposable = null;
   cache.clear();
+  setStatus('idle');
 }

@@ -190,10 +190,14 @@ const FileTabs = memo(() => {
     window.__createNewFile = async () => {
       await handleAddTab();
     };
+    // Opening a file has to go through the tab handler so the tab strip and the
+    // recorder's file timeline stay in sync with the active file.
+    window.__openFileTab = handleTabClick;
     return () => {
       window.__createNewFile = undefined;
+      window.__openFileTab = undefined;
     };
-  }, [handleAddTab]);
+  }, [handleAddTab, handleTabClick]);
 
   const handleCloseTab = useCallback(async (e, name) => {
     e.stopPropagation();

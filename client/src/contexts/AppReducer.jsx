@@ -1,3 +1,14 @@
+/**
+ * Resolves a payload that may be a React-style updater function.
+ *
+ * Callers reach for `set(prev => !prev)` out of habit; without this the updater
+ * itself would be stored as the new state, which silently made the minimap and
+ * explorer toggles permanently "on".
+ */
+const resolve = (value, previous) => (typeof value === "function" ? value(previous) : value);
+
+const set = (state, key, action) => ({ ...state, [key]: resolve(action.payload.value, state[key]) });
+
 const defaultFunc = (state, action) => {
     switch (action.type) {
         case "START_RECORDING":
@@ -5,45 +16,45 @@ const defaultFunc = (state, action) => {
         case "STOP_RECORDING":
             return { ...state, recording: false, paused: false }
         case "SET_PAUSED":
-            return { ...state, paused: action.payload.value }
+            return set(state, "paused", action)
         case "SET_USER":
-            return { ...state, user: action.payload.value }
+            return set(state, "user", action)
         case "SET_RECORD_NAME":
-            return { ...state, recordName: action.payload.value }
+            return set(state, "recordName", action)
         case "SET_PLAYING":
-            return { ...state, playing: action.payload.value }
+            return set(state, "playing", action)
         case "SET_OUTPUT":
-            return { ...state, output: action.payload.value }
+            return set(state, "output", action)
         case "SET_TOAST":
-            return { ...state, toast: action.payload.value }
+            return set(state, "toast", action)
         case "SET_AUDIO_ENABLED":
-            return { ...state, audioEnabled: action.payload.value }
+            return set(state, "audioEnabled", action)
         case "SET_FONT_SIZE":
-            return { ...state, fontSize: action.payload.value }
+            return set(state, "fontSize", action)
         case "SET_SHOW_MINIMAP":
-            return { ...state, showMinimap: action.payload.value }
+            return set(state, "showMinimap", action)
         case "SET_ACTIVE_FILE":
-            return { ...state, activeFile: action.payload.value }
+            return set(state, "activeFile", action)
         case "SET_PREVIEW_FILE":
-            return { ...state, previewFile: action.payload.value }
+            return set(state, "previewFile", action)
         case "SET_FILES":
-            return { ...state, files: action.payload.value }
+            return set(state, "files", action)
         case "SET_SIDEBAR_OPEN":
-            return { ...state, sidebarOpen: action.payload.value }
+            return set(state, "sidebarOpen", action)
         case "SET_CURRENT_WORKSPACE":
-            return { ...state, currentWorkspace: action.payload.value }
+            return set(state, "currentWorkspace", action)
         case "SET_CURRENT_RECORD":
-            return { ...state, currentRecord: action.payload.value }
+            return set(state, "currentRecord", action)
         case "SET_AUTOSAVE":
-            return { ...state, autoSave: action.payload.value }
+            return set(state, "autoSave", action)
         case "SET_THEME":
-            return { ...state, theme: action.payload.value }
+            return set(state, "theme", action)
         case "SET_DIRTY_FILES":
-            return { ...state, dirtyFiles: action.payload.value }
+            return set(state, "dirtyFiles", action)
         case "SET_SETTINGS":
-            return { ...state, settings: action.payload.value }
+            return set(state, "settings", action)
         case "SET_SETTINGS_OPEN":
-            return { ...state, settingsOpen: action.payload.value }
+            return set(state, "settingsOpen", action)
         default:
             return state
     }

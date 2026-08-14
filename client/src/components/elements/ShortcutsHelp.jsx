@@ -4,11 +4,13 @@ import {
   FiX, FiTerminal, FiCircle, FiPlay, FiFolder, FiSkipBack, FiHelpCircle, FiSave,
   FiScissors, FiCopy, FiClipboard, FiList, FiCornerUpLeft, FiCornerUpRight,
   FiSearch, FiArrowUp, FiArrowDown, FiCrosshair, FiCode, FiMove,
+  FiCommand, FiZap, FiCpu,
 } from "react-icons/fi";
 
 const shortcuts = [
   // General
   { group: "General" },
+  { keys: "Ctrl+Shift+P", desc: "Command palette", icon: FiCommand },
   { keys: "Ctrl+S", desc: "Save current file", icon: FiSave },
   { keys: "Ctrl+Enter", desc: "Execute code", icon: FiTerminal },
   { keys: "Ctrl+R", desc: "Start / Stop recording", icon: FiCircle },
@@ -38,6 +40,12 @@ const shortcuts = [
   { keys: "Ctrl+Alt+↑", desc: "Add cursor above", icon: FiArrowUp },
   { keys: "Ctrl+Alt+↓", desc: "Add cursor below", icon: FiArrowDown },
 
+  // AI
+  { group: "AI" },
+  { keys: "Ctrl+K", desc: "Edit selection with AI", icon: FiZap },
+  { keys: "Ctrl+Shift+Space", desc: "Trigger inline AI suggestion", icon: FiCpu },
+  { keys: "Tab", desc: "Accept inline AI suggestion", icon: FiCpu },
+
   // Code actions
   { group: "Code" },
   { keys: "Ctrl+G", desc: "Go to line", icon: FiCode },
@@ -46,6 +54,11 @@ const shortcuts = [
   { keys: "Shift+Alt+↓", desc: "Duplicate line down", icon: FiCopy },
   { keys: "Shift+Alt+↑", desc: "Duplicate line up", icon: FiCopy },
 ];
+
+/** The shortcuts are authored with Ctrl; macOS binds the same actions to Cmd. */
+function displayKeys(keys) {
+  return window.electronAPI?.platform === 'darwin' ? keys.replace(/Ctrl/g, 'Cmd') : keys;
+}
 
 const ShortcutsHelp = memo(({ display, setDisplay }) => {
   const ref = useRef(null);
@@ -100,7 +113,7 @@ const ShortcutsHelp = memo(({ display, setDisplay }) => {
             const { keys, desc, icon: Icon } = item;
             return (
               <div key={keys} className="shortcut-row">
-                <kbd className="shortcut-keys">{keys}</kbd>
+                <kbd className="shortcut-keys">{displayKeys(keys)}</kbd>
                 <span className="shortcut-desc"><Icon size={13} /> {desc}</span>
               </div>
             );
