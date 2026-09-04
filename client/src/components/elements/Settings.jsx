@@ -4,7 +4,8 @@ import { GlobalContext } from '../../contexts/GlobalStates';
 import { useMode, MODES } from '../../contexts/ModeContext';
 import { saveSettings as persistSettings, cloneDefaults } from '../../constants/settings';
 import { getAvailableFormatters } from '../../services/formatter';
-import { FiX, FiEdit3, FiCode, FiTerminal, FiSave, FiGitCommit, FiCpu, FiMessageSquare, FiZap } from 'react-icons/fi';
+import { FiX, FiEdit3, FiCode, FiTerminal, FiSave, FiGitCommit, FiCpu, FiMessageSquare, FiZap, FiServer } from 'react-icons/fi';
+import ServerSettings from './ServerSettings';
 import axios from 'axios';
 
 const Toggle = ({ checked, onChange, disabled }) => (
@@ -61,7 +62,7 @@ export default function Settings() {
 
   useEffect(() => {
     if (mode === MODES.ONLINE) {
-      axios.get('/index/settings', { withCredentials: true })
+      axios.get('index/settings', { withCredentials: true })
         .then(res => {
           if (res.data?.settings) {
             setSettings(prev => {
@@ -108,7 +109,7 @@ export default function Settings() {
       persistSettings(localSettings);
     } else {
       try {
-        await axios.post('/index/settings', localSettings, { withCredentials: true });
+        await axios.post('index/settings', localSettings, { withCredentials: true });
       } catch (err) {
         console.warn('Failed to save settings to server:', err);
       }
@@ -816,6 +817,11 @@ export default function Settings() {
             disabled={!localSettings.terminalAI.enabled}
           />
         </label>
+      </div>
+    )},
+    { id: 'server', label: 'Server', icon: FiServer, content: (
+      <div className="settings-section">
+        <ServerSettings />
       </div>
     )},
   ];

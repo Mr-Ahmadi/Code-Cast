@@ -1,6 +1,8 @@
 import axios from "axios";
 import checkEmail from "../validation/checkEmail";
 import checkPassword from "../validation/checkPassword";
+import { setAuthToken } from "../../services/serverConfig";
+import describeRequestError from "./describeRequestError";
 
 const signIn = async (values, setMessage, navigate) => {
   setMessage(["LOADING", null]);
@@ -27,15 +29,18 @@ const signIn = async (values, setMessage, navigate) => {
 
     axios
       .request(config)
-      .then(({ data: { message }, status }) => {
+      .then(({ data: { message, token }, status }) => {
         if (status === 200) {
+          // Held client-side so a remote endpoint, whose cookie this origin
+          // cannot read, still authenticates.
+          if (token) setAuthToken(token);
           navigate("/", { state: { message: ["SUCCESS", message] } });
         } else {
           setMessage(["ERROR", message]);
         }
       })
       .catch((err) => {
-        setMessage(["ERROR", err.message]);
+        setMessage(["ERROR", describeRequestError(err)]);
       });
   }
 };

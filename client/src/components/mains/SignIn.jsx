@@ -2,13 +2,14 @@ import useForm from "../../hooks/useForm";
 import { Link, useNavigate } from "react-router-dom";
 import signIn from "../../functions/requests/signIn";
 import { useMode, MODES } from "../../contexts/ModeContext";
+import AuthShell from "../elements/AuthShell";
+import { FiMonitor } from "react-icons/fi";
 
 const SignIn = () => {
     const {
         values, message,
         handleChange,
         handleSubmit,
-        handleReset,
     } = useForm({
         email: "",
         password: "",
@@ -17,6 +18,7 @@ const SignIn = () => {
     const msgType = message[0] === "ERROR" ? "error" : message[0] === "SUCCESS" ? "success" : message[0] === "LOADING" ? "loading" : null;
     const { setMode } = useMode();
     const navigate = useNavigate();
+    const loading = message[0] === "LOADING";
 
     const handleOffline = () => {
         setMode(MODES.LOCAL);
@@ -24,9 +26,23 @@ const SignIn = () => {
     };
 
     return (
-        <div className="partial-container">
-            <h2 className="partial-title">Sign In</h2>
-            <form onSubmit={handleSubmit} onReset={handleReset}>
+        <AuthShell
+            title="Welcome back"
+            subtitle="Sign in to reach your projects and recordings."
+            footer={
+                <>
+                    <div className="offline-divider"><span>or</span></div>
+                    <button className="btn btn-full auth-offline-btn" onClick={handleOffline}>
+                        <FiMonitor size={14} />
+                        Continue offline
+                    </button>
+                    <p className="auth-alt">
+                        New here? <Link to="/signup">Create an account</Link>
+                    </p>
+                </>
+            }
+        >
+            <form onSubmit={handleSubmit}>
                 <div className="form-group">
                     <label htmlFor="email">Email</label>
                     <input
@@ -37,6 +53,7 @@ const SignIn = () => {
                         value={values.email}
                         onChange={handleChange}
                         autoComplete="email"
+                        autoFocus
                         required
                         aria-required="true"
                     />
@@ -60,29 +77,15 @@ const SignIn = () => {
                         {message[1]}
                     </span>
                 )}
-                <div className="bottom-row">
-                    <div>
-                        <Link to="/signup">Create account</Link>
-                    </div>
-                    <div>
-                        <input className="btn btn-sm"
-                            type="reset" value="Clear"
-                            disabled={message[0] === "LOADING"}
-                        />
-                        <input className={"btn btn-primary btn-sm" + (message[0] === "LOADING" ? " btn-loading" : "")}
-                            type="submit" value="Sign In"
-                            disabled={message[0] === "LOADING"}
-                        />
-                    </div>
-                </div>
+                <button
+                    className={"btn btn-primary btn-full" + (loading ? " btn-loading" : "")}
+                    type="submit"
+                    disabled={loading}
+                >
+                    Sign in
+                </button>
             </form>
-            <div className="offline-divider">
-                <span>or</span>
-            </div>
-            <button className="btn btn-primary btn-full" onClick={handleOffline}>
-                Continue Offline
-            </button>
-        </div>
+        </AuthShell>
     );
 };
 

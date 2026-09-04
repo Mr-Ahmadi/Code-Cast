@@ -1,23 +1,38 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-label="Code Cast">
   <defs>
-    <linearGradient id="bg" x1="0.2" y1="0" x2="0.8" y2="1">
-      <stop offset="0%" stop-color="#C95F5D"/>
-      <stop offset="100%" stop-color="#A94442"/>
+    <linearGradient id="cc-bg" x1="0.15" y1="0" x2="0.85" y2="1">
+      <stop offset="0%" stop-color="#C8615E"/>
+      <stop offset="48%" stop-color="#A84341"/>
+      <stop offset="100%" stop-color="#7E2B29"/>
     </linearGradient>
-    <linearGradient id="highlight" x1="0" y1="0" x2="0" y2="0.55">
-      <stop offset="0%" stop-color="rgba(255,255,255,0.14)"/>
-      <stop offset="55%" stop-color="rgba(255,255,255,0)"/>
+    <linearGradient id="cc-sheen" x1="0" y1="0" x2="0.3" y2="0.9">
+      <stop offset="0%" stop-color="#ffffff" stop-opacity="0.16"/>
+      <stop offset="60%" stop-color="#ffffff" stop-opacity="0"/>
     </linearGradient>
-    <linearGradient id="shadow" x1="0" y1="0.5" x2="0" y2="1">
-      <stop offset="50%" stop-color="rgba(0,0,0,0)"/>
-      <stop offset="100%" stop-color="rgba(0,0,0,0.18)"/>
+    <linearGradient id="cc-edge" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#ffffff" stop-opacity="0.28"/>
+      <stop offset="55%" stop-color="#ffffff" stop-opacity="0.05"/>
+      <stop offset="100%" stop-color="#000000" stop-opacity="0.20"/>
     </linearGradient>
   </defs>
-  <rect x="53" y="53" width="406" height="406" rx="90" fill="url(#bg)"/>
-  <rect x="53" y="71" width="406" height="222" rx="90" fill="url(#highlight)"/>
-  <rect x="53" y="239" width="406" height="220" rx="90" fill="url(#shadow)"/>
-  <g fill="none" stroke-linecap="round" stroke-linejoin="round">
-    <path d="M 190 168 L 318 256 L 190 344" stroke="#ffffff" stroke-width="36" opacity="0.90"/>
-    <line x1="348" y1="336" x2="392" y2="336" stroke="#46B188" stroke-width="20" stroke-linecap="round" opacity="0.92"/>
-  </g>
+
+  <!-- Squircle body -->
+  <rect x="48" y="48" width="416" height="416" rx="104" fill="url(#cc-bg)"/>
+  <rect x="48" y="48" width="416" height="416" rx="104" fill="url(#cc-sheen)"/>
+  <rect x="49.25" y="49.25" width="413.5" height="413.5" rx="102.75"
+        fill="none" stroke="url(#cc-edge)" stroke-width="2.5"/>
+
+  <!-- Code chevron -->
+  <path d="M 154 178 L 218 256 L 154 334"
+        fill="none" stroke="#ffffff" stroke-width="34"
+        stroke-linecap="round" stroke-linejoin="round"/>
+
+  <!-- Record dot, with broadcast arcs radiating from it -->
+  <circle cx="274" cy="256" r="22" fill="#ffffff"/>
+  <path d="M 305.8 205.1 A 60 60 0 0 1 305.8 306.9"
+        fill="none" stroke="#ffffff" stroke-width="18"
+        stroke-linecap="round" opacity="0.78"/>
+  <path d="M 327 171.2 A 100 100 0 0 1 327 340.8"
+        fill="none" stroke="#ffffff" stroke-width="16"
+        stroke-linecap="round" opacity="0.42"/>
 </svg>

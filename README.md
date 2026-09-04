@@ -22,6 +22,7 @@ Record and replay code typing sessions with synchronized audio. Capture keystrok
 - **AI chat** — streaming assistant with quick actions (explain, improve, find bugs, write tests) that can insert code back into the editor
 - **Command palette** — `Ctrl+Shift+P` for fuzzy-searchable commands, `@` to jump to an open file
 - **Explain panel** — AI-powered code explanation (online mode)
+- **Configurable server endpoint** — point the app at any Code Cast server from the sign-in screen or **Settings → Server**, with a connection test that distinguishes "unreachable", "not a Code Cast server" and "reachable but its database is down"
 - **Two modes**:
   - **Online** — server-backed with PostgreSQL, JWT auth, cloud storage
   - **Local** — fully offline via Electron with filesystem persistence (or IndexedDB in browser)
@@ -77,6 +78,27 @@ npm run electron:build  # produces DMG (macOS), NSIS (Windows), AppImage (Linux)
 7. Click **Open** (or `Ctrl+O`) to browse recordings, then select one and press **Play** (or `Ctrl+P`)
 8. Use **Export** to download a `.cvid` file, **Import** to load one
 9. Toggle the terminal with `` Ctrl+` `` to run shell commands
+
+## Choosing a Server
+
+Online mode talks to a Code Cast server. The address is configurable, so the
+desktop app and a browser tab can point at a shared instance rather than only
+`localhost`.
+
+- **Sign-in screen** — expand **Server** at the bottom of the card.
+- **In the app** — **Settings → Server**.
+- **When a connection fails** — the "Can't reach the server" screen offers the
+  same editor inline, since Settings is unreachable while signed out.
+
+Leave the field empty to use the origin the app is served from (in development
+this means the Vite proxy). A bare `host:port` is accepted and gets an `http://`
+scheme added. **Test connection** probes `GET /health` and reports what it
+found; the endpoint is stored per browser/profile in `localStorage`.
+
+Because a cookie set by a server on another origin is not readable by the
+client, sign-in also returns the JWT in the response body. The client stores it
+and sends it as an `Authorization: Bearer` header, which is what makes a remote
+endpoint work; the cookie path still works unchanged for same-origin setups.
 
 ## Project Structure
 
@@ -162,11 +184,14 @@ The command palette also accepts `@` to jump to an open file.
 | `DB_PASSWORD`  | Database password          | `codecast_pass`            |
 | `BASE_URL`     | Server base URL            | `http://localhost:4000`    |
 | `JWT_SECRET`   | JWT signing secret         | _(change to random value)_ |
+| `PORT`         | Port to listen on          | `4000`                     |
+| `HOST`         | Interface to bind          | `0.0.0.0`                  |
 
 ## API Overview
 
 | Method | Endpoint              | Description              |
 |--------|-----------------------|--------------------------|
+| GET    | `/health`             | Unauthenticated liveness + database status |
 | POST   | `/user/signup`        | Create an account        |
 | POST   | `/user/signin`        | Log in                   |
 | GET    | `/user/signout`       | Log out                  |

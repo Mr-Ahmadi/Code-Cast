@@ -6,6 +6,7 @@ import { GlobalContext } from '../../contexts/GlobalStates';
 import { useMode, MODES } from '../../contexts/ModeContext';
 import TerminalAI from './TerminalAI';
 import PropTypes from "prop-types";
+import { wsUrl, getAuthToken } from '../../services/serverConfig';
 
 export default function TerminalPanel({ visible, terminalId }) {
   const terminalRef = useRef(null);
@@ -245,19 +246,19 @@ export default function TerminalPanel({ visible, terminalId }) {
       }
     } else if (!isLocal) {
       term.write('\x1b[2m[Terminal] Mode: Online (Server)\x1b[0m\r\n');
-      const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-      const host = window.location.host;
       const getCookie = (name) => {
         const match = document.cookie.match(new RegExp(`(^| )${name}=([^;]+)`));
         return match ? match[2] : '';
       };
-      const token = getCookie('jwt');
-      const wsUrl = `${protocol}//${host}/terminal${token ? `?token=${encodeURIComponent(token)}` : ''}`;
-      
-      term.write(`\x1b[2m[Terminal] Connecting to ${wsUrl}...\x1b[0m\r\n`);
-      
+      // Prefer the stored token: against a remote endpoint the cookie belongs
+      // to the server's origin and is not readable here.
+      const token = getAuthToken() || getCookie('jwt');
+      const endpoint = wsUrl(`terminal${token ? `?token=${encodeURIComponent(token)}` : ''}`);
+
+      term.write(`\x1b[2m[Terminal] Connecting to ${endpoint.replace(/\?token=.*$/, '')}...\x1b[0m\r\n`);
+
       try {
-        const ws = new WebSocket(wsUrl);
+        const ws = new WebSocket(endpoint);
         resizeTransportRef.current = (cols, rows) => {
           if (ws.readyState === WebSocket.OPEN) {
             ws.send(JSON.stringify({ type: "resize", cols, rows }));

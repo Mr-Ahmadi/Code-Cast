@@ -82,7 +82,10 @@ router.post("/signin", async (req, res) => {
       withCredentials: true,
       maxAge: 3 * 24 * 60 * 60 * 1000,
     });
-    res.status(200).json({ message: "Sign in successful" });
+    // The token also travels in the body so a client pointed at a remote
+    // endpoint can authenticate with a bearer header, where a cookie set for
+    // the server's origin is invisible to it.
+    res.status(200).json({ message: "Sign in successful", token });
   } catch (err) {
     if (err.message === "Incurrect email/password") {
       res.status(400).json({ message: "Incurrect email/password" });

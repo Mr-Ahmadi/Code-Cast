@@ -1,6 +1,7 @@
 import axios from "axios";
 import checkEmail from "../validation/checkEmail";
 import checkPassword from "../validation/checkPassword";
+import describeRequestError from "./describeRequestError";
 
 const signUp = async (values, setMessage, navigate) => {
   setMessage(["LOADING", null]);
@@ -40,7 +41,7 @@ const signUp = async (values, setMessage, navigate) => {
         }
       })
       .catch((err) => {
-        setMessage(["ERROR", err.message]);
+        setMessage(["ERROR", describeRequestError(err)]);
       });
   }
 };

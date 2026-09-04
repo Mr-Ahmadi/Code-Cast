@@ -75,8 +75,13 @@ const StatusBar = memo(() => {
 
   useEffect(() => onAiStatusChange(setAiStatus), []);
 
+  const barClass =
+    'status-bar'
+    + (recording ? ' is-recording' : '')
+    + (!recording && playing ? ' is-playing' : '');
+
   return (
-    <div className="status-bar" role="status" aria-label="Status Bar">
+    <div className={barClass} role="status" aria-label="Status Bar">
       <div className="status-bar-left">
         {isLocal ? (
           <span className="status-item status-item-interactive">
@@ -93,13 +98,13 @@ const StatusBar = memo(() => {
           <span className="status-item status-item-interactive">{currentWorkspace.name}</span>
         )}
         {recording && (
-          <span className="status-item" style={{ backgroundColor: 'rgba(255, 255, 255, 0.15)' }}>
+          <span className="status-item status-item-state">
             <span className="recording-dot" style={{ display: "inline-block", marginRight: 6 }} />
             Recording
           </span>
         )}
         {playing && (
-          <span className="status-item" style={{ backgroundColor: 'rgba(255, 255, 255, 0.15)' }}>
+          <span className="status-item status-item-state">
             <span className="playing-dot" style={{ display: "inline-block", marginRight: 6 }} />
             Playing
           </span>

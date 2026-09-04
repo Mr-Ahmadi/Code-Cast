@@ -1,6 +1,7 @@
 import { Link } from "react-router-dom";
 import useForm from "../../hooks/useForm";
 import signUp from "../../functions/requests/signUp";
+import AuthShell from "../elements/AuthShell";
 import { FiInfo } from "react-icons/fi";
 
 const SignUp = () => {
@@ -8,7 +9,6 @@ const SignUp = () => {
         values, message,
         handleChange,
         handleSubmit,
-        handleReset,
     } = useForm({
         email: "",
         password: "",
@@ -16,11 +16,19 @@ const SignUp = () => {
     }, signUp);
 
     const msgType = message[0] === "ERROR" ? "error" : message[0] === "SUCCESS" ? "success" : message[0] === "LOADING" ? "loading" : null;
+    const loading = message[0] === "LOADING";
 
     return (
-        <div className="partial-container">
-            <h2 className="partial-title">Sign Up</h2>
-            <form onSubmit={handleSubmit} onReset={handleReset}>
+        <AuthShell
+            title="Create an account"
+            subtitle="Store your projects and recordings on your Code Cast server."
+            footer={
+                <p className="auth-alt">
+                    Already have an account? <Link to="/signin">Sign in</Link>
+                </p>
+            }
+        >
+            <form onSubmit={handleSubmit}>
                 <div className="form-group">
                     <label htmlFor="email">Email</label>
                     <input
@@ -31,6 +39,7 @@ const SignUp = () => {
                         value={values.email}
                         onChange={handleChange}
                         autoComplete="email"
+                        autoFocus
                         required
                         aria-required="true"
                     />
@@ -47,14 +56,15 @@ const SignUp = () => {
                         autoComplete="new-password"
                         required
                         aria-required="true"
+                        aria-describedby="password-hint"
                     />
-                    <small style={{ color: 'var(--text-muted)', fontSize: '11px', display: 'block', marginTop: '4px' }}>
-                        <FiInfo size={10} style={{ verticalAlign: 'middle', marginRight: 2 }} />
-                        8+ characters, upper + lower + number
+                    <small id="password-hint" className="form-hint">
+                        <FiInfo size={11} />
+                        8+ characters, with upper case, lower case and a number
                     </small>
                 </div>
                 <div className="form-group">
-                    <label htmlFor="repeatPassword">Repeat Password</label>
+                    <label htmlFor="repeatPassword">Repeat password</label>
                     <input
                         className="text-input full-width"
                         type="password"
@@ -72,23 +82,15 @@ const SignUp = () => {
                         {message[1]}
                     </span>
                 )}
-                <div className="bottom-row">
-                    <div>
-                        <Link to="/signin">Already have an account?</Link>
-                    </div>
-                    <div>
-                        <input className="btn btn-sm"
-                            type="reset" value="Clear"
-                            disabled={message[0] === "LOADING"}
-                        />
-                        <input className={"btn btn-primary btn-sm" + (message[0] === "LOADING" ? " btn-loading" : "")}
-                            type="submit" value="Sign Up"
-                            disabled={message[0] === "LOADING"}
-                        />
-                    </div>
-                </div>
+                <button
+                    className={"btn btn-primary btn-full" + (loading ? " btn-loading" : "")}
+                    type="submit"
+                    disabled={loading}
+                >
+                    Create account
+                </button>
             </form>
-        </div>
+        </AuthShell>
     );
 };
 

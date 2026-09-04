@@ -1,4 +1,4 @@
-import { useRef, useContext, useEffect, useCallback, useState } from 'react';
+import { useRef, useContext, useEffect, useCallback, useState, lazy, Suspense } from 'react';
 import Editor from '../elements/Editor';
 import Output from '../elements/Output';
 import Top from '../elements/TopBar';
@@ -9,7 +9,6 @@ import FileTabs from '../elements/FileTabs';
 import FileTree from '../elements/FileTree';
 import GitPanel from '../elements/GitPanel';
 import ShortcutsHelp from '../elements/ShortcutsHelp';
-import TerminalPanel from '../elements/Terminal';
 import ExplainPanel from '../elements/ExplainPanel';
 import AiChat from '../elements/AiChat';
 import LocalSetupPrompt from '../elements/LocalSetupPrompt';
@@ -17,6 +16,10 @@ import ActivityBar from '../elements/ActivityBar';
 import StatusBar from '../elements/StatusBar';
 import Settings from '../elements/Settings';
 import CommandPalette from '../elements/CommandPalette';
+
+// xterm is a large dependency and the terminal starts hidden, so it is kept
+// out of the initial payload and fetched when a bottom panel first opens.
+const TerminalPanel = lazy(() => import('../elements/Terminal'));
 import { GlobalContext } from '../../contexts/GlobalStates';
 import { getFiles, exportRecord, isTypistLoaded, importFromFile, stopPlay } from "../../functions/record";
 import { useMode, MODES } from '../../contexts/ModeContext';
@@ -176,11 +179,21 @@ export default function App() {
         return () => unsub();
     }, [dirtyFiles]);
 
+    // Typist has no change notification, so the file list is polled. getFiles()
+    // allocates a fresh array of fresh objects every call, which would push a
+    // new context value — and re-render every consumer — twice a second even
+    // when nothing changed. Compare first and only dispatch on a real change.
     useEffect(() => {
+        let previousSignature = null;
+
         const syncFiles = () => {
             const files = getFiles();
+            const signature = files.map(f => `${f.name}\u0000${f.language}`).join('\u0001');
+            if (signature === previousSignature) return;
+            previousSignature = signature;
             setFiles(files);
         };
+
         syncFiles();
         const interval = setInterval(syncFiles, 500);
         return () => clearInterval(interval);
@@ -362,9 +375,6 @@ export default function App() {
     }, [handleKeyDown]);
 
     const hasBottomContent = output || terminalVisible || activePanel === 'explain' || activePanel === 'chat';
-    const explorerContext = currentRecord
-        ? "Record Snapshot"
-        : currentWorkspace?.name || "No Project";
     const explorerMode = currentRecord ? "RECORDED FILES" : "WORKSPACE FILES";
     const activeTerminal = terminals.find(t => t.id === activeTerminalId) || terminals[0];
 
@@ -639,11 +649,11 @@ export default function App() {
                             <div className="sidebar-header">
                                 <div className="sidebar-title-row">
                                     <span className="sidebar-title">Explorer</span>
-                                    <span className="sidebar-mode-badge">{explorerMode}</span>
+                                    {currentRecord && (
+                                        <span className="sidebar-mode-badge">{explorerMode}</span>
+                                    )}
                                 </div>
-                                <span className="sidebar-context" title={explorerContext}>{explorerContext}</span>
                             </div>
-                            <div className="sidebar-section-title">Files</div>
                             <div className="sidebar-content">
                                 <FileTree />
                             </div>
@@ -743,13 +753,18 @@ export default function App() {
                                 </div>
                                 <div className="panel-body" style={{ display: activePanel === 'terminal' ? 'flex' : 'none' }}>
                                     <div className="terminal-stack">
-                                        {terminals.map((terminal) => (
-                                            <TerminalPanel
-                                                key={terminal.id}
-                                                visible={activePanel === 'terminal' && terminalVisible && terminal.id === activeTerminalId}
-                                                terminalId={terminal.id}
-                                            />
-                                        ))}
+                                        {/* Its own boundary: suspending here must not unmount the
+                                            other panels, and once loaded the terminals stay alive
+                                            across tab switches so their sessions persist. */}
+                                        <Suspense fallback={<div className="terminal-loading">Starting terminal…</div>}>
+                                            {terminals.map((terminal) => (
+                                                <TerminalPanel
+                                                    key={terminal.id}
+                                                    visible={activePanel === 'terminal' && terminalVisible && terminal.id === activeTerminalId}
+                                                    terminalId={terminal.id}
+                                                />
+                                            ))}
+                                        </Suspense>
                                     </div>
                                 </div>
                                 <div className="panel-body" style={{ display: activePanel === 'explain' ? 'flex' : 'none' }}>

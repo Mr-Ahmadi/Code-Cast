@@ -1,8 +1,11 @@
 import axios from "axios";
 import cookies from "js-cookie";
+import { getAuthToken, clearAuthToken } from "../../services/serverConfig";
 
 const checkAuth = async (setAuth, setUser) => {
-  if (cookies.get("jwt")) {
+  // Either credential is enough: a cookie when the API shares this origin, a
+  // stored bearer token when it does not.
+  if (cookies.get("jwt") || getAuthToken()) {
     let config = {
       method: "get",
       url: "user/checkAuth",
@@ -19,10 +22,14 @@ const checkAuth = async (setAuth, setUser) => {
           setAuth(false);
         }
       })
-      .catch(({ response: { status } }) => {
+      .catch((err) => {
+        const status = err?.response?.status;
         if (status === 401) {
+          clearAuthToken();
           setAuth(false);
         } else {
+          // No response at all means the endpoint is unreachable, which is a
+          // connection problem rather than a rejected credential.
           setAuth(undefined);
         }
       });
