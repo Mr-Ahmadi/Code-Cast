@@ -1,4 +1,4 @@
-import { resolveProvider, complete, chat, isAbortError, stripCodeFences, stripThinking } from './llm';
+import { resolveProvider, complete, chat, isAbortError, stripThinking } from './llm';
 import { buildFimPrompt, stripSentinels, supportsFim } from './fim';
 
 const EMPTY = { items: [] };
@@ -121,6 +121,11 @@ function commentDelimiterAt(model, position) {
   return null;
 }
 
+/** model.uri is file:///<relative name>, matching the keys of __getAllModelContents. */
+function fileNameOf(model) {
+  return decodeURIComponent(model?.uri?.path || '').replace(/^\/+/, '');
+}
+
 function gatherContextFiles(model) {
   if (!currentSettings?.aiAutocomplete?.useOpenFileContext) return [];
   try {
@@ -128,8 +133,7 @@ function gatherContextFiles(model) {
     const entries = Object.entries(all);
     if (!entries.length) return [];
 
-    // model.uri is file:///<relative name>, matching the keys above.
-    const currentName = decodeURIComponent(model?.uri?.path || '').replace(/^\/+/, '');
+    const currentName = fileNameOf(model);
     const currentDir = currentName.slice(0, currentName.lastIndexOf('/'));
 
     const scored = entries
@@ -152,33 +156,214 @@ function gatherContextFiles(model) {
 
 /* ---------------------------------------------------------------- cleaning */
 
-export function cleanCompletion(text, modelName) {
-  let cleaned = stripSentinels(text, modelName);
+/** Languages where natural-language lines are the content, not a failure. */
+const PROSE_LANGUAGES = new Set(['markdown', 'mdx', 'plaintext', 'restructuredtext', 'latex', 'tex', 'asciidoc']);
 
-  let lines = cleaned.split('\n').map(l => l.trimEnd());
-  while (lines.length && lines[0].trim() === '') lines.shift();
-  while (lines.length && lines[lines.length - 1].trim() === '') lines.pop();
+/** Languages with free text between tags, where only unmistakable chatter is cut. */
+const MARKUP_LANGUAGES = new Set(['html', 'xml', 'vue', 'svelte', 'php', 'javascriptreact', 'typescriptreact', 'handlebars', 'razor']);
 
-  // Small models like to append an English explanation after the code. Cut at
-  // the first run of two consecutive prose-looking lines.
-  const isProseLine = (l) => {
-    const t = l.trimStart();
-    return t.length > 50 && /^[A-Z][a-z]/.test(t) && !/[{}()[\];]/.test(l)
-      && !/^(def |class |import |from |if |for |while |return |print\b)/.test(t);
-  };
-  for (let i = 1; i < lines.length - 1; i++) {
-    if (isProseLine(lines[i]) && isProseLine(lines[i + 1])) {
-      lines = lines.slice(0, i);
-      break;
+const HASH_COMMENT_LANGUAGES = new Set(['python', 'ruby', 'r', 'shell', 'yaml', 'toml', 'dockerfile', 'perl', 'powershell', 'makefile', 'elixir', 'julia', 'coffeescript']);
+
+/** Openers of the explanations models append after (or put before) the code. */
+const EXPLANATION_START = /^(?:explanation|notes?|output|usage|example usage|how it works|this (?:code|function|method|snippet|completion|will|adds|implements|creates|returns|defines)|in this (?:code|example|snippet)|the (?:above|code|function|completion)|here(?:'s| is| are)|i(?:'ve| have| added)|let me|sure|certainly)\b/i;
+
+function isCommentLine(trimmed, language) {
+  // A bare `*` continues a block comment; `**Bold**` is markdown, not a comment.
+  if (/^(\/\/|\/\*|\*(?:\s|\/|$)|<!--|-->)/.test(trimmed)) return true;
+  if (trimmed.startsWith('--') && ['sql', 'lua', 'haskell'].includes(language)) return true;
+  return trimmed.startsWith('#') && HASH_COMMENT_LANGUAGES.has(language);
+}
+
+/** A sentence: capitalised plain first word, several words, no statement punctuation. */
+function isProseLine(trimmed) {
+  return !/[{};=<>]/.test(trimmed)
+    && /^[A-Z][a-z']*(?:\s+\S+){3,}/.test(trimmed)
+    && (trimmed.length > 50 || /[.:!?]$/.test(trimmed));
+}
+
+const stripMarkdownDecoration = (trimmed) => trimmed.replace(/^(?:[*_>]+\s*|[-+]\s+|\d+\.\s+)+/, '');
+
+/**
+ * Tracks whether text sits inside a docstring or block comment, where prose is
+ * legitimate. `open` is the pending closing delimiter. Approximate: string
+ * literals that contain the delimiters can fool it.
+ */
+function advanceBlockText(open, text) {
+  const re = /"""|'''|\/\*|\*\//g;
+  let match;
+  while ((match = re.exec(text))) {
+    const token = match[0];
+    if (open) {
+      if (token === open) open = null;
+    } else if (token !== '*/') {
+      open = token === '/*' ? '*/' : token;
     }
   }
+  return open;
+}
 
-  if (!currentSettings?.aiAutocomplete?.multiline) {
+/**
+ * Index of the first line where the model stopped writing code and started
+ * talking — a markdown fence or heading, "Explanation:", paragraphs of prose —
+ * or -1. Comments, docstrings and block comments are never cut.
+ */
+function findChatterStart(lines, { language, prefix, linePrefix }) {
+  if (PROSE_LANGUAGES.has(language)) return -1;
+  const markup = MARKUP_LANGUAGES.has(language);
+  let open = advanceBlockText(null, prefix);
+
+  for (let i = 0; i < lines.length; i++) {
+    const trimmed = lines[i].trim();
+    const wasOpen = open !== null;
+    open = advanceBlockText(open, lines[i]);
+    // The first line continues what is already typed; it is not a sentence of its own.
+    if (!trimmed || wasOpen || open !== null || (i === 0 && linePrefix.trim())) continue;
+
+    if (trimmed.startsWith('```')) return i;
+    if (isCommentLine(trimmed, language)) continue;
+    if (/^(?:#{1,6}\s+[A-Za-z].*|(?:\*\*|__)[^*_]+(?:\*\*|__):?)$/.test(trimmed)) return i;
+
+    const text = stripMarkdownDecoration(trimmed);
+    if (EXPLANATION_START.test(text) && /^[A-Z]/.test(text) && !/[{};=]/.test(text)
+      && (!markup || text.endsWith(':'))) {
+      return i;
+    }
+    if (markup || !isProseLine(text)) continue;
+
+    const nextIndex = lines.findIndex((l, j) => j > i && l.trim());
+    const next = nextIndex === -1 ? '' : lines[nextIndex].trim();
+    if (text.endsWith(':') || next.startsWith('```') || isProseLine(stripMarkdownDecoration(next))) return i;
+    // A lone closing remark, set off from the code by a blank line.
+    if (!next && i > 0 && !lines[i - 1].trim() && /[.!]$/.test(text)) return i;
+  }
+  return -1;
+}
+
+/**
+ * Models that run past the hole rewrite the code that already follows the
+ * cursor. Returns the line where that echo starts, or -1.
+ */
+function findSuffixRepeat(lines, suffix) {
+  const after = suffix.split('\n').slice(1).map((l) => l.trim()).filter(Boolean).slice(0, 5);
+  if (!after.length) return -1;
+  for (let i = 1; i < lines.length; i++) {
+    let matched = 0;
+    while (matched < after.length && i + matched < lines.length && lines[i + matched].trim() === after[matched]) {
+      matched++;
+    }
+    if (!matched) continue;
+    // A short line such as `}` only counts when it is where the completion ends.
+    if (i + matched === lines.length || matched >= 2 || after[0].length >= 8) return i;
+  }
+  return -1;
+}
+
+/**
+ * @param {string} text Raw model output.
+ * @param {object} ctx
+ * @param {string} ctx.modelName  Decides which sentinel tokens to strip.
+ * @param {string} ctx.language   Monaco language id.
+ * @param {string} ctx.prefix     Text before the cursor.
+ * @param {string} ctx.suffix     Text after the cursor.
+ * @param {string} ctx.linePrefix Current line up to the cursor.
+ * @param {string} ctx.lineSuffix Current line after the cursor.
+ */
+export function cleanCompletion(text, {
+  modelName = '', language = '', prefix = '', suffix = '', linePrefix = '', lineSuffix = '',
+} = {}) {
+  let lines = stripSentinels(text, modelName).replace(/\r\n/g, '\n').split('\n').map((l) => l.trimEnd());
+
+  let leadingBreak = false;
+  while (lines.length && lines[0].trim() === '') {
+    lines.shift();
+    leadingBreak = true;
+  }
+  if (!lines.length) return '';
+  // After typed code (e.g. right after `{`) a leading newline is the point of
+  // the suggestion; dropping it would glue the next line onto this one.
+  if (leadingBreak && linePrefix.trim()) lines.unshift('');
+  // On an indented blank line the indentation is already typed.
+  else if (!leadingBreak && linePrefix && !linePrefix.trim() && lines[0].startsWith(linePrefix)) {
+    lines[0] = lines[0].slice(linePrefix.length);
+  }
+
+  const chatter = findChatterStart(lines, { language, prefix, linePrefix });
+  if (chatter !== -1) lines = lines.slice(0, chatter);
+
+  const repeat = findSuffixRepeat(lines, suffix);
+  if (repeat !== -1) lines = lines.slice(0, repeat);
+
+  while (lines.length && lines[lines.length - 1].trim() === '') lines.pop();
+
+  // In the middle of a line only a single-line insertion makes sense.
+  if (!currentSettings?.aiAutocomplete?.multiline || lineSuffix.trim()) {
     lines = lines.length ? [lines[0]] : [];
   }
 
   // Only the trailing edge is safe to trim: leading indentation is meaningful.
   return lines.join('\n').replace(/\s+$/, '');
+}
+
+const CHAT_PREAMBLE = /^(?:sure|certainly|of course|okay|ok|here(?:'s| is| are)|the (?:completion|code|missing code|inserted code|code to insert)|to complete|completion|i (?:would|will|'ll)|this (?:completes|will))\b[^{};=]*[:!.]$/i;
+const NOTHING_TO_INSERT = /^(?:nothing(?: to insert)?|no (?:completion|code|changes?|insertion)(?: (?:is )?(?:needed|required))?|n\/a|none)\.?$/i;
+
+/**
+ * Chat models often restate the code they were asked to continue — the line
+ * being typed, or the whole file. Keeps only what follows the cursor.
+ */
+function dropRestatedPrefix(text, prefix) {
+  const prefixLines = prefix.split('\n');
+  // Trailing whitespace is part of what was typed (`return |`).
+  const typed = prefixLines[prefixLines.length - 1].trimStart();
+  const above = prefixLines.slice(0, -1).map((l) => l.trim()).filter(Boolean);
+  const lines = text.split('\n');
+
+  // Echo of the surrounding file: find the lines just above the cursor. Two
+  // lines are a safer anchor; the echo may start at the nearer one, though.
+  for (const anchor of [above.slice(-2), above.slice(-1)]) {
+    if (anchor.join('').length < 6) continue;
+    for (let i = anchor.length - 1; i < lines.length - 1; i++) {
+      if (!anchor.every((a, j) => lines[i - anchor.length + 1 + j].trim() === a)) continue;
+      let k = i + 1;
+      if (typed) {
+        while (k < lines.length && !lines[k].trim()) k++;
+        if (k === lines.length || !lines[k].trimStart().startsWith(typed)) continue;
+      }
+      const rest = typed ? lines[k].trimStart().slice(typed.length) : lines[k];
+      return [rest, ...lines.slice(k + 1)].join('\n');
+    }
+  }
+
+  const trimmed = text.trimStart();
+  if (typed && trimmed.startsWith(typed)) return trimmed.slice(typed.length);
+  return text;
+}
+
+/** Pulls the insertion out of a chat reply, discarding the conversation around it. */
+export function extractChatCompletion(reply, { language = '', prefix = '' } = {}) {
+  let text = stripThinking(reply).replace(/\r\n/g, '\n');
+  if (NOTHING_TO_INSERT.test(text.trim())) return '';
+
+  // The fenced body is the answer, whatever chatter surrounds it. In prose
+  // languages a fence can itself be the content, so it is left alone there.
+  const fence = PROSE_LANGUAGES.has(language)
+    ? null
+    : /```[\w+#.-]*[^\S\n]*\n([\s\S]*?)(?:\n[^\S\n]*```|$)/.exec(text);
+  const inline = /^\s*`([^`\n]+)`\s*$/.exec(text);
+  if (fence) {
+    text = fence[1];
+  } else if (inline && !PROSE_LANGUAGES.has(language)) {
+    text = inline[1];
+  } else {
+    const lines = text.split('\n');
+    while (lines.length && CHAT_PREAMBLE.test(lines[0].trim())) {
+      lines.shift();
+      while (lines.length && !lines[0].trim()) lines.shift();
+    }
+    text = lines.join('\n');
+  }
+
+  return dropRestatedPrefix(text.replace(/<\/?CURSOR>/gi, ''), prefix);
 }
 
 /**
@@ -223,12 +408,32 @@ function positionUnchanged(editor, position) {
 /* ---------------------------------------------------------------- request */
 
 const CHAT_COMPLETION_PROMPT = [
-  'You are a code completion engine inside an IDE.',
-  'The user sends source code containing a <CURSOR> marker.',
-  'Reply with ONLY the text to insert at <CURSOR> so the code continues naturally.',
-  'Never repeat code that already appears before or after the cursor.',
-  'No explanations, no markdown fences. If nothing should be inserted, reply with nothing.',
+  'You are a code completion engine inside an IDE, not a chat assistant.',
+  'The user sends a source file containing a <CURSOR> marker.',
+  'Reply with exactly the code to insert at <CURSOR> and nothing else:',
+  '- no explanations, greetings, notes or markdown fences;',
+  '- never repeat code that already appears before or after <CURSOR>;',
+  '- match the language, indentation and style of the file;',
+  '- finish the current line or statement; add more lines only when they clearly belong there.',
+  'If nothing should be inserted, reply with an empty message.',
 ].join('\n');
+
+/** A worked example: small chat models follow a demonstration far better than rules. */
+const CHAT_EXAMPLE = [
+  {
+    role: 'user',
+    content: 'Language: python\nFile: shapes.py\n\nimport math\n\ndef circle_area(radius):\n    return <CURSOR>\n\nprint(circle_area(2))\n',
+  },
+  { role: 'assistant', content: 'math.pi * radius ** 2' },
+];
+
+function chatUserMessage({ prefix, suffix, language, fileName, contextFiles }) {
+  const related = contextFiles.slice(0, 3)
+    .map((f) => `--- ${f.name}\n${f.content.slice(0, 1500)}`)
+    .join('\n');
+  return `${related ? `Related files:\n${related}\n\n` : ''}Language: ${language}\n`
+    + `${fileName ? `File: ${fileName}\n` : ''}\n${prefix}<CURSOR>${suffix}`;
+}
 
 /** provider|model pairs whose endpoint turned out to have no raw-completions route. */
 const chatOnlyModels = new Set();
@@ -239,7 +444,7 @@ function usesChatPrompt(conf, provider, modelName) {
   return !supportsFim(modelName) || chatOnlyModels.has(`${provider.id}|${modelName}`);
 }
 
-async function requestCompletion({ provider, modelName, prefix, suffix, linePrefix, language, contextFiles, conf, signal }) {
+async function requestCompletion({ provider, modelName, prefix, suffix, language, fileName, contextFiles, conf, signal }) {
   const common = {
     provider,
     model: modelName,
@@ -251,7 +456,7 @@ async function requestCompletion({ provider, modelName, prefix, suffix, linePref
 
   if (!usesChatPrompt(conf, provider, modelName)) {
     try {
-      const { prompt, stop } = buildFimPrompt({ model: modelName, prefix, suffix, contextFiles });
+      const { prompt, stop } = buildFimPrompt({ model: modelName, prefix, suffix, contextFiles, fileName });
       return await complete({ ...common, prompt, stop });
     } catch (err) {
       // Hosted chat-only APIs (OpenAI, Groq, …) have no /completions route.
@@ -261,27 +466,16 @@ async function requestCompletion({ provider, modelName, prefix, suffix, linePref
     }
   }
 
-  const related = contextFiles.slice(0, 3)
-    .map((f) => `--- ${f.name}\n${f.content.slice(0, 1500)}`)
-    .join('\n');
   const reply = await chat({
     ...common,
     messages: [
       { role: 'system', content: CHAT_COMPLETION_PROMPT },
-      {
-        role: 'user',
-        content: `${related ? `Related files:\n${related}\n\n` : ''}Language: ${language}\n\n${prefix}<CURSOR>${suffix}`,
-      },
+      ...CHAT_EXAMPLE,
+      { role: 'user', content: chatUserMessage({ prefix, suffix, language, fileName, contextFiles }) },
     ],
   });
 
-  let text = stripCodeFences(stripThinking(reply)).replace(/<CURSOR>/g, '');
-  // Chat models often restate the line they were asked to continue.
-  const typed = linePrefix.trimStart();
-  if (typed && text.trimStart().startsWith(typed)) {
-    text = text.trimStart().slice(typed.length);
-  }
-  return text;
+  return extractChatCompletion(reply, { language, prefix });
 }
 
 /* --------------------------------------------------------------- provider */
@@ -392,8 +586,8 @@ export function registerAiAutocomplete(editor, monaco, settings) {
                 modelName,
                 prefix,
                 suffix,
-                linePrefix,
                 language,
+                fileName: fileNameOf(model),
                 contextFiles: gatherContextFiles(model),
                 conf,
                 signal: controller.signal,
@@ -406,7 +600,9 @@ export function registerAiAutocomplete(editor, monaco, settings) {
                 return;
               }
 
-              const cleaned = cleanCompletion(completion, modelName);
+              const cleaned = cleanCompletion(completion, {
+                modelName, language, prefix, suffix, linePrefix, lineSuffix,
+              });
               if (!cleaned) {
                 finish(EMPTY);
                 return;
