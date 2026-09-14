@@ -17,7 +17,7 @@ const TerminalAI = memo(({ settings, onInjectCommand }) => {
     setCommand('');
     try {
       const { generateCommand } = await import('../../services/terminalAI');
-      const result = await generateCommand(query, settings.terminalAI);
+      const result = await generateCommand(query, settings);
       if (result) {
         setCommand(result);
       } else {

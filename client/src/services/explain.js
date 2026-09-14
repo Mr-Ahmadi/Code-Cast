@@ -1,30 +1,35 @@
-function normalizeUrl(url) {
-  url = url.trim();
-  if (!url.startsWith('http://') && !url.startsWith('https://')) {
-    url = `http://${url}`;
-  }
-  return url.replace(/\/+$/, '');
-}
+import { resolveFeature, chat, stripThinking } from './llm';
 
-export async function explainCode(code, language, settings) {
+const SYSTEM_PROMPT = [
+  'You explain code to someone watching a coding screencast.',
+  'Be concise and concrete: what the code does, how it is structured, and any notable patterns or pitfalls.',
+  'Use short paragraphs or bullet points. Do not repeat the code back.',
+].join('\n');
+
+/**
+ * @param {string} code
+ * @param {string} language
+ * @param {object} settings  The full app settings object.
+ * @param {object} [options]
+ * @param {AbortSignal} [options.signal]
+ * @param {(text: string) => void} [options.onProgress] Receives the partial explanation.
+ */
+export async function explainCode(code, language, settings, { signal, onProgress } = {}) {
   if (!code || !code.trim()) return '';
-  const { model, ollamaUrl } = settings;
-  const base = normalizeUrl(ollamaUrl);
+  const { provider, model } = resolveFeature(settings, 'playbackExplanation');
 
-  const prompt = `Explain the following ${language} code concisely. Describe what it does, its structure, and key patterns:\n\n${code}`;
-
-  const res = await fetch(`${base}/api/generate`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      model,
-      prompt,
-      stream: false,
-      options: { temperature: 0.2 },
-    }),
+  const text = await chat({
+    provider,
+    model,
+    temperature: 0.2,
+    signal,
+    timeout: 120000,
+    messages: [
+      { role: 'system', content: SYSTEM_PROMPT },
+      { role: 'user', content: `Explain this ${language} code:\n\n${code.slice(0, 12000)}` },
+    ],
+    onToken: onProgress ? (_delta, acc) => onProgress(stripThinking(acc)) : undefined,
   });
 
-  if (!res.ok) throw new Error(`Ollama API error: ${res.status}`);
-  const data = await res.json();
-  return data.response || '';
+  return stripThinking(text).trim();
 }

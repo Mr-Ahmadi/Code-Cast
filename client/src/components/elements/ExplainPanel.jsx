@@ -1,34 +1,52 @@
-import { useState, useCallback, useEffect, memo } from 'react';
+import { useState, useCallback, useEffect, useRef, memo } from 'react';
 import PropTypes from 'prop-types';
 
 const ExplainPanel = memo(({ code, language, settings, explainTrigger }) => {
   const [explanation, setExplanation] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
+  const abortRef = useRef(null);
 
   const handleExplain = useCallback(async () => {
     if (!code || !code.trim() || !settings?.playbackExplanation?.enabled) return;
+    // A new request (e.g. auto-explain on seek) supersedes the running one.
+    abortRef.current?.abort();
+    const controller = new AbortController();
+    abortRef.current = controller;
+
     setLoading(true);
     setError(null);
     setExplanation('');
     try {
       const { explainCode } = await import('../../services/explain');
-      const result = await explainCode(
-        code,
-        language || 'plaintext',
-        settings.playbackExplanation
-      );
-      setExplanation(result || '(no explanation generated)');
+      const result = await explainCode(code, language || 'plaintext', settings, {
+        signal: controller.signal,
+        onProgress: (partial) => {
+          if (abortRef.current !== controller) return;
+          setExplanation(partial);
+          if (partial) setLoading(false);
+        },
+      });
+      if (abortRef.current === controller) setExplanation(result || '(no explanation generated)');
     } catch (err) {
-      setError(err.message || 'Failed to get explanation');
+      if (err?.name !== 'AbortError' && abortRef.current === controller) {
+        setError(err.message || 'Failed to get explanation');
+      }
     } finally {
-      setLoading(false);
+      if (abortRef.current === controller) {
+        abortRef.current = null;
+        setLoading(false);
+      }
     }
   }, [code, language, settings]);
 
+  useEffect(() => () => abortRef.current?.abort(), []);
+
   useEffect(() => {
     if (explainTrigger > 0) handleExplain();
-  }, [explainTrigger, handleExplain]);
+    // Only a new trigger should start a request, not every code change.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [explainTrigger]);
 
   const isEmpty = !explanation && !loading && !error;
 
@@ -64,7 +82,7 @@ const ExplainPanel = memo(({ code, language, settings, explainTrigger }) => {
               : 'No code to explain.'}
           </div>
         )}
-        {explanation && !loading && (
+        {explanation && (
           <div className="explain-content">{explanation}</div>
         )}
       </div>

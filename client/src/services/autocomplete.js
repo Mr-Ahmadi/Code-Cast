@@ -1,5 +1,5 @@
-import { ollamaCompletion } from './ollama';
-import { buildFimPrompt, stripSentinels } from './fim';
+import { resolveProvider, complete, chat, isAbortError, stripCodeFences, stripThinking } from './llm';
+import { buildFimPrompt, stripSentinels, supportsFim } from './fim';
 
 const EMPTY = { items: [] };
 
@@ -37,11 +37,15 @@ function settleInflight() {
 
 const statusListeners = new Set();
 let status = 'idle';
+let statusDetail = null;
 
-/** Subscribe to 'idle' | 'loading' | 'error'. Returns an unsubscribe function. */
+/**
+ * Subscribe to 'idle' | 'loading' | 'error'. The listener also receives the
+ * error message while in the 'error' state. Returns an unsubscribe function.
+ */
 export function onAiStatusChange(listener) {
   statusListeners.add(listener);
-  listener(status);
+  listener(status, statusDetail);
   return () => statusListeners.delete(listener);
 }
 
@@ -49,10 +53,11 @@ export function getAiStatus() {
   return status;
 }
 
-function setStatus(next) {
-  if (status === next) return;
+function setStatus(next, detail = null) {
+  if (status === next && statusDetail === detail) return;
   status = next;
-  for (const listener of statusListeners) listener(next);
+  statusDetail = detail;
+  for (const listener of statusListeners) listener(next, detail);
 }
 
 /* ------------------------------------------------------------------- cache */
@@ -215,6 +220,70 @@ function positionUnchanged(editor, position) {
   return !!now && now.lineNumber === position.lineNumber && now.column === position.column;
 }
 
+/* ---------------------------------------------------------------- request */
+
+const CHAT_COMPLETION_PROMPT = [
+  'You are a code completion engine inside an IDE.',
+  'The user sends source code containing a <CURSOR> marker.',
+  'Reply with ONLY the text to insert at <CURSOR> so the code continues naturally.',
+  'Never repeat code that already appears before or after the cursor.',
+  'No explanations, no markdown fences. If nothing should be inserted, reply with nothing.',
+].join('\n');
+
+/** provider|model pairs whose endpoint turned out to have no raw-completions route. */
+const chatOnlyModels = new Set();
+
+function usesChatPrompt(conf, provider, modelName) {
+  if (conf.promptMode === 'chat') return true;
+  if (conf.promptMode === 'fim') return false;
+  return !supportsFim(modelName) || chatOnlyModels.has(`${provider.id}|${modelName}`);
+}
+
+async function requestCompletion({ provider, modelName, prefix, suffix, linePrefix, language, contextFiles, conf, signal }) {
+  const common = {
+    provider,
+    model: modelName,
+    signal,
+    temperature: conf.temperature ?? 0.1,
+    maxTokens: conf.maxTokens ?? 128,
+    timeout: conf.requestTimeoutMs ?? 12000,
+  };
+
+  if (!usesChatPrompt(conf, provider, modelName)) {
+    try {
+      const { prompt, stop } = buildFimPrompt({ model: modelName, prefix, suffix, contextFiles });
+      return await complete({ ...common, prompt, stop });
+    } catch (err) {
+      // Hosted chat-only APIs (OpenAI, Groq, …) have no /completions route.
+      const noCompletionsRoute = provider.id === 'openai' && [400, 404, 405, 501].includes(err?.status);
+      if (!noCompletionsRoute || conf.promptMode === 'fim') throw err;
+      chatOnlyModels.add(`${provider.id}|${modelName}`);
+    }
+  }
+
+  const related = contextFiles.slice(0, 3)
+    .map((f) => `--- ${f.name}\n${f.content.slice(0, 1500)}`)
+    .join('\n');
+  const reply = await chat({
+    ...common,
+    messages: [
+      { role: 'system', content: CHAT_COMPLETION_PROMPT },
+      {
+        role: 'user',
+        content: `${related ? `Related files:\n${related}\n\n` : ''}Language: ${language}\n\n${prefix}<CURSOR>${suffix}`,
+      },
+    ],
+  });
+
+  let text = stripCodeFences(stripThinking(reply)).replace(/<CURSOR>/g, '');
+  // Chat models often restate the line they were asked to continue.
+  const typed = linePrefix.trimStart();
+  if (typed && text.trimStart().startsWith(typed)) {
+    text = text.trimStart().slice(typed.length);
+  }
+  return text;
+}
+
 /* --------------------------------------------------------------- provider */
 
 export function registerAiAutocomplete(editor, monaco, settings) {
@@ -292,6 +361,7 @@ export function registerAiAutocomplete(editor, monaco, settings) {
             const prefix = text.slice(Math.max(0, offset - maxPrefix), offset);
             const suffix = text.slice(offset, offset + maxSuffix);
             const modelName = conf.model || 'qwen2.5-coder:1.5b';
+            const provider = resolveProvider(currentSettings, conf.provider);
 
             const emit = (completion) => {
               const trimmed = trimSuffixOverlap(completion, lineSuffix);
@@ -307,7 +377,7 @@ export function registerAiAutocomplete(editor, monaco, settings) {
               });
             };
 
-            const cacheKey = `${modelName}|${hashString(prefix.slice(-600))}|${hashString(suffix.slice(0, 600))}|${language}`;
+            const cacheKey = `${provider.id}|${modelName}|${hashString(prefix.slice(-600))}|${hashString(suffix.slice(0, 600))}|${language}`;
             const cached = lruGet(cacheKey);
             if (cached !== undefined) {
               if (positionUnchanged(editor, position)) emit(cached);
@@ -317,18 +387,16 @@ export function registerAiAutocomplete(editor, monaco, settings) {
 
             setStatus('loading');
             try {
-              const contextFiles = gatherContextFiles(model);
-              const { prompt, stop } = buildFimPrompt({ model: modelName, prefix, suffix, contextFiles });
-
-              const completion = await ollamaCompletion({
-                model: modelName,
-                prompt,
-                ollamaUrl: conf.ollamaUrl,
+              const completion = await requestCompletion({
+                provider,
+                modelName,
+                prefix,
+                suffix,
+                linePrefix,
+                language,
+                contextFiles: gatherContextFiles(model),
+                conf,
                 signal: controller.signal,
-                stop,
-                temperature: conf.temperature ?? 0.1,
-                numPredict: conf.maxTokens ?? 128,
-                timeout: conf.requestTimeoutMs ?? 12000,
               });
 
               setStatus('idle');
@@ -353,7 +421,8 @@ export function registerAiAutocomplete(editor, monaco, settings) {
               emit(cleaned);
             } catch (err) {
               // An aborted request is a normal supersede, not a failure.
-              setStatus(err?.name === 'AbortError' ? 'idle' : 'error');
+              if (isAbortError(err)) setStatus('idle');
+              else setStatus('error', err?.message || 'Autocomplete request failed');
               finish(EMPTY);
             }
           }, debounceMs);

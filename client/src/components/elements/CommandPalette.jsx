@@ -89,6 +89,10 @@ const CommandPalette = memo(() => {
       run: () => window.__openAiChat?.({ useSelection: true, label: 'bugs' }) },
     { id: 'ai.tests', label: 'AI: Write Tests for Selection', icon: FiCpu,
       run: () => window.__openAiChat?.({ useSelection: true, label: 'tests' }) },
+    { id: 'ai.models', label: 'AI: Browse Models (Ollama, LM Studio, …)', icon: FiCpu,
+      run: () => window.__openSettings?.('aiModels') },
+    { id: 'ai.providers', label: 'AI: Configure Providers', icon: FiSettings,
+      run: () => window.__openSettings?.('aiProviders') },
 
     // --- File -----------------------------------------------------------
     { id: 'file.save', label: 'File: Save', hint: `${modKey()}+S`, icon: FiSave,

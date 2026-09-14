@@ -1,4 +1,4 @@
-const { app, BrowserWindow, ipcMain, dialog, Menu } = require('electron');
+const { app, BrowserWindow, ipcMain, dialog, Menu, shell: electronShell } = require('electron');
 const path = require('path');
 const { exec, spawn } = require('child_process');
 const os = require('os');
@@ -328,6 +328,13 @@ function createWindow() {
     });
     mainWindow.once('ready-to-show', () => mainWindow.show());
   }
+
+  // Links such as ollama.com or lmstudio.ai belong in the system browser, not
+  // in a bare Electron window.
+  mainWindow.webContents.setWindowOpenHandler(({ url }) => {
+    if (/^https?:\/\//i.test(url)) electronShell.openExternal(url);
+    return { action: 'deny' };
+  });
 
   mainWindow.on('close', (e) => {
     if (global._quitting) return;
@@ -969,6 +976,62 @@ ipcMain.handle('file:listRecursive', async (event, dirPath) => {
   }
   walk(dirPath);
   return results;
+});
+
+// --- AI provider proxy ---
+// Model servers (Ollama, LM Studio, llama.cpp, …) are called from the main
+// process so none of them needs CORS configured for the app's origin.
+
+const aiRequests = new Map();
+
+function describeFetchError(err) {
+  const cause = err?.cause;
+  if (cause?.code === 'ECONNREFUSED') return `Connection refused (${cause.address || 'host'}:${cause.port || ''})`;
+  if (cause?.code === 'ENOTFOUND') return `Host not found (${cause.hostname || ''})`;
+  return cause?.message || err?.message || 'Request failed';
+}
+
+ipcMain.handle('ai:fetch', async (event, requestId, request = {}) => {
+  const { url, method = 'GET', headers = {}, body, stream = false } = request;
+  if (typeof url !== 'string' || !/^https?:\/\//i.test(url)) {
+    return { error: 'Only http(s) URLs can be requested.' };
+  }
+
+  const controller = new AbortController();
+  aiRequests.set(requestId, controller);
+  const sender = event.sender;
+
+  try {
+    const res = await fetch(url, { method, headers, body, signal: controller.signal });
+    const meta = { ok: res.ok, status: res.status, statusText: res.statusText };
+
+    if (!res.ok || !stream || !res.body) {
+      return { ...meta, text: await res.text() };
+    }
+
+    const decoder = new TextDecoder();
+    for await (const value of res.body) {
+      if (sender.isDestroyed()) {
+        controller.abort();
+        break;
+      }
+      const chunk = decoder.decode(value, { stream: true });
+      if (chunk) sender.send('ai:chunk', requestId, chunk);
+    }
+    const tail = decoder.decode();
+    if (tail && !sender.isDestroyed()) sender.send('ai:chunk', requestId, tail);
+    return { ...meta, text: '' };
+  } catch (err) {
+    if (controller.signal.aborted) return { aborted: true };
+    return { error: describeFetchError(err) };
+  } finally {
+    aiRequests.delete(requestId);
+  }
+});
+
+ipcMain.handle('ai:abort', (event, requestId) => {
+  aiRequests.get(requestId)?.abort();
+  aiRequests.delete(requestId);
 });
 
 // --- Shell IPC for running arbitrary commands ---

@@ -70,17 +70,21 @@ export const DEFAULT_SETTINGS = {
     autocomplete: true,
     refactoring: true,
   },
+  aiProviders: {
+    ollama: { baseUrl: 'http://localhost:11434' },
+    lmstudio: { baseUrl: 'http://localhost:1234/v1' },
+    openai: { baseUrl: '', apiKey: '' },
+  },
   commitMessage: {
     enabled: true,
     provider: 'ollama',
     model: 'qwen2.5-coder:1.5b',
-    ollamaUrl: 'http://localhost:11434',
   },
   aiAutocomplete: {
     enabled: false,
     provider: 'ollama',
     model: 'qwen2.5-coder:1.5b',
-    ollamaUrl: 'http://localhost:11434',
+    promptMode: 'auto',
     triggerMode: 'auto',
     debounceMs: 350,
     maxTokens: 128,
@@ -97,7 +101,6 @@ export const DEFAULT_SETTINGS = {
     enabled: true,
     provider: 'ollama',
     model: 'qwen2.5-coder:7b',
-    ollamaUrl: 'http://localhost:11434',
     temperature: 0.3,
     includeActiveFile: true,
     maxHistory: 12,
@@ -106,28 +109,37 @@ export const DEFAULT_SETTINGS = {
     enabled: true,
     provider: 'ollama',
     model: 'qwen2.5-coder:7b',
-    ollamaUrl: 'http://localhost:11434',
     temperature: 0.1,
   },
   playbackExplanation: {
     enabled: true,
     provider: 'ollama',
     model: 'qwen2.5-coder:1.5b',
-    ollamaUrl: 'http://localhost:11434',
     autoExplain: false,
   },
   terminalAI: {
     enabled: true,
     provider: 'ollama',
     model: 'qwen2.5-coder:1.5b',
-    ollamaUrl: 'http://localhost:11434',
   },
 };
 
-/** Sections whose model/url fields describe an Ollama-backed feature. */
-export const AI_SECTIONS = [
-  'aiAutocomplete', 'aiChat', 'aiEdit', 'commitMessage', 'playbackExplanation', 'terminalAI',
+/**
+ * Settings sections backed by a model, with the kind of model each one wants
+ * (used when picking a default from what a provider has installed).
+ */
+export const AI_FEATURES = [
+  { section: 'aiAutocomplete', label: 'Autocomplete', role: 'completion' },
+  { section: 'aiChat', label: 'Chat', role: 'chat' },
+  { section: 'aiEdit', label: 'Inline Edit', role: 'chat' },
+  { section: 'commitMessage', label: 'Commit Messages', role: 'fast' },
+  { section: 'playbackExplanation', label: 'Explain', role: 'fast' },
+  { section: 'terminalAI', label: 'Terminal', role: 'fast' },
 ];
+
+export const AI_SECTIONS = AI_FEATURES.map((f) => f.section);
+
+const PROVIDER_IDS = ['ollama', 'lmstudio', 'openai'];
 
 export const SUGGESTED_MODELS = [
   'qwen2.5-coder:1.5b',
@@ -167,12 +179,57 @@ export function cloneDefaults() {
   return deepMerge(DEFAULT_SETTINGS, {});
 }
 
+/**
+ * Upgrades settings saved by older versions, where every AI section carried
+ * its own `ollamaUrl`, to the shared `aiProviders` block.
+ */
+export function migrateSettings(raw) {
+  if (!raw || typeof raw !== 'object') return {};
+  const next = { ...raw };
+
+  let legacyUrl = null;
+  for (const section of ['aiChat', ...AI_SECTIONS]) {
+    const conf = next[section];
+    if (!conf || typeof conf !== 'object') continue;
+    if (!legacyUrl && typeof conf.ollamaUrl === 'string' && conf.ollamaUrl.trim()) {
+      legacyUrl = conf.ollamaUrl.trim();
+    }
+    const rest = { ...conf };
+    delete rest.ollamaUrl;
+    if (rest.provider !== undefined && !PROVIDER_IDS.includes(rest.provider)) rest.provider = 'ollama';
+    next[section] = rest;
+  }
+
+  if (legacyUrl && !next.aiProviders?.ollama?.baseUrl) {
+    next.aiProviders = {
+      ...(next.aiProviders || {}),
+      ollama: { ...(next.aiProviders?.ollama || {}), baseUrl: legacyUrl },
+    };
+  }
+  return next;
+}
+
+/** Layers saved (possibly partial or legacy) settings over a base object. */
+export function mergeSettings(base, overrides) {
+  return deepMerge(base || DEFAULT_SETTINGS, migrateSettings(overrides));
+}
+
+/** A copy without API keys, for syncing settings to the Code Cast server. */
+export function withoutSecrets(settings) {
+  const providers = {};
+  for (const [id, conf] of Object.entries(settings?.aiProviders || {})) {
+    const rest = { ...(conf || {}) };
+    delete rest.apiKey;
+    providers[id] = rest;
+  }
+  return { ...settings, aiProviders: providers };
+}
+
 export function loadSettings() {
   try {
     const raw = localStorage.getItem(SETTINGS_KEY);
     if (raw) {
-      const parsed = JSON.parse(raw);
-      return deepMerge(DEFAULT_SETTINGS, parsed);
+      return mergeSettings(DEFAULT_SETTINGS, JSON.parse(raw));
     }
   } catch { /* corrupted settings fall back to defaults */ }
   return cloneDefaults();

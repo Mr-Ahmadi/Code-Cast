@@ -2,10 +2,12 @@ import { useContext, useState, useCallback, useEffect } from 'react';
 import PropTypes from 'prop-types';
 import { GlobalContext } from '../../contexts/GlobalStates';
 import { useMode, MODES } from '../../contexts/ModeContext';
-import { saveSettings as persistSettings, cloneDefaults } from '../../constants/settings';
+import { saveSettings as persistSettings, cloneDefaults, mergeSettings, withoutSecrets } from '../../constants/settings';
 import { getAvailableFormatters } from '../../services/formatter';
-import { FiX, FiEdit3, FiCode, FiTerminal, FiSave, FiGitCommit, FiCpu, FiMessageSquare, FiZap, FiServer } from 'react-icons/fi';
+import { FiX, FiEdit3, FiCode, FiTerminal, FiSave, FiGitCommit, FiCpu, FiMessageSquare, FiZap, FiServer, FiBox, FiList } from 'react-icons/fi';
 import ServerSettings from './ServerSettings';
+import { AiProvidersSection, FeatureModelFields } from './AiSettings';
+import AiModelsSection from './AiModels';
 import axios from 'axios';
 
 const Toggle = ({ checked, onChange, disabled }) => (
@@ -27,26 +29,11 @@ Toggle.propTypes = {
   disabled: PropTypes.bool,
 };
 
-function ModelSelect({ value, onChange, disabled }) {
-  const models = [
-    'qwen2.5-coder:1.5b', 'qwen2.5-coder:3b', 'qwen2.5-coder:7b', 'qwen2.5-coder:14b',
-    'codellama:7b', 'codellama:13b', 'codellama:34b',
-    'stable-code:3b', 'deepseek-coder:6.7b', 'starcoder2:3b', 'starcoder2:7b', 'codegemma:7b',
-  ];
-  return (
-    <select className="settings-select" value={value} onChange={e => onChange(e.target.value)} disabled={disabled}>
-      {models.map(m => (
-        <option key={m} value={m}>{m}</option>
-      ))}
-    </select>
-  );
-}
-
-ModelSelect.propTypes = {
-  value: PropTypes.string,
-  onChange: PropTypes.func,
-  disabled: PropTypes.bool,
-};
+const SECTION_GROUPS = [
+  { label: 'Editor', ids: ['editor', 'formatter', 'lsp'] },
+  { label: 'AI', ids: ['aiProviders', 'aiModels', 'aiAutocomplete', 'aiChat', 'aiEdit', 'playbackExplanation', 'terminalAI', 'commit'] },
+  { label: 'Connection', ids: ['server'] },
+];
 
 export default function Settings() {
   const { settings, setSettings, settingsOpen, setSettingsOpen, setTheme, setFontSize, setShowMinimap, setAutoSave } = useContext(GlobalContext);
@@ -65,11 +52,9 @@ export default function Settings() {
       axios.get('index/settings', { withCredentials: true })
         .then(res => {
           if (res.data?.settings) {
-            setSettings(prev => {
-              const merged = { ...prev, ...res.data.settings };
-              setLocalSettings(merged);
-              return merged;
-            });
+            // Deep-merge so sections added since the server copy was saved keep
+            // their defaults, and API keys (never synced) stay local.
+            setSettings(prev => mergeSettings(prev, res.data.settings));
           }
         })
         .catch(() => {});
@@ -105,11 +90,12 @@ export default function Settings() {
     setSaving(true);
     setSettings(localSettings);
 
-    if (mode === MODES.LOCAL) {
-      persistSettings(localSettings);
-    } else {
+    // Always keep a local copy: it is the only place API keys are stored, and
+    // it lets online mode start with the right AI setup before the server answers.
+    persistSettings(localSettings);
+    if (mode !== MODES.LOCAL) {
       try {
-        await axios.post('index/settings', localSettings, { withCredentials: true });
+        await axios.post('index/settings', withoutSecrets(localSettings), { withCredentials: true });
       } catch (err) {
         console.warn('Failed to save settings to server:', err);
       }
@@ -124,6 +110,15 @@ export default function Settings() {
     setSaving(false);
   }, [localSettings, mode, setSettings, setFontSize, setShowMinimap, setAutoSave, setTheme]);
 
+  // Lets the command palette, AI chat and status bar open a specific tab.
+  useEffect(() => {
+    window.__openSettings = (section) => {
+      if (section) setActiveSection(section);
+      setSettingsOpen(true);
+    };
+    return () => { window.__openSettings = undefined; };
+  }, [setSettingsOpen]);
+
   const handleReset = useCallback(() => {
     // cloneDefaults deep-copies every section, so newly added ones reset too
     // instead of being missed by a hand-maintained list.
@@ -134,6 +129,8 @@ export default function Settings() {
   if (!settingsOpen) return null;
 
   const formatters = getAvailableFormatters();
+  const openProviders = () => setActiveSection('aiProviders');
+  const openModels = () => setActiveSection('aiModels');
 
   const handleOverlayClick = (e) => {
     if (e.target === e.currentTarget) {
@@ -467,11 +464,17 @@ export default function Settings() {
         </label>
       </div>
     )},
-    { id: 'commit', label: 'Commit', icon: FiGitCommit, content: (
+    { id: 'aiProviders', label: 'Providers', icon: FiBox, content: (
+      <AiProvidersSection localSettings={localSettings} updateLocal={updateLocal} onOpenModels={openModels} />
+    )},
+    { id: 'aiModels', label: 'Models', icon: FiList, content: (
+      <AiModelsSection localSettings={localSettings} updateLocal={updateLocal} onOpenProviders={openProviders} />
+    )},
+    { id: 'commit', label: 'Commit Messages', icon: FiGitCommit, content: (
       <div className="settings-section">
         <h4 className="settings-section-title">Commit Messages</h4>
         <p className="settings-section-desc">
-          Generate commit messages from staged changes using a local Ollama model (e.g. Qwen2.5-Coder).
+          Generate a commit message from the staged diff. A small, fast model is enough.
         </p>
 
         <label className="settings-field settings-checkbox-field">
@@ -482,33 +485,21 @@ export default function Settings() {
           <span className="settings-field-label">Enable AI Commit Messages</span>
         </label>
 
-        <label className="settings-field">
-          <span className="settings-field-label">Ollama URL</span>
-          <input
-            type="text"
-            className="settings-input"
-            value={localSettings.commitMessage.ollamaUrl}
-            onChange={e => updateLocal('commitMessage', 'ollamaUrl', e.target.value)}
-            disabled={!localSettings.commitMessage.enabled}
-            placeholder="http://localhost:11434"
-          />
-        </label>
-
-        <label className="settings-field">
-          <span className="settings-field-label">Model</span>
-          <ModelSelect
-            value={localSettings.commitMessage.model}
-            onChange={v => updateLocal('commitMessage', 'model', v)}
-            disabled={!localSettings.commitMessage.enabled}
-          />
-        </label>
+        <FeatureModelFields
+          section="commitMessage"
+          localSettings={localSettings}
+          updateLocal={updateLocal}
+          disabled={!localSettings.commitMessage.enabled}
+          onOpenProviders={openProviders}
+        />
       </div>
     )},
-    { id: 'aiAutocomplete', label: 'AI Autocomplete', icon: FiCpu, content: (
+    { id: 'aiAutocomplete', label: 'Autocomplete', icon: FiCpu, content: (
       <div className="settings-section">
         <h4 className="settings-section-title">AI Autocomplete</h4>
         <p className="settings-section-desc">
-          Use local Ollama models for AI-powered inline code completion (e.g. Qwen2.5-Coder).
+          Ghost-text code completion. FIM-trained code models (Qwen2.5-Coder, DeepSeek-Coder, StarCoder2,
+          CodeGemma, Codestral, CodeLlama) give the best and fastest results; any other model works through a chat prompt.
         </p>
 
         <label className="settings-field settings-checkbox-field">
@@ -519,25 +510,26 @@ export default function Settings() {
           <span className="settings-field-label">Enable AI Autocomplete</span>
         </label>
 
-        <label className="settings-field">
-          <span className="settings-field-label">Ollama URL</span>
-          <input
-            type="text"
-            className="settings-input"
-            value={localSettings.aiAutocomplete.ollamaUrl}
-            onChange={e => updateLocal('aiAutocomplete', 'ollamaUrl', e.target.value)}
-            disabled={!localSettings.aiAutocomplete.enabled}
-            placeholder="http://localhost:11434"
-          />
-        </label>
+        <FeatureModelFields
+          section="aiAutocomplete"
+          localSettings={localSettings}
+          updateLocal={updateLocal}
+          disabled={!localSettings.aiAutocomplete.enabled}
+          onOpenProviders={openProviders}
+        />
 
         <label className="settings-field">
-          <span className="settings-field-label">Model</span>
-          <ModelSelect
-            value={localSettings.aiAutocomplete.model}
-            onChange={v => updateLocal('aiAutocomplete', 'model', v)}
+          <span className="settings-field-label">Prompt Style</span>
+          <select
+            className="settings-select"
+            value={localSettings.aiAutocomplete.promptMode || 'auto'}
+            onChange={e => updateLocal('aiAutocomplete', 'promptMode', e.target.value)}
             disabled={!localSettings.aiAutocomplete.enabled}
-          />
+          >
+            <option value="auto">Automatic (FIM for code models, chat otherwise)</option>
+            <option value="fim">Fill-in-the-middle (raw completion)</option>
+            <option value="chat">Chat prompt (works with any model)</option>
+          </select>
         </label>
 
         <div className="settings-subsection">
@@ -602,14 +594,27 @@ export default function Settings() {
               disabled={!localSettings.aiAutocomplete.enabled}
             />
           </label>
+          <label className="settings-field">
+            <span className="settings-field-label">Request Timeout (ms)</span>
+            <input
+              type="number"
+              className="settings-input"
+              min="2000"
+              max="120000"
+              step="1000"
+              value={localSettings.aiAutocomplete.requestTimeoutMs ?? 12000}
+              onChange={e => updateLocal('aiAutocomplete', 'requestTimeoutMs', Number(e.target.value))}
+              disabled={!localSettings.aiAutocomplete.enabled}
+            />
+          </label>
         </div>
       </div>
     )},
-    { id: 'aiChat', label: 'AI Chat', icon: FiMessageSquare, content: (
+    { id: 'aiChat', label: 'Chat', icon: FiMessageSquare, content: (
       <div className="settings-section">
         <h4 className="settings-section-title">AI Chat & Code Assistant</h4>
         <p className="settings-section-desc">
-          Conversational assistant that can explain, edit, and generate code with local Ollama models.
+          Conversational assistant that can explain, edit, and generate code.
         </p>
 
         <label className="settings-field settings-checkbox-field">
@@ -620,26 +625,13 @@ export default function Settings() {
           <span className="settings-field-label">Enable AI Chat</span>
         </label>
 
-        <label className="settings-field">
-          <span className="settings-field-label">Ollama URL</span>
-          <input
-            type="text"
-            className="settings-input"
-            value={localSettings.aiChat.ollamaUrl}
-            onChange={e => updateLocal('aiChat', 'ollamaUrl', e.target.value)}
-            disabled={!localSettings.aiChat.enabled}
-            placeholder="http://localhost:11434"
-          />
-        </label>
-
-        <label className="settings-field">
-          <span className="settings-field-label">Model</span>
-          <ModelSelect
-            value={localSettings.aiChat.model}
-            onChange={v => updateLocal('aiChat', 'model', v)}
-            disabled={!localSettings.aiChat.enabled}
-          />
-        </label>
+        <FeatureModelFields
+          section="aiChat"
+          localSettings={localSettings}
+          updateLocal={updateLocal}
+          disabled={!localSettings.aiChat.enabled}
+          onOpenProviders={openProviders}
+        />
 
         <label className="settings-field">
           <span className="settings-field-label">Temperature</span>
@@ -681,7 +673,7 @@ export default function Settings() {
         </label>
       </div>
     )},
-    { id: 'aiEdit', label: 'AI Edit', icon: FiZap, content: (
+    { id: 'aiEdit', label: 'Inline Edit', icon: FiZap, content: (
       <div className="settings-section">
         <h4 className="settings-section-title">Inline AI Edit</h4>
         <p className="settings-section-desc">
@@ -697,26 +689,13 @@ export default function Settings() {
           <span className="settings-field-label">Enable Inline AI Edit</span>
         </label>
 
-        <label className="settings-field">
-          <span className="settings-field-label">Ollama URL</span>
-          <input
-            type="text"
-            className="settings-input"
-            value={localSettings.aiEdit.ollamaUrl}
-            onChange={e => updateLocal('aiEdit', 'ollamaUrl', e.target.value)}
-            disabled={!localSettings.aiEdit.enabled}
-            placeholder="http://localhost:11434"
-          />
-        </label>
-
-        <label className="settings-field">
-          <span className="settings-field-label">Model</span>
-          <ModelSelect
-            value={localSettings.aiEdit.model}
-            onChange={v => updateLocal('aiEdit', 'model', v)}
-            disabled={!localSettings.aiEdit.enabled}
-          />
-        </label>
+        <FeatureModelFields
+          section="aiEdit"
+          localSettings={localSettings}
+          updateLocal={updateLocal}
+          disabled={!localSettings.aiEdit.enabled}
+          onOpenProviders={openProviders}
+        />
 
         <label className="settings-field">
           <span className="settings-field-label">Temperature</span>
@@ -740,7 +719,7 @@ export default function Settings() {
       <div className="settings-section">
         <h4 className="settings-section-title">Playback Explanation</h4>
         <p className="settings-section-desc">
-          Explain code at the current playback position using local AI models.
+          Explain code at the current playback position.
         </p>
 
         <label className="settings-field settings-checkbox-field">
@@ -760,33 +739,20 @@ export default function Settings() {
           <span className="settings-field-label">Auto-explain on seek</span>
         </label>
 
-        <label className="settings-field">
-          <span className="settings-field-label">Ollama URL</span>
-          <input
-            type="text"
-            className="settings-input"
-            value={localSettings.playbackExplanation.ollamaUrl}
-            onChange={e => updateLocal('playbackExplanation', 'ollamaUrl', e.target.value)}
-            disabled={!localSettings.playbackExplanation.enabled}
-            placeholder="http://localhost:11434"
-          />
-        </label>
-
-        <label className="settings-field">
-          <span className="settings-field-label">Model</span>
-          <ModelSelect
-            value={localSettings.playbackExplanation.model}
-            onChange={v => updateLocal('playbackExplanation', 'model', v)}
-            disabled={!localSettings.playbackExplanation.enabled}
-          />
-        </label>
+        <FeatureModelFields
+          section="playbackExplanation"
+          localSettings={localSettings}
+          updateLocal={updateLocal}
+          disabled={!localSettings.playbackExplanation.enabled}
+          onOpenProviders={openProviders}
+        />
       </div>
     )},
-    { id: 'terminalAI', label: 'Terminal AI', icon: FiTerminal, content: (
+    { id: 'terminalAI', label: 'Terminal', icon: FiTerminal, content: (
       <div className="settings-section">
         <h4 className="settings-section-title">Terminal AI Assistant</h4>
         <p className="settings-section-desc">
-          Convert natural language to shell commands and explain terminal errors using local AI.
+          Convert natural language to shell commands and explain terminal errors.
         </p>
 
         <label className="settings-field settings-checkbox-field">
@@ -797,26 +763,13 @@ export default function Settings() {
           <span className="settings-field-label">Enable Terminal AI</span>
         </label>
 
-        <label className="settings-field">
-          <span className="settings-field-label">Ollama URL</span>
-          <input
-            type="text"
-            className="settings-input"
-            value={localSettings.terminalAI.ollamaUrl}
-            onChange={e => updateLocal('terminalAI', 'ollamaUrl', e.target.value)}
-            disabled={!localSettings.terminalAI.enabled}
-            placeholder="http://localhost:11434"
-          />
-        </label>
-
-        <label className="settings-field">
-          <span className="settings-field-label">Model</span>
-          <ModelSelect
-            value={localSettings.terminalAI.model}
-            onChange={v => updateLocal('terminalAI', 'model', v)}
-            disabled={!localSettings.terminalAI.enabled}
-          />
-        </label>
+        <FeatureModelFields
+          section="terminalAI"
+          localSettings={localSettings}
+          updateLocal={updateLocal}
+          disabled={!localSettings.terminalAI.enabled}
+          onOpenProviders={openProviders}
+        />
       </div>
     )},
     { id: 'server', label: 'Server', icon: FiServer, content: (
@@ -844,27 +797,39 @@ export default function Settings() {
           </button>
         </div>
 
-        <div className="settings-tabs">
-          {sections.map(s => (
-            <button
-              key={s.id}
-              className={`settings-tab${activeSection === s.id ? ' active' : ''}`}
-              onClick={() => setActiveSection(s.id)}
-            >
-              <s.icon size={14} />
-              <span>{s.label}</span>
-            </button>
-          ))}
-        </div>
+        <div className="settings-body">
+          <nav className="settings-nav" aria-label="Settings sections">
+            {SECTION_GROUPS.map(group => (
+              <div key={group.label} className="settings-nav-group">
+                <span className="settings-nav-title">{group.label}</span>
+                {group.ids.map(id => sections.find(s => s.id === id)).filter(Boolean).map(s => (
+                  <button
+                    key={s.id}
+                    type="button"
+                    className={`settings-tab${activeSection === s.id ? ' active' : ''}`}
+                    onClick={() => setActiveSection(s.id)}
+                    aria-current={activeSection === s.id ? 'page' : undefined}
+                  >
+                    <s.icon size={14} />
+                    <span>{s.label}</span>
+                  </button>
+                ))}
+              </div>
+            ))}
+          </nav>
 
-        <div className="settings-scroll">
-          {sections.find(s => s.id === activeSection)?.content}
+          <div className="settings-scroll" key={activeSection}>
+            {sections.find(s => s.id === activeSection)?.content}
+          </div>
         </div>
 
         <div className="settings-footer">
-          <button className="btn" onClick={handleReset} disabled={!dirty}>
-            Reset to Defaults
-          </button>
+          <div className="settings-footer-left">
+            <button className="btn" onClick={handleReset}>
+              Reset to Defaults
+            </button>
+            {dirty && <span className="settings-dirty">Unsaved changes</span>}
+          </div>
           <div className="settings-footer-right">
             <button className="btn" onClick={() => setSettingsOpen(false)}>
               Cancel

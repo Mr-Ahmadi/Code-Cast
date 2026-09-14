@@ -1,55 +1,59 @@
-function normalizeUrl(url) {
-  url = url.trim();
-  if (!url.startsWith('http://') && !url.startsWith('https://')) {
-    url = `http://${url}`;
-  }
-  return url.replace(/\/+$/, '');
+import { resolveFeature, chat, stripThinking, stripCodeFences } from './llm';
+
+function describeShell() {
+  const platform = window.electronAPI?.platform;
+  if (platform === 'win32') return 'Windows (PowerShell)';
+  if (platform === 'darwin') return 'macOS (zsh)';
+  return 'Linux (bash)';
 }
 
-export async function generateCommand(query, settings) {
+/** Reduces a chatty reply to the one command it contains. */
+function extractCommand(reply) {
+  const lines = stripCodeFences(stripThinking(reply))
+    .split('\n')
+    .map((l) => l.trim())
+    .filter((l) => l && !l.startsWith('#') && !l.startsWith('//'));
+  return (lines[0] || '').replace(/^\$\s+/, '').replace(/^`+|`+$/g, '').trim();
+}
+
+export async function generateCommand(query, settings, { signal } = {}) {
   if (!query || !query.trim()) return '';
-  const { model, ollamaUrl } = settings;
-  const base = normalizeUrl(ollamaUrl);
+  const { provider, model } = resolveFeature(settings, 'terminalAI');
 
-  const prompt = `Convert this natural language request into a single shell command. Reply with ONLY the command, no explanation:\n\n${query}`;
-
-  const res = await fetch(`${base}/api/generate`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      model,
-      prompt,
-      stream: false,
-      options: { temperature: 0.1 },
-    }),
+  const reply = await chat({
+    provider,
+    model,
+    temperature: 0.1,
+    maxTokens: 200,
+    signal,
+    timeout: 60000,
+    messages: [
+      {
+        role: 'system',
+        content: `Convert the user's request into a single shell command for ${describeShell()}. Reply with ONLY the command on one line: no explanation, no markdown.`,
+      },
+      { role: 'user', content: query.trim() },
+    ],
   });
 
-  if (!res.ok) throw new Error(`Ollama API error: ${res.status}`);
-  const data = await res.json();
-  let cmd = (data.response || '').trim();
-  cmd = cmd.replace(/^```(?:\w+)?\n?/, '').replace(/\n?```$/, '').trim();
-  return cmd;
+  return extractCommand(reply);
 }
 
-export async function explainTerminalError(errorOutput, settings) {
+export async function explainTerminalError(errorOutput, settings, { signal } = {}) {
   if (!errorOutput || !errorOutput.trim()) return '';
-  const { model, ollamaUrl } = settings;
-  const base = normalizeUrl(ollamaUrl);
+  const { provider, model } = resolveFeature(settings, 'terminalAI');
 
-  const prompt = `Explain this terminal error and suggest a fix concisely:\n\n${errorOutput.slice(0, 2000)}`;
-
-  const res = await fetch(`${base}/api/generate`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      model,
-      prompt,
-      stream: false,
-      options: { temperature: 0.2 },
-    }),
+  const reply = await chat({
+    provider,
+    model,
+    temperature: 0.2,
+    signal,
+    timeout: 90000,
+    messages: [
+      { role: 'system', content: `You help a developer on ${describeShell()} understand terminal errors. Explain the cause briefly and suggest a concrete fix.` },
+      { role: 'user', content: errorOutput.slice(-4000) },
+    ],
   });
 
-  if (!res.ok) throw new Error(`Ollama API error: ${res.status}`);
-  const data = await res.json();
-  return data.response || '';
+  return stripThinking(reply).trim();
 }

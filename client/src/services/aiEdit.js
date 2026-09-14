@@ -7,7 +7,9 @@
  * the editor.
  */
 
-import { ollamaChatStream } from './ollama';
+import { resolveFeature, chat, stripCodeFences, stripThinking } from './llm';
+
+export { stripCodeFences };
 
 const SYSTEM_PROMPT = [
   'You are a code editing engine embedded in an IDE.',
@@ -19,22 +21,7 @@ const SYSTEM_PROMPT = [
   '- If the instruction does not require a change, return the code unchanged.',
 ].join('\n');
 
-/**
- * Strips the markdown fences small models add even when told not to.
- * Only a fence wrapping the *entire* reply is removed, so fenced blocks that
- * are genuinely part of the code (e.g. inside a markdown file) survive.
- */
-export function stripCodeFences(text) {
-  const trimmed = text.trim();
-  const match = /^```[\w-]*\n?([\s\S]*?)\n?```$/.exec(trimmed);
-  if (match) return match[1];
-
-  // An unterminated opening fence, which streaming reliably produces mid-flight.
-  const opening = /^```[\w-]*\n/.exec(trimmed);
-  if (opening) return trimmed.slice(opening[0].length).replace(/\n?```\s*$/, '');
-
-  return text;
-}
+const clean = (text) => stripCodeFences(stripThinking(text));
 
 function buildUserMessage({ instruction, code, language, fileName, prefix, suffix }) {
   const parts = [];
@@ -73,7 +60,7 @@ export async function streamAiEdit({
   signal,
   onProgress,
 }) {
-  const conf = settings?.aiEdit || {};
+  const { conf, provider, model } = resolveFeature(settings, 'aiEdit');
   if (conf.enabled === false) {
     throw new Error('AI edit is disabled. Enable it in Settings.');
   }
@@ -93,14 +80,15 @@ export async function streamAiEdit({
     },
   ];
 
-  const full = await ollamaChatStream({
-    model: conf.model || 'qwen2.5-coder:7b',
+  const full = await chat({
+    provider,
+    model,
     messages,
-    ollamaUrl: conf.ollamaUrl,
     temperature: conf.temperature ?? 0.1,
     signal,
-    onToken: onProgress ? (_delta, acc) => onProgress(stripCodeFences(acc)) : undefined,
+    timeout: 120000,
+    onToken: onProgress ? (_delta, acc) => onProgress(clean(acc)) : undefined,
   });
 
-  return stripCodeFences(full).replace(/\s+$/, '');
+  return clean(full).replace(/\s+$/, '');
 }

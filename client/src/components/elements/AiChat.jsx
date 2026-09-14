@@ -1,8 +1,14 @@
 import { useState, useCallback, useRef, useEffect, memo, useContext } from 'react';
 import { GlobalContext } from '../../contexts/GlobalStates';
-import { ollamaChatStream, ollamaListModels } from '../../services/ollama';
+import axios from 'axios';
+import { useMode, MODES } from '../../contexts/ModeContext';
 import {
-  FiSend, FiTrash2, FiSquare, FiCopy, FiCornerDownLeft, FiCpu, FiCheck,
+  PROVIDERS, PROVIDER_IDS, resolveProvider, resolveFeature, chat, checkProvider, listModels,
+  modelAvailable, isAbortError, stripThinking, isThinking,
+} from '../../services/llm';
+import { saveSettings, withoutSecrets } from '../../constants/settings';
+import {
+  FiSend, FiTrash2, FiSquare, FiCopy, FiCornerDownLeft, FiCpu, FiCheck, FiList,
 } from 'react-icons/fi';
 
 const QUICK_ACTIONS = [
@@ -40,7 +46,10 @@ function buildQuickPrompt(kind, code, language) {
 }
 
 const AiChat = memo(() => {
-  const { activeFile, settings } = useContext(GlobalContext);
+  const { activeFile, settings, setSettings } = useContext(GlobalContext);
+  const { mode } = useMode();
+  /** Models per provider id, for the header's model picker. */
+  const [pickerModels, setPickerModels] = useState({});
   const [messages, setMessages] = useState([]);
   const [input, setInput] = useState('');
   const [streaming, setStreaming] = useState(false);
@@ -54,8 +63,9 @@ const AiChat = memo(() => {
 
   messagesRef.current = messages;
 
-  const conf = settings?.aiChat;
+  const { conf, provider, model: chatModel } = resolveFeature(settings, 'aiChat');
   const chatEnabled = conf?.enabled;
+  const [checkNonce, setCheckNonce] = useState(0);
 
   useEffect(() => {
     if (listRef.current) {
@@ -65,20 +75,52 @@ const AiChat = memo(() => {
 
   useEffect(() => {
     let mounted = true;
-    const check = async () => {
-      if (!conf?.ollamaUrl) return;
-      const result = await ollamaListModels(conf.ollamaUrl);
-      if (!mounted) return;
-      if (result.length) {
-        setStatus({ ok: true, text: `Ollama · ${result.length} model${result.length === 1 ? '' : 's'}` });
-      } else {
-        setStatus({ ok: true, text: 'Ollama connected · no models' });
-      }
-    };
     setStatus(null);
-    check();
+    checkProvider(provider).then((result) => {
+      if (!mounted) return;
+      if (!result.ok) {
+        setStatus({ ok: false, text: `${provider.label} offline`, detail: result.error });
+      } else if (!result.models.length) {
+        setStatus({ ok: false, text: `${provider.label} · no models`, detail: 'The provider is running but has no models. See Settings → AI Providers.' });
+      } else if (chatModel && !modelAvailable(result.models, chatModel)) {
+        setStatus({ ok: false, text: `${provider.label} · model missing`, detail: `"${chatModel}" is not available on ${provider.label}. Pick another model in Settings → AI Chat.` });
+      } else {
+        setStatus({ ok: true, text: `${provider.label} · connected` });
+      }
+    }).catch(() => {});
     return () => { mounted = false; };
-  }, [conf?.ollamaUrl]);
+    // `provider` is rebuilt every render; its fields below are what matter.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [provider.id, provider.baseUrl, provider.apiKey, chatModel, checkNonce]);
+
+  const providersKey = JSON.stringify(settings?.aiProviders || {});
+  useEffect(() => {
+    let mounted = true;
+    for (const id of PROVIDER_IDS) {
+      const p = resolveProvider(settings, id);
+      if (!p.baseUrl) continue;
+      listModels(p)
+        .then((models) => { if (mounted) setPickerModels((prev) => ({ ...prev, [id]: models })); })
+        .catch(() => { if (mounted) setPickerModels((prev) => ({ ...prev, [id]: null })); });
+    }
+    return () => { mounted = false; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [providersKey, checkNonce]);
+
+  const selectChatModel = useCallback((value) => {
+    const split = value.indexOf('::');
+    const next = {
+      ...settings,
+      aiChat: { ...settings.aiChat, provider: value.slice(0, split), model: value.slice(split + 2) },
+    };
+    setSettings(next);
+    saveSettings(next);
+    if (mode !== MODES.LOCAL) {
+      axios.post('index/settings', withoutSecrets(next), { withCredentials: true }).catch(() => {});
+    }
+  }, [settings, setSettings, mode]);
+
+  const currentPickerModel = (pickerModels[provider.id] || []).find((m) => modelAvailable([m], chatModel)) || chatModel;
 
   const getEditorContext = useCallback(() => {
     const editor = window.__getEditor?.();
@@ -123,11 +165,12 @@ const AiChat = memo(() => {
       .map(({ role, content }) => ({ role, content }));
 
     try {
-      const full = await ollamaChatStream({
-        model: conf?.model,
+      const full = await chat({
+        provider,
+        model: chatModel,
         messages: [{ role: 'system', content: systemParts.join('\n\n') }, ...history],
-        ollamaUrl: conf?.ollamaUrl,
         temperature: conf?.temperature ?? 0.3,
+        timeout: 180000,
         signal: controller.signal,
         onToken: (_delta, acc) => {
           setMessages((prev) => {
@@ -145,22 +188,23 @@ const AiChat = memo(() => {
       setMessages((prev) => {
         const copy = [...prev];
         const last = copy[copy.length - 1];
+        const content = stripThinking(full).trim() || '(the model returned an empty reply)';
         if (last?.role === 'assistant') {
-          copy[copy.length - 1] = { ...last, content: full };
+          copy[copy.length - 1] = { ...last, content };
         } else {
-          copy.push({ id: `a-${Date.now()}`, role: 'assistant', content: full });
+          copy.push({ id: `a-${Date.now()}`, role: 'assistant', content });
         }
         return copy;
       });
     } catch (err) {
-      if (err?.name !== 'AbortError') {
+      if (!isAbortError(err)) {
         setError(err?.message || 'Failed to reach the AI model.');
       }
     } finally {
       setStreaming(false);
       abortRef.current = null;
     }
-  }, [chatEnabled, streaming, conf, activeFile, getEditorContext]);
+  }, [chatEnabled, streaming, conf, provider, chatModel, activeFile, getEditorContext]);
 
   const handleSend = useCallback((e) => {
     e.preventDefault();
@@ -245,12 +289,16 @@ const AiChat = memo(() => {
   }, [send]);
 
   const assistantMessage = (msg) => {
-    const blocks = extractCodeBlocks(msg.content);
+    const visible = stripThinking(msg.content);
+    const thinking = isThinking(msg.content) && !visible.trim();
+    const blocks = thinking ? [] : extractCodeBlocks(visible);
     const blocksText = blocks.map(b => b.code).join('\n\n');
     return (
       <div className="ai-chat-msg ai-chat-assistant" key={msg.id}>
         <div className="ai-chat-msg-body">
-          <div className="ai-chat-msg-text">{msg.content}</div>
+          {thinking
+            ? <div className="ai-chat-msg-text ai-chat-thinking">Thinking…</div>
+            : <div className="ai-chat-msg-text">{visible}</div>}
           {blocks.length > 0 && (
             <div className="ai-chat-msg-actions">
               <button
@@ -291,13 +339,48 @@ const AiChat = memo(() => {
         <span className="ai-chat-title">
           <FiCpu size={12} />
           AI Chat
-          {conf?.model && <span className="ai-chat-model">{conf.model}</span>}
+          <select
+            className="ai-chat-model-select"
+            value={`${provider.id}::${currentPickerModel}`}
+            onChange={(e) => selectChatModel(e.target.value)}
+            title="Chat model — lists what each provider has installed"
+            aria-label="Chat model"
+          >
+            {PROVIDER_IDS
+              .filter((id) => pickerModels[id]?.length || id === provider.id)
+              .map((id) => (
+                <optgroup key={id} label={PROVIDERS[id].label}>
+                  {id === provider.id && !(pickerModels[id] || []).includes(currentPickerModel) && (
+                    <option value={`${id}::${currentPickerModel}`}>
+                      {currentPickerModel || '(no model)'}{pickerModels[id] ? ' — not available' : ''}
+                    </option>
+                  )}
+                  {(pickerModels[id] || []).map((m) => (
+                    <option key={m} value={`${id}::${m}`}>{m}</option>
+                  ))}
+                </optgroup>
+              ))}
+          </select>
         </span>
+        <button
+          className="ai-chat-clear"
+          onClick={() => window.__openSettings?.('aiModels')}
+          title="Browse all models"
+          aria-label="Browse all models"
+        >
+          <FiList size={12} />
+        </button>
         <span className="ai-chat-status">
           {status ? (
-            <span className={status.ok ? 'ai-chat-ok' : ''}>{status.text}</span>
+            <span
+              className={status.ok ? 'ai-chat-ok' : 'ai-chat-bad'}
+              title={status.detail ? `${status.detail}\n\nClick to check again.` : 'Click to check again.'}
+              onClick={() => setCheckNonce(n => n + 1)}
+            >
+              {status.text}
+            </span>
           ) : (
-            'checking Ollama…'
+            `checking ${provider.label}…`
           )}
         </span>
         <button className="ai-chat-clear" onClick={handleNewChat} title="New chat">
@@ -345,6 +428,9 @@ const AiChat = memo(() => {
           </div>
         )}
         {error && <div className="ai-chat-error">{error}</div>}
+        {!error && messages.length === 0 && status && !status.ok && status.detail && (
+          <div className="ai-chat-error">{status.detail}</div>
+        )}
       </div>
 
       <form className="ai-chat-input-row" onSubmit={handleSend}>

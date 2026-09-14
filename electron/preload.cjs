@@ -1,8 +1,26 @@
 const { contextBridge, ipcRenderer } = require('electron');
 
+// One listener routes streamed AI chunks to the request that asked for them.
+const aiChunkHandlers = new Map();
+ipcRenderer.on('ai:chunk', (_event, requestId, chunk) => {
+  aiChunkHandlers.get(requestId)?.(chunk);
+});
+
 contextBridge.exposeInMainWorld('electronAPI', {
   isElectron: true,
   platform: process.platform,
+
+  ai: {
+    fetch: async (requestId, request, onChunk) => {
+      if (typeof onChunk === 'function') aiChunkHandlers.set(requestId, onChunk);
+      try {
+        return await ipcRenderer.invoke('ai:fetch', requestId, request);
+      } finally {
+        aiChunkHandlers.delete(requestId);
+      }
+    },
+    abort: (requestId) => ipcRenderer.invoke('ai:abort', requestId),
+  },
 
   terminal: {
     isPtyAvailable: () => ipcRenderer.invoke('terminal:isPtyAvailable'),

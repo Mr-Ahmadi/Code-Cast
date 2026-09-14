@@ -2,7 +2,7 @@ import { useState, useEffect, useCallback, useContext } from "react";
 import { GlobalContext } from "../../contexts/GlobalStates";
 import { useMode, MODES } from "../../contexts/ModeContext";
 import { FiGitBranch, FiRefreshCw, FiPlus, FiMinus, FiChevronRight, FiChevronDown, FiGithub, FiRotateCcw, FiArrowUp, FiZap } from "react-icons/fi";
-import { ollamaChat } from "../../services/ollama";
+import { resolveFeature, chat, stripThinking } from "../../services/llm";
 
 function parsePorcelain(output) {
   const staged = [];
@@ -79,9 +79,9 @@ export default function GitPanel() {
       setToast({ message: "No staged changes found.", type: "ERROR" });
       return;
     }
-    const { model, ollamaUrl } = settings?.commitMessage || {};
-    if (!model || !ollamaUrl) {
-      setToast({ message: "Ollama model or URL not configured in settings.", type: "ERROR" });
+    const { conf, provider, model } = resolveFeature(settings, "commitMessage");
+    if (conf.enabled === false) {
+      setToast({ message: "AI commit messages are disabled in Settings.", type: "ERROR" });
       return;
     }
     setGenerating(true);
@@ -91,25 +91,34 @@ export default function GitPanel() {
       const lines = diff.split('\n');
       const added = lines.filter(l => l.startsWith('+') && !l.startsWith('+++')).length;
       const removed = lines.filter(l => l.startsWith('-') && !l.startsWith('---')).length;
-      const summary = files.length ? `Files: ${files.join(', ')}\n+${added} -${removed}` : diff.slice(0, 500);
-      const msg = await ollamaChat({
+      // The diff itself is what makes a message specific; the stats alone only
+      // ever produce "Update files".
+      const summary = [
+        files.length ? `Files: ${files.join(', ')}` : '',
+        `+${added} -${removed}`,
+        '',
+        diff.length > 6000 ? `${diff.slice(0, 6000)}\n… (diff truncated)` : diff,
+      ].join('\n');
+      const msg = await chat({
+        provider,
         model,
+        temperature: 0.2,
+        timeout: 90000,
         messages: [
           {
             role: 'system',
-            content: 'You are a git commit message generator. Reply with ONLY the commit message, one line, max 72 chars.',
+            content: 'You are a git commit message generator. Read the staged diff and reply with ONLY the commit message: one line, imperative mood, max 72 chars, no quotes.',
           },
           { role: 'user', content: summary },
         ],
-        ollamaUrl,
       });
-      const lines2 = msg.trim().split('\n');
+      const lines2 = stripThinking(msg).trim().split('\n');
       let clean = '';
       for (const l of lines2) {
         const t = l.trim();
         if (!t || t.startsWith('`') || t.startsWith('*') || t.startsWith('-') || t.startsWith('#')) continue;
         if (t.length > 150 || /^(the|this|i think|here|sure|okay)/i.test(t)) continue;
-        clean = t;
+        clean = t.replace(/^["']|["']$/g, '').replace(/^commit message:\s*/i, '');
         break;
       }
       if (clean) {
@@ -402,7 +411,7 @@ export default function GitPanel() {
               className="git-commit-magic-btn"
               onClick={handleGenerateMsg}
               disabled={generating}
-              title={generating ? "Generating..." : "Generate commit message with Ollama"}
+              title={generating ? "Generating..." : "Generate commit message with AI"}
             >
               <FiZap size={14} className={generating ? "pulse" : ""} />
             </button>

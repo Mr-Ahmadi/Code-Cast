@@ -17,11 +17,13 @@ Record and replay code typing sessions with synchronized audio. Capture keystrok
 - **Project templates** — HTML/CSS/JS, React, Python, Node.js starters
 - **Export/Import** — save recordings as `.cvid` files for sharing or backup
 - **Git integration** — stage, commit, push, and publish repos to GitHub (local mode)
-- **AI inline completion** — ghost-text suggestions from a local Ollama model, with FIM prompting tuned per model family (Qwen, DeepSeek, StarCoder, CodeGemma, CodeLlama)
+- **Bring your own model** — every AI feature runs on **Ollama**, **LM Studio**, or any **OpenAI-compatible** server (llama.cpp, Jan, vLLM, LocalAI, text-generation-webui, OpenAI, OpenRouter, Groq), chosen per feature — see [AI Providers](#ai-providers)
+- **AI inline completion** — ghost-text suggestions with FIM prompting tuned per model family (Qwen-Coder, DeepSeek-Coder, StarCoder, CodeGemma, Codestral, CodeLlama), and a chat-prompt fallback for any other model
 - **AI inline edit** — `Ctrl+K` rewrites the selection from a plain-language instruction and shows a diff before applying it
 - **AI chat** — streaming assistant with quick actions (explain, improve, find bugs, write tests) that can insert code back into the editor
 - **Command palette** — `Ctrl+Shift+P` for fuzzy-searchable commands, `@` to jump to an open file
-- **Explain panel** — AI-powered code explanation (online mode)
+- **Explain panel** — streaming AI explanation of the code at the playback position
+- **AI commit messages & terminal assistant** — commit messages from the staged diff; natural language → shell command
 - **Configurable server endpoint** — point the app at any Code Cast server from the sign-in screen or **Settings → Server**, with a connection test that distinguishes "unreachable", "not a Code Cast server" and "reachable but its database is down"
 - **Two modes**:
   - **Online** — server-backed with PostgreSQL, JWT auth, cloud storage
@@ -78,6 +80,47 @@ npm run electron:build  # produces DMG (macOS), NSIS (Windows), AppImage (Linux)
 7. Click **Open** (or `Ctrl+O`) to browse recordings, then select one and press **Play** (or `Ctrl+P`)
 8. Use **Export** to download a `.cvid` file, **Import** to load one
 9. Toggle the terminal with `` Ctrl+` `` to run shell commands
+
+## AI Providers
+
+All AI features (autocomplete, chat, inline edit, explain, commit messages,
+terminal) are configured in **Settings → AI Providers**, then each feature's
+tab picks a provider and a model. Model fields list what the provider actually
+has installed and warn when the chosen model is missing.
+
+| Provider | Default URL | Setup |
+| --- | --- | --- |
+| Ollama | `http://localhost:11434` | `ollama pull qwen2.5-coder:1.5b` (autocomplete) and `ollama pull qwen2.5-coder:7b` (chat/edit) |
+| LM Studio | `http://localhost:1234/v1` | Download a model, then **Developer → Start server**. Enable *Just-in-Time model loading* to switch models from Code Cast |
+| OpenAI-compatible | — | Presets for llama.cpp, Jan, vLLM, LocalAI, text-generation-webui, OpenAI, OpenRouter, Groq. Optional API key |
+
+**Settings → AI Models** (also *AI: Browse Models* in the command palette, or
+the list icon in AI Chat) shows every model each provider can serve: size,
+quantization, capabilities (code, autocomplete/FIM, chat, vision, thinking,
+embedding), whether it is loaded, and which features use it. From there you can
+assign a model to one or all features, download Ollama models with a progress
+bar, and **Scan This Computer** to find running servers (Ollama, LM Studio,
+llama.cpp, Jan, vLLM, text-generation-webui, KoboldCpp, GPT4All). The AI Chat
+header also has a model picker that switches the chat model instantly.
+
+**Use for All AI Features** on a provider card points every feature at that
+provider and picks installed models suited to each (a small FIM-capable model
+for autocomplete, a larger coder model for chat).
+
+Notes:
+
+- **Desktop app** — requests go through the Electron main process, so no CORS
+  configuration is needed for any provider.
+- **Browser** — the model server must allow the page's origin. Ollama: start it
+  with `OLLAMA_ORIGINS=http://localhost:5173`. LM Studio: turn on *Enable CORS*.
+- **Autocomplete** uses fill-in-the-middle prompts for code models and a chat
+  prompt for everything else (override under *Prompt Style*). Endpoints without
+  a raw `/completions` route fall back to chat automatically.
+- **Thinking models** (DeepSeek-R1, Qwen3, …) work; their `<think>` block is
+  hidden from chat and stripped from edits, commands and commit messages.
+- **API keys** stay in local storage and are never synced to the Code Cast
+  server. Settings saved by earlier versions (per-feature `ollamaUrl`) are
+  migrated automatically.
 
 ## Choosing a Server
 

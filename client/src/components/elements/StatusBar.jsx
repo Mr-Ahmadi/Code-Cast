@@ -5,14 +5,16 @@ import { getFiles, getActiveFile } from "../../functions/record";
 import { getFormatterForLanguage, getFormatterDisplayName } from "../../constants/settings";
 import { getMonacoLanguage } from "../../services/formatter";
 import { onAiStatusChange } from "../../services/autocomplete";
+import { resolveFeature } from "../../services/llm";
 import { FiWifi, FiMonitor, FiCode, FiCheckCircle, FiCpu, FiAlertCircle } from "react-icons/fi";
 
 const StatusBar = memo(() => {
-  const { recording, playing, currentWorkspace, fontSize, settings } = useContext(GlobalContext);
+  const { recording, playing, currentWorkspace, fontSize, settings, setSettingsOpen } = useContext(GlobalContext);
   const { mode } = useMode();
   const [cursorPos, setCursorPos] = useState({ line: 1, col: 1 });
   const [selectionInfo, setSelectionInfo] = useState(null);
   const [aiStatus, setAiStatus] = useState('idle');
+  const [aiDetail, setAiDetail] = useState(null);
 
   const files = getFiles();
   const active = getActiveFile();
@@ -26,7 +28,8 @@ const StatusBar = memo(() => {
   const formatOnSave = settings?.formatter?.formatOnSave;
   const lspEnabled = settings?.lsp?.enabled;
   const aiEnabled = settings?.aiAutocomplete?.enabled;
-  const aiModel = settings?.aiAutocomplete?.model || 'no model set';
+  const { provider: aiProvider, model: aiModelName } = resolveFeature(settings, 'aiAutocomplete');
+  const aiModel = aiModelName ? `${aiProvider.label} · ${aiModelName}` : 'no model set';
 
   const isLocal = mode === MODES.LOCAL;
 
@@ -73,7 +76,10 @@ const StatusBar = memo(() => {
     };
   }, []);
 
-  useEffect(() => onAiStatusChange(setAiStatus), []);
+  useEffect(() => onAiStatusChange((next, detail) => {
+    setAiStatus(next);
+    setAiDetail(detail);
+  }), []);
 
   const barClass =
     'status-bar'
@@ -116,9 +122,10 @@ const StatusBar = memo(() => {
             className={`status-item status-item-interactive status-ai status-ai-${aiStatus}`}
             title={
               aiStatus === 'loading' ? 'AI autocomplete: generating a suggestion…'
-                : aiStatus === 'error' ? 'AI autocomplete: could not reach Ollama'
+                : aiStatus === 'error' ? `AI autocomplete failed: ${aiDetail || `could not reach ${aiProvider.label}`}\n\nClick to open settings.`
                 : `AI autocomplete: ready (${aiModel})`
             }
+            onClick={() => (window.__openSettings ? window.__openSettings('aiAutocomplete') : setSettingsOpen?.(true))}
           >
             {aiStatus === 'error'
               ? <FiAlertCircle size={11} className="status-item-icon" />
